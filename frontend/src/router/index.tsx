@@ -6,6 +6,9 @@ import {
   SubscriptionPlansPage,
   SubscriptionCheckoutPage,
   SubscriptionConfirmationPage,
+  UserProfilePage,
+  UserSettingsPage,
+  ProfileSelectionPage,
 } from '@/pages/private'
 
 export const router = createBrowserRouter([
@@ -20,10 +23,13 @@ export const router = createBrowserRouter([
   {
     element: <PrivateLayout />,
     children: [
+      { path: '/profiles',                    element: <ProfileSelectionPage /> },
       { path: '/dashboard',                   element: <DashboardPage /> },
       { path: '/subscription/plans',          element: <SubscriptionPlansPage /> },
       { path: '/subscription/checkout',       element: <SubscriptionCheckoutPage /> },
       { path: '/subscription/confirmation',   element: <SubscriptionConfirmationPage /> },
+      { path: '/profile',                     element: <UserProfilePage /> },
+      { path: '/settings',                    element: <UserSettingsPage /> },
     ],
   },
   {
