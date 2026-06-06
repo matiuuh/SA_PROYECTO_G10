@@ -1,0 +1,1 @@
+export { SubscriptionConfirmationPage } from './SubscriptionConfirmationPage'
