@@ -3,74 +3,89 @@
 ## Core del negocio
 | Representación | Actor | Descripción |
 |----|-------------|-------------|
-|![Cliente](./img/actor.png)  | **Cliente** | Usuario que interactúa con el sistema para registrarse, iniciar sesión, buscar cines por ciudad, visualizar cartelera, seleccionar asientos y comprar boletos |
-|![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el sistema, incluyendo la administración de películas, funciones y usuarios. |
-|![Servicio de Divisas](./img/actor.png)  | **Servicio de Divisas** | Servicio externo que proporciona la conversión de monedas para las transacciones en el sistema. |
-|![Sistema de Usuarios](./img/actor.png)  | **Sistema de Usuarios** | Sistema interno que gestiona la creación y administración de cuentas de usuario. |
-|![Servicio de Cobros](./img/actor.png)  | **Servicio de Cobros** | Servicio externo que maneja el proceso de pago para las transacciones en el sistema. |
-|![Servicio de Notificaciones](./img/actor.png)  | **Servicio de Notificaciones** | Servicio externo que se encarga de enviar notificaciones a los usuarios del sistema. |
-|![Servicio de Streaming](./img/actor.png)  | **Servicio de Streaming** | Servicio externo que proporciona la transmisión de contenido para las transacciones en el sistema. |
-|![Servicio de Catalogo](./img/actor.png)  | **Servicio de Catalogo** | Servicio externo que proporciona el catálogo de películas para las transacciones en el sistema. |
+|![Cliente](./img/actor.png)  | **Cliente** | Persona que utiliza la plataforma para registrarse, iniciar sesion, administrar perfiles, gestionar su suscripcion, explorar el catalogo, reproducir contenido y calificarlo. |
+|![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar y eliminar peliculas o series. |
+|![Pasarela de Pago](./img/actor.png)  | **Pasarela de Pago** | Servicio externo que procesa las transacciones asociadas a la asignación de planes de suscripcion. |
+|![Proveedor de Divisas](./img/actor.png)  | **Proveedor de Divisas** | Servicio externo que suministra los tipos de cambio utilizados por la plataforma para mostrar precios en la moneda local del usuario. |
+|![Proveedor de Correo SMTP](./img/actor.png)  | **Proveedor de Correo SMTP** | Servicio externo encargado de entregar los correos de confirmacion de registro, recibos de compra y alertas de nuevo contenido. |
+|![Proveedor OAuth](./img/actor.png)  | **Proveedor OAuth** | Servicio externo de identidad utilizado cuando la plataforma delega procesos de autenticacion o autorizacion mediante OAuth. |
 
 ## Casos de uso de alto nivel
-![Caso de Uso de Alto Nivel](./img/CDUALTO.png)
 
 ## Primera descomposición
 
-**CDU01**: **Gestión de Usuario**: Es el punto central del sistema para cualquier usuario. Permite el registro y manejo de datos personales de los usuarios, así como la gestión de sesión y preferencias en la aplicación.
+**CDU001**: **Gestión de Cuenta y Perfiles**: Reúne las operaciones que el cliente realiza para registrarse, autenticarse y administrar los perfiles asociados a su cuenta.
 
-- **CDU-001.1**: Registrar Cliente
+**CDU002**: **Gestión de Suscripción y Pago**: Permite al cliente consultar planes, ver precios en moneda local y administrar su suscripción mediante el procesamiento de pagos.
+
+**CDU003**: **Exploración de Catálogo**: Permite al cliente descubrir el contenido disponible en la plataforma y consultar la información detallada de películas y series.
+
+**CDU004**: **Calificación de Contenido**: Permite al cliente emitir su valoracion sobre una pelicula o serie mediante like o dislike y consultar la recomendacion global generada por la comunidad.
+
+**CDU005**: **Reproducción e Historial**: Permite al cliente reproducir contenido, continuar desde el punto en que lo dejó y consultar el historial reciente de su perfil activo.
+
+**CDU006**: **Notificaciones por Correo**: Agrupa las notificaciones automáticas que el sistema envía al cliente como parte de los procesos principales de registro, compra y publicación de contenido.
+
+**CDU007**: **Gestión de Divisas**: Administra la consulta de tipos de cambio y la conversión de precios en coordinación con el proveedor externo de divisas.
+
+**CDU008**: **Administración de Contenido**: Permite al administrador gestionar el catálogo de la plataforma mediante operaciones de alta, actualización y baja de películas o series.
+
+## Casos de uso expandidos
+
+### Expandidos de CDU001: Gestión de Cuenta y Perfiles
+
+- **CDU-001.1**: Registrar Cuenta
 - **CDU-001.2**: Iniciar Sesión
-- **CDU-001.3**: Actualizar Datos Personales
-- **CDU-001.4**: Cambiar Contraseña
-- **CDU-001.5**: Cerrar Sesión
-- **CDU-001.6**: Crear Perfil
-- **CDU-001.7**: Modificar Perfil
-- **CDU-001.8**: Eliminar Perfil
-- **CDU-001.9**: Consultar Historial de Reproducción
+- **CDU-001.3**: Iniciar Sesión con OAuth
+- **CDU-001.4**: Cerrar Sesión
+- **CDU-001.5**: Actualizar Credenciales de Acceso
+- **CDU-001.6**: Seleccionar Perfil
+- **CDU-001.7**: Crear Perfil
+- **CDU-001.8**: Modificar Perfil
+- **CDU-001.9**: Eliminar Perfil
 
-**CDU02**: **Gestión de Catálogo**: Permite a los usuarios explorar, consultar y administrar el contenido disponible en la plataforma (películas y series).
+### Expandidos de CDU002: Gestión de Suscripción y Pago
 
-- **CDU-002.1**: Visualizar Catálogo
-- **CDU-002.2**: Buscar Contenido
-- **CDU-002.3**: Filtrar Catálogo
-- **CDU-002.4**: Ver Detalle de Contenido
-- **CDU-002.5**: Registrar Contenido
-- **CDU-002.6**: Cargar Contenido
-- **CDU-002.7**: Modificar Contenido
-- **CDU-002.8**: Eliminar Contenido
-- **CDU-002.9**: Calificar Contenido
+- **CDU-002.1**: Ver Planes Disponibles
+- **CDU-002.2**: Consultar Precio en Moneda Local
+- **CDU-002.3**: Contratar Suscripción
+- **CDU-002.4**: Modificar Plan de Suscripción
+- **CDU-002.5**: Cancelar Suscripción
+- **CDU-002.6**: Procesar Pago
+- **CDU-002.7**: Generar Recibo de Compra
 
-**CDU03**: **Gestión de Streaming**: Administra el contenido solicitado por los usuarios del sistema.
+### Expandidos de CDU003: Exploración de Catálogo
 
-- **CDU-003.1**: Reproducir Contenido
-- **CDU-003.2**: Controlar Reproducción (pausar, reanudar, avanzar)
-- **CDU-003.3**: Registrar Progreso de Visualización
+- **CDU-003.1**: Visualizar Catálogo
+- **CDU-003.2**: Buscar Contenido
+- **CDU-003.3**: Filtrar Catálogo
+- **CDU-003.4**: Ver Detalle de Contenido
 
-**CDU04**: **Gestión de Notificaciones**: Gestiona las notificaciones del sistema, informandole a los usuarios acerca de nuevo contenido, actualización de suscripción, pago procesado, entre otros.
+### Expandidos de CDU004: Calificación de Contenido
 
-- **CDU-004.1**: Enviar Confirmación de Registro
-- **CDU-004.2**: Enviar Recibo de Pago
-- **CDU-004.3**: Enviar Confirmación de Actualización de Suscripción
-- **CDU-004.4**: Enviar Alerta de Nuevo Contenido
+- **CDU-004.1**: Calificar Contenido
+- **CDU-004.2**: Consultar Recomendacion Global del Contenido
 
-**CDU05**: **Gestión de Cobros**: Maneja los cobros asociados a las transacciones del sistema.
+### Expandidos de CDU005: Reproducción e Historial
 
-- **CDU-005.1**: Procesar Pago
-- **CDU-005.2**: Consultar Historial de Pagos
-- **CDU-005.3**: Generar Recibo de Pago
+- **CDU-005.1**: Reproducir Contenido
+- **CDU-005.2**: Reanudar Reproducción
+- **CDU-005.3**: Registrar Progreso de Visualización
+- **CDU-005.4**: Consultar Historial de Reproducción
 
-**CDU06**: **Gestión de Suscripción**: Permite a los usuarios consultar, contratar y gestionar sus planes de suscripción dentro del sistema.
+### Expandidos de CDU006: Notificaciones por Correo
 
-- **CDU-006.1**: Ver Planes Disponibles
-- **CDU-006.2**: Contratar Suscripción
-- **CDU-006.3**: Modificar Plan de Suscripción
-- **CDU-006.4**: Cancelar Suscripción
+- **CDU-006.1**: Enviar Confirmación de Registro
+- **CDU-006.2**: Enviar Recibo de Compra
+- **CDU-006.3**: Enviar Alerta de Nuevo Contenido
 
-**CDU07**: **Gestión de Divisas**: Administra la conversión de precios entre diferentes monedas.
+### Expandidos de CDU007: Gestión de Divisas
 
 - **CDU-007.1**: Consultar Tipo de Cambio
 - **CDU-007.2**: Convertir Precio a Moneda Local
-- **CDU-007.3**: Actualizar Caché de Tasas de Cambio
+- **CDU-007.3**: Actualizar Caché de Tipos de Cambio
 
-![Primera Descomposicion](./img/primeraDescomposicion.png)
+### Expandidos de CDU008: Administración de Contenido
+
+- **CDU-008.1**: Registrar Contenido
+- **CDU-008.3**: Eliminar Contenido
