@@ -1,7 +1,12 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { PublicLayout, PrivateLayout } from '@/components/templates'
 import { LandingPage, LoginPage, RegisterPage } from '@/pages/public'
-import { DashboardPage } from '@/pages/private'
+import {
+  DashboardPage,
+  SubscriptionPlansPage,
+  SubscriptionCheckoutPage,
+  SubscriptionConfirmationPage,
+} from '@/pages/private'
 
 export const router = createBrowserRouter([
   {
@@ -15,7 +20,10 @@ export const router = createBrowserRouter([
   {
     element: <PrivateLayout />,
     children: [
-      { path: '/dashboard', element: <DashboardPage /> },
+      { path: '/dashboard',                   element: <DashboardPage /> },
+      { path: '/subscription/plans',          element: <SubscriptionPlansPage /> },
+      { path: '/subscription/checkout',       element: <SubscriptionCheckoutPage /> },
+      { path: '/subscription/confirmation',   element: <SubscriptionConfirmationPage /> },
     ],
   },
   {
