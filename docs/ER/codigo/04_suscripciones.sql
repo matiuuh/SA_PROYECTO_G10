@@ -7,9 +7,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE estado_suscripcion AS ENUM ('activa', 'cancelada', 'vencida');
 CREATE TYPE evento_instantanea AS ENUM ('insercion', 'actualizacion', 'eliminacion');
 
-CREATE SCHEMA IF NOT EXISTS suscripciones;
-
-CREATE TABLE suscripciones.planes (
+CREATE TABLE planes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(80) NOT NULL UNIQUE,
     descripcion TEXT,
@@ -23,10 +21,10 @@ CREATE TABLE suscripciones.planes (
     CONSTRAINT ck_perfiles_maximos CHECK (perfiles_maximos BETWEEN 1 AND 5)
 );
 
-CREATE TABLE suscripciones.suscripciones (
+CREATE TABLE suscripciones (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cuenta_id UUID NOT NULL,
-    plan_id UUID NOT NULL REFERENCES suscripciones.planes(id),
+    plan_id UUID NOT NULL REFERENCES planes(id),
     estado estado_suscripcion NOT NULL DEFAULT 'activa',
     fecha_inicio TIMESTAMPTZ,
     fecha_fin TIMESTAMPTZ,
@@ -34,17 +32,17 @@ CREATE TABLE suscripciones.suscripciones (
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE suscripciones.cambios_plan (
+CREATE TABLE cambios_plan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    suscripcion_id UUID NOT NULL REFERENCES suscripciones.suscripciones(id) ON DELETE CASCADE,
-    plan_anterior_id UUID REFERENCES suscripciones.planes(id),
-    plan_nuevo_id UUID NOT NULL REFERENCES suscripciones.planes(id),
+    suscripcion_id UUID NOT NULL REFERENCES suscripciones(id) ON DELETE CASCADE,
+    plan_anterior_id UUID REFERENCES planes(id),
+    plan_nuevo_id UUID NOT NULL REFERENCES planes(id),
     estado estado_suscripcion NOT NULL DEFAULT 'activa',
     solicitado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     aplicado_en TIMESTAMPTZ
 );
 
-CREATE TABLE suscripciones.instantaneas (
+CREATE TABLE instantaneas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tabla_origen VARCHAR(100) NOT NULL,
     entidad_id UUID NOT NULL,
@@ -58,7 +56,7 @@ CREATE TABLE suscripciones.instantaneas (
 -- FUNCIONES
 -- =========================================================
 
-CREATE OR REPLACE FUNCTION suscripciones.fn_actualizar_actualizado_en()
+CREATE OR REPLACE FUNCTION fn_actualizar_actualizado_en()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.actualizado_en = NOW();
@@ -66,7 +64,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION suscripciones.fn_registrar_instantanea()
+CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -89,14 +87,14 @@ $$ LANGUAGE plpgsql;
 -- VISTAS
 -- =========================================================
 
-CREATE VIEW suscripciones.v_planes_activos AS
+CREATE VIEW v_planes_activos AS
 SELECT *
-FROM suscripciones.planes
+FROM planes
 WHERE activo = TRUE;
 
-CREATE VIEW suscripciones.v_suscripciones_vigentes AS
+CREATE VIEW v_suscripciones_vigentes AS
 SELECT *
-FROM suscripciones.suscripciones
+FROM suscripciones
 WHERE estado = 'activa';
 
 -- =========================================================
@@ -104,29 +102,29 @@ WHERE estado = 'activa';
 -- =========================================================
 
 CREATE TRIGGER trg_actualizar_actualizado_en_planes
-BEFORE UPDATE ON suscripciones.planes
-FOR EACH ROW EXECUTE FUNCTION suscripciones.fn_actualizar_actualizado_en();
+BEFORE UPDATE ON planes
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_actualizado_en();
 
 CREATE TRIGGER trg_actualizar_actualizado_en_suscripciones
-BEFORE UPDATE ON suscripciones.suscripciones
-FOR EACH ROW EXECUTE FUNCTION suscripciones.fn_actualizar_actualizado_en();
+BEFORE UPDATE ON suscripciones
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_actualizado_en();
 
 CREATE TRIGGER trg_snapshot_planes
-AFTER INSERT OR UPDATE OR DELETE ON suscripciones.planes
-FOR EACH ROW EXECUTE FUNCTION suscripciones.fn_registrar_instantanea();
+AFTER INSERT OR UPDATE OR DELETE ON planes
+FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
 
 CREATE TRIGGER trg_snapshot_suscripciones
-AFTER INSERT OR UPDATE OR DELETE ON suscripciones.suscripciones
-FOR EACH ROW EXECUTE FUNCTION suscripciones.fn_registrar_instantanea();
+AFTER INSERT OR UPDATE OR DELETE ON suscripciones
+FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
 
 CREATE TRIGGER trg_snapshot_cambios_plan
-AFTER INSERT OR UPDATE OR DELETE ON suscripciones.cambios_plan
-FOR EACH ROW EXECUTE FUNCTION suscripciones.fn_registrar_instantanea();
+AFTER INSERT OR UPDATE OR DELETE ON cambios_plan
+FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
 
 -- =========================================================
 -- ÍNDICES
 -- =========================================================
 
-CREATE INDEX idx_suscripciones_cuenta ON suscripciones.suscripciones(cuenta_id);
-CREATE INDEX idx_suscripciones_estado ON suscripciones.suscripciones(estado);
-CREATE INDEX idx_suscripciones_instantaneas_tabla ON suscripciones.instantaneas(tabla_origen, entidad_id);
+CREATE INDEX idx_suscripciones_cuenta ON suscripciones(cuenta_id);
+CREATE INDEX idx_suscripciones_estado ON suscripciones(estado);
+CREATE INDEX idx_suscripciones_instantaneas_tabla ON instantaneas(tabla_origen, entidad_id);

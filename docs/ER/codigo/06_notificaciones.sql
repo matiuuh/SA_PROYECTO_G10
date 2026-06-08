@@ -7,9 +7,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE tipo_notificacion AS ENUM ('registro', 'recibo_compra', 'nuevo_contenido');
 CREATE TYPE estado_envio AS ENUM ('enviado', 'fallido');
 
-CREATE SCHEMA IF NOT EXISTS notificaciones;
-
-CREATE TABLE notificaciones.envios_correo (
+CREATE TABLE envios_correo (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tipo_notificacion tipo_notificacion NOT NULL,
     correo_destino VARCHAR(255) NOT NULL,
@@ -26,19 +24,19 @@ CREATE TABLE notificaciones.envios_correo (
 -- VISTAS
 -- =========================================================
 
-CREATE VIEW notificaciones.v_envios_exitosos AS
+CREATE VIEW v_envios_exitosos AS
 SELECT *
-FROM notificaciones.envios_correo
+FROM envios_correo
 WHERE estado_envio = 'enviado';
 
-CREATE VIEW notificaciones.v_envios_fallidos AS
+CREATE VIEW v_envios_fallidos AS
 SELECT *
-FROM notificaciones.envios_correo
+FROM envios_correo
 WHERE estado_envio = 'fallido';
 
 -- =========================================================
 -- ÍNDICES
 -- =========================================================
 
-CREATE INDEX idx_envios_correo_estado ON notificaciones.envios_correo(estado_envio);
-CREATE INDEX idx_envios_correo_tipo ON notificaciones.envios_correo(tipo_notificacion);
+CREATE INDEX idx_envios_correo_estado ON envios_correo(estado_envio);
+CREATE INDEX idx_envios_correo_tipo ON envios_correo(tipo_notificacion);

@@ -8,9 +8,7 @@ CREATE TYPE tipo_operacion_pago AS ENUM ('contratacion', 'modificacion_plan');
 CREATE TYPE estado_pago AS ENUM ('pendiente', 'aprobado', 'rechazado', 'cancelado');
 CREATE TYPE evento_instantanea AS ENUM ('insercion', 'actualizacion', 'eliminacion');
 
-CREATE SCHEMA IF NOT EXISTS cobros;
-
-CREATE TABLE cobros.transacciones (
+CREATE TABLE transacciones (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cuenta_id UUID NOT NULL,
     suscripcion_id UUID,
@@ -28,9 +26,9 @@ CREATE TABLE cobros.transacciones (
     CONSTRAINT ck_monto_local CHECK (monto_local > 0)
 );
 
-CREATE TABLE cobros.recibos (
+CREATE TABLE recibos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    transaccion_id UUID NOT NULL REFERENCES cobros.transacciones(id) ON DELETE CASCADE,
+    transaccion_id UUID NOT NULL REFERENCES transacciones(id) ON DELETE CASCADE,
     numero_recibo VARCHAR(50) NOT NULL UNIQUE,
     correo_destino VARCHAR(255) NOT NULL,
     enviado BOOLEAN NOT NULL DEFAULT FALSE,
@@ -38,7 +36,7 @@ CREATE TABLE cobros.recibos (
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE cobros.instantaneas (
+CREATE TABLE instantaneas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tabla_origen VARCHAR(100) NOT NULL,
     entidad_id UUID NOT NULL,
@@ -48,7 +46,7 @@ CREATE TABLE cobros.instantaneas (
     fecha_evento TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE OR REPLACE FUNCTION cobros.fn_actualizar_actualizado_en()
+CREATE OR REPLACE FUNCTION fn_actualizar_actualizado_en()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.actualizado_en = NOW();
@@ -56,7 +54,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION cobros.fn_registrar_instantanea()
+CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -79,7 +77,7 @@ $$ LANGUAGE plpgsql;
 -- PROCEDIMIENTOS ALMACENADOS
 -- =========================================================
 
-CREATE OR REPLACE PROCEDURE cobros.sp_registrar_compra(
+CREATE OR REPLACE PROCEDURE sp_registrar_compra(
     p_cuenta_id UUID,
     p_plan_id UUID,
     p_tipo_operacion tipo_operacion_pago,
@@ -95,7 +93,7 @@ AS $$
 DECLARE
     v_transaccion_id UUID;
 BEGIN
-    INSERT INTO cobros.transacciones (
+    INSERT INTO transacciones (
         cuenta_id,
         plan_id,
         tipo_operacion,
@@ -118,7 +116,7 @@ BEGIN
     ) RETURNING id INTO v_transaccion_id;
 
     IF p_estado = 'aprobado' THEN
-        INSERT INTO cobros.recibos (
+        INSERT INTO recibos (
             transaccion_id,
             numero_recibo,
             correo_destino,
@@ -139,12 +137,12 @@ $$;
 -- VISTAS
 -- =========================================================
 
-CREATE VIEW cobros.v_transacciones_aprobadas AS
+CREATE VIEW v_transacciones_aprobadas AS
 SELECT *
-FROM cobros.transacciones
+FROM transacciones
 WHERE estado = 'aprobado';
 
-CREATE VIEW cobros.v_resumen_transacciones AS
+CREATE VIEW v_resumen_transacciones AS
 SELECT
     t.id,
     t.cuenta_id,
@@ -157,11 +155,11 @@ SELECT
     t.referencia_pasarela,
     t.pagado_en,
     t.creado_en
-FROM cobros.transacciones t;
+FROM transacciones t;
 
-CREATE VIEW cobros.v_recibos_enviados AS
+CREATE VIEW v_recibos_enviados AS
 SELECT *
-FROM cobros.recibos
+FROM recibos
 WHERE enviado = TRUE;
 
 -- =========================================================
@@ -169,22 +167,22 @@ WHERE enviado = TRUE;
 -- =========================================================
 
 CREATE TRIGGER trg_actualizar_actualizado_en_transacciones
-BEFORE UPDATE ON cobros.transacciones
-FOR EACH ROW EXECUTE FUNCTION cobros.fn_actualizar_actualizado_en();
+BEFORE UPDATE ON transacciones
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_actualizado_en();
 
 CREATE TRIGGER trg_snapshot_transacciones
-AFTER INSERT OR UPDATE OR DELETE ON cobros.transacciones
-FOR EACH ROW EXECUTE FUNCTION cobros.fn_registrar_instantanea();
+AFTER INSERT OR UPDATE OR DELETE ON transacciones
+FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
 
 CREATE TRIGGER trg_snapshot_recibos
-AFTER INSERT OR UPDATE OR DELETE ON cobros.recibos
-FOR EACH ROW EXECUTE FUNCTION cobros.fn_registrar_instantanea();
+AFTER INSERT OR UPDATE OR DELETE ON recibos
+FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
 
 -- =========================================================
 -- ÍNDICES
 -- =========================================================
 
-CREATE INDEX idx_transacciones_cuenta ON cobros.transacciones(cuenta_id);
-CREATE INDEX idx_transacciones_estado ON cobros.transacciones(estado);
-CREATE INDEX idx_recibos_transaccion ON cobros.recibos(transaccion_id);
-CREATE INDEX idx_cobros_instantaneas_tabla ON cobros.instantaneas(tabla_origen, entidad_id);
+CREATE INDEX idx_transacciones_cuenta ON transacciones(cuenta_id);
+CREATE INDEX idx_transacciones_estado ON transacciones(estado);
+CREATE INDEX idx_recibos_transaccion ON recibos(transaccion_id);
+CREATE INDEX idx_cobros_instantaneas_tabla ON instantaneas(tabla_origen, entidad_id);
