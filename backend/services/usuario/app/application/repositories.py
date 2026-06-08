@@ -1,0 +1,19 @@
+from typing import Protocol
+
+from app.domain.models import Account, Session
+
+
+class AccountRepository(Protocol):
+    def create(self, account: Account) -> None: ...
+
+    def get_by_email(self, email: str) -> Account | None: ...
+
+    def get_by_id(self, account_id: str) -> Account | None: ...
+
+
+class SessionRepository(Protocol):
+    def create(self, session: Session) -> None: ...
+
+    def get_by_id(self, session_id: str) -> Session | None: ...
+
+    def update(self, session: Session) -> None: ...
