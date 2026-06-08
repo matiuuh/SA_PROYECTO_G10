@@ -1,0 +1,1 @@
+export { UploadMoviePage } from './UploadMoviePage'

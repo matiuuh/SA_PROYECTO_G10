@@ -33,7 +33,7 @@ export function ProfileSelectionPage() {
 
   const handleSelectProfile = (profileId: string) => {
     console.log('Perfil seleccionado:', profileId)
-    navigate('/dashboard')
+    navigate('/panel')
   }
 
   const handleAddProfile = () => {
