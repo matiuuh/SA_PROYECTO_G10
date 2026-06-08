@@ -5,13 +5,14 @@ package grpc
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 	"quetzaltv/services/catalogo/internal/application"
 	"quetzaltv/services/catalogo/internal/domain"
+	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 )
 
 // Handler implementa catalogov1.CatalogoServiceServer.
@@ -111,14 +112,22 @@ func (h *Handler) CrearContenido(
 	req *catalogov1.CrearContenidoRequest,
 ) (*catalogov1.Contenido, error) {
 	c := &domain.Content{
-		Title:          req.Titulo,
-		Type:           protoToContentType(req.Tipo),
-		Synopsis:       req.Sinopsis,
-		TechnicalSheet: req.FichaTecnica,
-		AgeRating:      req.ClasificacionEdad,
-		Language:       req.Idioma,
-		PosterURL:      req.UrlPortada,
-		VideoURL:       req.UrlVideo,
+		Title:              req.Titulo,
+		Type:               protoToContentType(req.Tipo),
+		Synopsis:           req.Sinopsis,
+		TechnicalSheet:     req.FichaTecnica,
+		AgeRating:          req.ClasificacionEdad,
+		Language:           req.Idioma,
+		PosterURL:          req.UrlPortada,
+		TrailerURL:         req.UrlTrailer,
+		CreatedByAccountID: req.CreadoPorCuentaId,
+	}
+	if req.FechaLanzamiento != "" {
+		releaseDate, err := time.Parse("2006-01-02", req.FechaLanzamiento)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "fecha_lanzamiento invalida, use YYYY-MM-DD")
+		}
+		c.ReleaseDate = &releaseDate
 	}
 	if req.DuracionMinutos > 0 {
 		v := int(req.DuracionMinutos)
@@ -143,7 +152,7 @@ func (h *Handler) ActualizarContenido(
 		TechnicalSheet: req.FichaTecnica,
 		AgeRating:      req.ClasificacionEdad,
 		PosterURL:      req.UrlPortada,
-		VideoURL:       req.UrlVideo,
+		TrailerURL:     req.UrlTrailer,
 	}
 	if req.DuracionMinutos > 0 {
 		v := int(req.DuracionMinutos)
@@ -184,6 +193,7 @@ func toProtoContent(c domain.Content) *catalogov1.Contenido {
 		Idioma:                  c.Language,
 		UrlPortada:              c.PosterURL,
 		PorcentajeRecomendacion: c.RecommendationPct,
+		UrlTrailer:              c.TrailerURL,
 	}
 	if c.ReleaseDate != nil {
 		p.FechaLanzamiento = c.ReleaseDate.Format("2006-01-02")
@@ -209,7 +219,7 @@ func toProtoDetail(d *domain.ContentDetail) *catalogov1.DetalleContenido {
 		ClasificacionEdad:       d.AgeRating,
 		Idioma:                  d.Language,
 		UrlPortada:              d.PosterURL,
-		UrlVideo:                d.VideoURL,
+		UrlTrailer:              d.TrailerURL,
 		TotalLikes:              int32(d.TotalLikes),
 		TotalDislikes:           int32(d.TotalDislikes),
 		PorcentajeRecomendacion: d.RecommendationPct,

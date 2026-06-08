@@ -25,7 +25,8 @@ func NewContentRepository(db *pgxpool.Pool) *ContentRepository {
 func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, idioma,
-		       url_portada, fecha_lanzamiento, porcentaje_recomendacion
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		ORDER BY titulo
 	`)
@@ -41,7 +42,8 @@ func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) 
 func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, idioma,
-		       url_portada, fecha_lanzamiento, porcentaje_recomendacion
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		WHERE titulo ILIKE $1
 		ORDER BY titulo
@@ -58,7 +60,8 @@ func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.
 func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT v.id, v.titulo, v.tipo::text, v.sinopsis, v.idioma,
-		       v.url_portada, v.fecha_lanzamiento, v.porcentaje_recomendacion
+		       v.url_portada, v.url_trailer,
+		       v.fecha_lanzamiento, v.porcentaje_recomendacion
 		FROM v_cartelera_contenido v
 		JOIN contenido_generos cg ON cg.contenido_id = v.id
 		WHERE cg.genero_id = ANY($1)
@@ -82,14 +85,14 @@ func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.C
 	err := r.db.QueryRow(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, ficha_tecnica,
 		       fecha_lanzamiento, clasificacion_edad, duracion_minutos,
-		       idioma, url_portada, url_video,
+		       idioma, url_portada, url_trailer,
 		       total_likes, total_dislikes, porcentaje_recomendacion
 		FROM v_detalle_contenido
 		WHERE id = $1
 	`, id).Scan(
 		&d.ID, &d.Title, &typeStr, &d.Synopsis, &d.TechnicalSheet,
 		&releaseDate, &d.AgeRating, &durationMin,
-		&d.Language, &d.PosterURL, &d.VideoURL,
+		&d.Language, &d.PosterURL, &d.TrailerURL,
 		&d.TotalLikes, &d.TotalDislikes, &d.RecommendationPct,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -162,8 +165,10 @@ func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genre
 		releaseDate = c.ReleaseDate
 	}
 
-	var createdBy *string
-	// creado_por_cuenta_id puede quedar NULL si no se provee
+	var createdBy any
+	if c.CreatedByAccountID != "" {
+		createdBy = c.CreatedByAccountID
+	}
 
 	row := r.db.QueryRow(ctx, `
 		CALL sp_registrar_contenido_completo(
@@ -174,7 +179,7 @@ func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genre
 	`,
 		c.Title, string(c.Type), c.Synopsis, c.TechnicalSheet,
 		releaseDate, c.AgeRating, c.DurationMinutes, c.Language,
-		c.PosterURL, c.VideoURL,
+		c.PosterURL, c.TrailerURL,
 		createdBy, genreIDs,
 	)
 	if err := row.Scan(&newID); err != nil {
@@ -194,10 +199,10 @@ func (r *ContentRepository) Update(ctx context.Context, id string, c *domain.Con
 		    clasificacion_edad = $5,
 		    duracion_minutos   = $6,
 		    url_portada        = $7,
-		    url_video          = $8
+		    url_trailer        = $8
 		WHERE id = $1 AND eliminado_en IS NULL
 	`, id, c.Title, c.Synopsis, c.TechnicalSheet,
-		c.AgeRating, c.DurationMinutes, c.PosterURL, c.VideoURL,
+		c.AgeRating, c.DurationMinutes, c.PosterURL, c.TrailerURL,
 	)
 	if err != nil {
 		return err
@@ -254,7 +259,8 @@ func scanContentRows(rows pgx.Rows) ([]domain.Content, error) {
 
 		if err := rows.Scan(
 			&c.ID, &c.Title, &typeStr, &c.Synopsis,
-			&c.Language, &c.PosterURL, &releaseDate, &pct,
+			&c.Language, &c.PosterURL, &c.TrailerURL,
+			&releaseDate, &pct,
 		); err != nil {
 			return nil, err
 		}

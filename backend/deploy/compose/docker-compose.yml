@@ -18,6 +18,10 @@ services:
       - ../../services/catalogo/database/sql/02_procedures.sql:/init-scripts/31-catalogo-procedures.sql:ro
       - ../../services/streaming/database/sql/01_schema.sql:/init-scripts/40-streaming-schema.sql:ro
       - ../../services/streaming/database/sql/02_procedures.sql:/init-scripts/41-streaming-procedures.sql:ro
+      - ../../services/divisas/database/sql/01_schema.sql:/init-scripts/45-divisas-schema.sql:ro
+      - ../../services/divisas/database/sql/02_procedures.sql:/init-scripts/46-divisas-procedures.sql:ro
+      - ../../services/notificaciones/database/sql/01_schema.sql:/init-scripts/47-notificaciones-schema.sql:ro
+      - ../../services/cobros/database/sql/01_schema.sql:/init-scripts/50-cobros-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -121,6 +125,64 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  divisas-service:
+    build:
+      context: ../..
+      dockerfile: services/divisas/Dockerfile
+    container_name: quetzal-divisas-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_divisas
+      REDIS_URL: redis://redis:6379
+      GRPC_PORT: 5005
+    ports:
+      - "5005:5005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notificaciones-service:
+    build:
+      context: ../..
+      dockerfile: services/notificaciones/Dockerfile
+    container_name: quetzal-notificaciones-service-local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_notificaciones
+      GRPC_PORT: 5007
+    ports:
+      - "5007:5007"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  cobros-service:
+    build:
+      context: ../..
+      dockerfile: services/cobros/Dockerfile
+    container_name: quetzal-cobros-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_cobros
+      DIVISAS_GRPC_TARGET: divisas-service:5005
+      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      DEFAULT_NOTIFICATION_USER_NAME: Usuario
+      BASE_CURRENCY: USD
+      GRPC_PORT: 5006
+    ports:
+      - "5006:5006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      divisas-service:
+        condition: service_started
+      notificaciones-service:
+        condition: service_started
 
 volumes:
   postgres_data:

@@ -11,7 +11,13 @@ Esta carpeta deja una base de trabajo local para el backend usando contenedores 
 - `streaming-service`: reproduccion por gRPC
 - `suscripcion-service`: microservicio de planes y suscripciones
   - HTTP: `8002`
-  - gRPC: `50052`
+  - gRPC: `5002`
+- `divisas-service`: tipos de cambio por gRPC
+  - gRPC: `5005`
+- `notificaciones-service`: correos y alertas por gRPC
+  - gRPC: `5007`
+- `cobros-service`: pagos por gRPC
+  - gRPC: `5006`
 
 ## Como se maneja la base de datos
 
@@ -26,6 +32,7 @@ Bases creadas al iniciar:
 - `quetzal_catalogo`
 - `quetzal_streaming`
 - `quetzal_suscripcion`
+- `quetzal_divisas`
 - `quetzal_cobros`
 - `quetzal_notificaciones`
 
@@ -43,25 +50,28 @@ Se cargan automaticamente las bases de:
 - `suscripcion`
 - `catalogo`
 - `streaming`
+- `divisas`
+- `notificaciones`
+- `cobros`
 
 ## Levantar el entorno
 
 Desde esta carpeta:
 
 ```bash
-docker compose -f docker-compose.local.yml up -d --build
+docker compose up -d --build
 ```
 
 ## Bajar el entorno
 
 ```bash
-docker compose -f docker-compose.local.yml down
+docker compose down
 ```
 
 Para borrar tambien los volumenes:
 
 ```bash
-docker compose -f docker-compose.local.yml down -v
+docker compose down -v
 ```
 
 ## Puertos
@@ -74,6 +84,9 @@ docker compose -f docker-compose.local.yml down -v
 - Suscripcion gRPC: `5002`
 - Catalogo gRPC: `5003`
 - Streaming gRPC: `5004`
+- Divisas gRPC: `5005`
+- Notificaciones gRPC: `5007`
+- Cobros gRPC: `5006`
 
 ## Nota importante
 

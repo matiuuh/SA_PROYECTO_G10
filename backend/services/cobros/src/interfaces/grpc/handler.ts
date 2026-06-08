@@ -84,6 +84,7 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
   try {
     const req = call.request as {
       cuenta_id: string;
+      suscripcion_id?: string;
       plan_id: string;
       tipo_operacion: number;
       monto_base: number;
@@ -99,6 +100,7 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
 
     const result = await procesarPago({
       cuenta_id: req.cuenta_id,
+      suscripcion_id: req.suscripcion_id && req.suscripcion_id.length > 0 ? req.suscripcion_id : null,
       plan_id: req.plan_id,
       tipo_operacion: tipoOp,
       monto_base: req.monto_base,

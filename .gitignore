@@ -37,6 +37,11 @@ docker-compose.override.yml
 # Build artifacts
 build/
 dist/
+bin/
+
+# Node.js dependencies
+node_modules/
+backend/services/*/node_modules/
 
 # Frontend artifacts when working from repo root
 frontend/node_modules/

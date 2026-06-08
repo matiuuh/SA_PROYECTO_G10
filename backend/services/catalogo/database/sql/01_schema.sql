@@ -40,7 +40,7 @@ CREATE TABLE contenidos (
     duracion_minutos     INTEGER,
     idioma               VARCHAR(50),
     url_portada          TEXT,
-    url_video            TEXT,
+    url_trailer          TEXT,
     creado_por_cuenta_id UUID,
     creado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -180,6 +180,7 @@ SELECT
     c.sinopsis,
     c.idioma,
     c.url_portada,
+    c.url_trailer,
     c.fecha_lanzamiento,
     fn_porcentaje_recomendacion(c.id) AS porcentaje_recomendacion
 FROM contenidos c
@@ -197,7 +198,7 @@ SELECT
     c.duracion_minutos,
     c.idioma,
     c.url_portada,
-    c.url_video,
+    c.url_trailer,
     fn_total_likes(c.id)              AS total_likes,
     fn_total_dislikes(c.id)           AS total_dislikes,
     fn_porcentaje_recomendacion(c.id) AS porcentaje_recomendacion

@@ -33,20 +33,21 @@ var (
 // ─── Entidades ────────────────────────────────────────────────────────────────
 
 type Content struct {
-	ID              string
-	Title           string
-	Type            ContentType
-	Synopsis        string
-	TechnicalSheet  string
-	ReleaseDate     *time.Time
-	AgeRating       string
-	DurationMinutes *int
-	Language        string
-	PosterURL       string
-	VideoURL        string
-	RecommendationPct float64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                 string
+	Title              string
+	Type               ContentType
+	Synopsis           string
+	TechnicalSheet     string
+	ReleaseDate        *time.Time
+	AgeRating          string
+	DurationMinutes    *int
+	Language           string
+	PosterURL          string
+	TrailerURL         string
+	CreatedByAccountID string
+	RecommendationPct  float64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type Genre struct {
