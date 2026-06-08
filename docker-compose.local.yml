@@ -3,6 +3,8 @@ name: quetzaltv-local
 # ─── Servicios activos en esta fase ───────────────────────────────────────────
 #   postgres       — instancia única con una DB por microservicio (patrón dev)
 #   redis          — caché compartido (TTL requerido por servicio divisas)
+#   usuario        — Python / gRPC :5001  + REST :8001
+#   suscripcion    — Python / gRPC :50052 + REST :8002
 #   catalogo       — Go / gRPC  :5003
 #   streaming      — Go / gRPC  :5004
 #   divisas        — TypeScript / gRPC  :5005
@@ -33,12 +35,13 @@ services:
       - ./backend/services/cobros/database/sql:/docker-entrypoint-initdb.d/cobros:ro
       - ./backend/services/notificaciones/database/sql:/docker-entrypoint-initdb.d/notificaciones:ro
       - ./backend/services/usuario/database/sql:/docker-entrypoint-initdb.d/usuario:ro
+      - ./backend/services/suscripcion/database/sql:/docker-entrypoint-initdb.d/suscripcion:ro
     ports:
       - "5432:5432"
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U quetzal -d catalogo_db && pg_isready -U quetzal -d streaming_db && pg_isready -U quetzal -d divisas_db && pg_isready -U quetzal -d cobros_db && pg_isready -U quetzal -d notificaciones_db
+        - pg_isready -U quetzal -d catalogo_db && pg_isready -U quetzal -d streaming_db && pg_isready -U quetzal -d divisas_db && pg_isready -U quetzal -d cobros_db && pg_isready -U quetzal -d notificaciones_db && pg_isready -U quetzal -d usuario_db && pg_isready -U quetzal -d suscripcion_db
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,6 +57,50 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # ─── Usuario ────────────────────────────────────────────────────────────────
+  usuario:
+    build:
+      # El Dockerfile hace COPY requirements.txt y COPY app/, así que el context
+      # debe ser el directorio del servicio directamente.
+      context: ./backend/services/usuario
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      STORAGE_BACKEND: postgres
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: usuario_db
+      DB_USER: quetzal
+      DB_PASSWORD: quetzal
+      JWT_SECRET: quetzal-dev-secret-change-in-prod
+      GRPC_PORT: "5001"
+    ports:
+      - "8001:8001"   # REST / FastAPI
+      - "5001:5001"   # gRPC
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Suscripción ────────────────────────────────────────────────────────────
+  suscripcion:
+    build:
+      context: ./backend/services/suscripcion
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: suscripcion_db
+      DB_USER: quetzal
+      DB_PASSWORD: quetzal
+      GRPC_PORT: "50052"
+    ports:
+      - "8002:8002"    # REST / FastAPI
+      - "50052:50052"  # gRPC
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # ─── Catálogo ───────────────────────────────────────────────────────────────
   catalogo:
