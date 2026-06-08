@@ -49,5 +49,7 @@ test-catalogo.ps1
 test-streaming.ps1
 test-divisas.ps1
 test-cobros.ps1
+test-usuario.ps1
+test-notificaciones.ps1
 req.json
 grpc_tmp.json

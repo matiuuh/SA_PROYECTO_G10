@@ -9,6 +9,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE DATABASE streaming_db;
     CREATE DATABASE divisas_db;
     CREATE DATABASE cobros_db;
+    CREATE DATABASE usuario_db;
+    CREATE DATABASE notificaciones_db;
 EOSQL
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname=catalogo_db \
@@ -25,3 +27,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname=divisas_db \
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname=cobros_db \
     -f /docker-entrypoint-initdb.d/cobros/01_schema.sql
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname=usuario_db \
+    -f /docker-entrypoint-initdb.d/usuario/01_usuarios.sql
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname=notificaciones_db \
+    -f /docker-entrypoint-initdb.d/notificaciones/01_schema.sql
