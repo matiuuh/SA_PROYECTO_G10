@@ -1,12 +1,13 @@
 name: quetzaltv-local
 
 # ─── Servicios activos en esta fase ───────────────────────────────────────────
-#   postgres  — instancia única con una DB por microservicio (patrón dev)
-#   redis     — caché compartido (TTL requerido por servicio divisas)
-#   catalogo  — Go / gRPC  :5003
-#   streaming — Go / gRPC  :5004
-#   divisas   — TypeScript / gRPC  :5005
-#   cobros    — TypeScript / gRPC  :5006
+#   postgres       — instancia única con una DB por microservicio (patrón dev)
+#   redis          — caché compartido (TTL requerido por servicio divisas)
+#   catalogo       — Go / gRPC  :5003
+#   streaming      — Go / gRPC  :5004
+#   divisas        — TypeScript / gRPC  :5005
+#   cobros         — TypeScript / gRPC  :5006
+#   notificaciones — TypeScript / gRPC  :5007
 #
 # Levantar todo:          docker compose -f docker-compose.local.yml up --build
 # Solo la DB:             docker compose -f docker-compose.local.yml up postgres
@@ -30,12 +31,14 @@ services:
       - ./backend/services/streaming/database/sql:/docker-entrypoint-initdb.d/streaming:ro
       - ./backend/services/divisas/database/sql:/docker-entrypoint-initdb.d/divisas:ro
       - ./backend/services/cobros/database/sql:/docker-entrypoint-initdb.d/cobros:ro
+      - ./backend/services/notificaciones/database/sql:/docker-entrypoint-initdb.d/notificaciones:ro
+      - ./backend/services/usuario/database/sql:/docker-entrypoint-initdb.d/usuario:ro
     ports:
       - "5432:5432"
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U quetzal -d catalogo_db && pg_isready -U quetzal -d streaming_db && pg_isready -U quetzal -d divisas_db && pg_isready -U quetzal -d cobros_db
+        - pg_isready -U quetzal -d catalogo_db && pg_isready -U quetzal -d streaming_db && pg_isready -U quetzal -d divisas_db && pg_isready -U quetzal -d cobros_db && pg_isready -U quetzal -d notificaciones_db
       interval: 5s
       timeout: 5s
       retries: 10
@@ -112,6 +115,24 @@ services:
       GRPC_PORT: "5006"
     ports:
       - "5006:5006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Notificaciones ─────────────────────────────────────────────────────────
+  notificaciones:
+    build:
+      context: ./backend
+      dockerfile: services/notificaciones/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/notificaciones_db?sslmode=disable
+      GRPC_PORT: "5007"
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      EMAIL_FROM: ${EMAIL_FROM}
+    ports:
+      - "5007:5007"
     depends_on:
       postgres:
         condition: service_healthy
