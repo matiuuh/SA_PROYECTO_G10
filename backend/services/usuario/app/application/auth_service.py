@@ -69,6 +69,35 @@ class AuthService:
 
         return account
 
+    def validate_token(self, token: str) -> tuple[Account, str]:
+        payload = self._jwt_service.decode(token)
+        session_id = payload.get("sid")
+        account_id = payload.get("sub")
+        if session_id is None or account_id is None:
+            raise AuthenticationError("Token invalido.")
+
+        session = self._session_repository.get_by_id(session_id)
+        if session is None or session.cerrada_en is not None:
+            raise AuthenticationError("La sesion ya no esta activa.")
+
+        account = self._account_repository.get_by_id(account_id)
+        if account is None:
+            raise NotFoundError("Cuenta no encontrada.")
+
+        return account, session_id
+
+    def get_account_by_id(self, account_id: str) -> Account:
+        account = self._account_repository.get_by_id(account_id)
+        if account is None:
+            raise NotFoundError("Cuenta no encontrada.")
+        return account
+
+    def get_account_by_email(self, email: str) -> Account:
+        account = self._account_repository.get_by_email(email)
+        if account is None:
+            raise NotFoundError("Cuenta no encontrada.")
+        return account
+
     def logout(self, token: str) -> None:
         payload = self._jwt_service.decode(token)
         session_id = payload.get("sid")
