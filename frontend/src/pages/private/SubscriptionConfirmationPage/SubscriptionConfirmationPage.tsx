@@ -15,7 +15,7 @@ export function SubscriptionConfirmationPage() {
 
   useEffect(() => {
     if (!orderId) {
-      navigate('/dashboard')
+      navigate('/panel')
     }
   }, [orderId, navigate])
 
@@ -75,7 +75,7 @@ export function SubscriptionConfirmationPage() {
           </div>
 
           <div className="flex justify-center">
-            <Button onClick={() => navigate('/dashboard')} className="gap-2">
+            <Button onClick={() => navigate('/panel')} className="gap-2">
               Ir al inicio
               <ArrowRight size={18} />
             </Button>
