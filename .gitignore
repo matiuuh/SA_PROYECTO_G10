@@ -43,3 +43,11 @@ frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/storybook-static/
+
+# Archivos de prueba local
+test-catalogo.ps1
+test-streaming.ps1
+test-divisas.ps1
+test-cobros.ps1
+req.json
+grpc_tmp.json
