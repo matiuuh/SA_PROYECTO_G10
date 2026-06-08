@@ -1,18 +1,48 @@
-# Archivos de entorno — nunca subir al repo
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+
+# Local environment files
 .env
 .env.*
 !.env.example
 
-# Contexto personal de Claude Code
-CLAUDE.local.md
-.claude/settings.local.json
+# Logs
+*.log
+logs/
 
-# Dependencias
-node_modules/
+# Docker / compose local overrides
+docker-compose.override.yml
 
-# Build outputs
-dist/
+# Build artifacts
 build/
+dist/
+
+# Frontend artifacts when working from repo root
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/storybook-static/
 
 # Archivos de prueba local
 test-catalogo.ps1
