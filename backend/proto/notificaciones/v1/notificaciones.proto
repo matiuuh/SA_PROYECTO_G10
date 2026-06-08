@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package notificaciones.v1;
+
+option go_package = "quetzaltv/notificaciones/v1;notificacionesv1";
+
+service NotificacionesService {
+  rpc EnviarConfirmacionRegistro (ConfirmacionRegistroRequest) returns (NotificacionResponse);
+  rpc EnviarRecibo                (ReciboRequest)               returns (NotificacionResponse);
+  rpc EnviarAlertaNuevaPublicacion(AlertaPublicacionRequest)    returns (NotificacionResponse);
+}
+
+// ── Mensajes de entrada ──────────────────────────────────────────────────────
+
+message ConfirmacionRegistroRequest {
+  string correo_destino = 1;
+  string nombre_usuario = 2;
+}
+
+message ReciboRequest {
+  string correo_destino   = 1;
+  string nombre_usuario   = 2;
+  string id_transaccion   = 3;
+  string descripcion_plan = 4;
+  double monto            = 5;
+  string moneda           = 6;
+  string fecha            = 7;
+}
+
+message AlertaPublicacionRequest {
+  repeated string correos_destino = 1;
+  string titulo_contenido         = 2;
+  string tipo_contenido           = 3;  // "pelicula" | "serie"
+  string descripcion              = 4;
+}
+
+// ── Mensaje de respuesta ─────────────────────────────────────────────────────
+
+message NotificacionResponse {
+  bool   enviado          = 1;
+  string mensaje          = 2;
+  string notificacion_id  = 3;
+}
