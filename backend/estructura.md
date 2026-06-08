@@ -18,29 +18,32 @@ La idea es que cada microservicio sea independiente, con su propio lenguaje, dep
 ```text
 backend/
 ├── api-gateway/
+├── infra/
+│   └── postgres/
+│       └── init.sh          ← crea DBs y aplica schemas al iniciar el contenedor
 ├── proto/
-│   ├── common/
-│   ├── usuario/v1/
-│   ├── suscripcion/v1/
 │   ├── catalogo/v1/
 │   ├── streaming/v1/
-│   ├── divisas/v1/
-│   ├── cobros/v1/
-│   └── notificaciones/v1/
+│   ├── usuario/v1/          ← pendiente
+│   ├── suscripcion/v1/      ← pendiente
+│   ├── divisas/v1/          ← pendiente
+│   ├── cobros/v1/           ← pendiente
+│   └── notificaciones/v1/   ← pendiente
 ├── services/
-│   ├── usuario/
-│   ├── suscripcion/
-│   ├── catalogo/
-│   ├── streaming/
-│   ├── divisas/
-│   ├── cobros/
-│   └── notificaciones/
+│   ├── catalogo/            ← Go 1.23, gRPC :5003
+│   ├── streaming/           ← Go 1.23, gRPC :5004
+│   ├── usuario/             ← Python, pendiente
+│   ├── suscripcion/         ← Python, pendiente
+│   ├── divisas/             ← TypeScript, pendiente
+│   ├── cobros/              ← TypeScript, pendiente
+│   └── notificaciones/      ← TypeScript, pendiente
 ├── deploy/
-│   ├── docker/
-│   └── compose/
 ├── scripts/
-└── sql/
+└── sql/                     ← SQLs temporales, pendiente mover a cada servicio
 ```
+
+El `docker-compose.local.yml` vive en la **raiz del proyecto** (no en `backend/`)
+porque necesita `context: ./backend` para que los Dockerfiles accedan a `proto/` y `services/`.
 
 ## Criterio por lenguaje
 
@@ -74,10 +77,17 @@ service/
 │   ├── infrastructure/
 │   └── interfaces/
 ├── pkg/
+│   └── pb/<servicio>/v1/   ← generado por protoc, NO subir al repo
 └── tests/
 ```
 
 Aplica bien para `catalogo` y `streaming`.
+
+El Dockerfile de cada servicio Go:
+- Usa `golang:1.23-alpine` como builder
+- Recibe `context: ./backend` desde docker-compose
+- Copia `services/<nombre>/` y `proto/` por separado
+- Genera el proto con `--go_opt=module=quetzaltv/services/<nombre>`
 
 ### TypeScript
 
@@ -100,9 +110,9 @@ Aplica bien para `divisas`, `cobros` y `notificaciones`.
 
 - Compartir contratos solo en `proto/`, no compartir logica de negocio entre servicios.
 - Cada servicio debe tener su propia carpeta `database/` con `sql/`, `migrations/` y `seed/`.
-- `sql/` puede quedarse por ahora como carpeta temporal de diseno, pero luego conviene mover cada script a su servicio.
+- El codigo generado por `protoc` (`pkg/pb/`) no se sube al repo — se genera en build time.
 - El `api-gateway` debe ser el unico punto de entrada externo.
-- Redis solo debe aparecer donde sea necesario, por ejemplo `divisas`.
+- Redis solo debe aparecer donde sea necesario (ej. `divisas`).
 
 ## Orden sugerido de trabajo
 

@@ -1,0 +1,91 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"time"
+)
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
+type ContentType string
+
+const (
+	ContentTypeMovie  ContentType = "pelicula"
+	ContentTypeSeries ContentType = "serie"
+)
+
+type ReactionType string
+
+const (
+	ReactionLike    ReactionType = "like"
+	ReactionDislike ReactionType = "dislike"
+)
+
+// ─── Errores de dominio ───────────────────────────────────────────────────────
+
+var (
+	ErrContentNotFound = errors.New("contenido no encontrado")
+	ErrContentDeleted  = errors.New("contenido ya eliminado")
+	ErrInvalidGenre    = errors.New("genero no valido")
+)
+
+// ─── Entidades ────────────────────────────────────────────────────────────────
+
+type Content struct {
+	ID              string
+	Title           string
+	Type            ContentType
+	Synopsis        string
+	TechnicalSheet  string
+	ReleaseDate     *time.Time
+	AgeRating       string
+	DurationMinutes *int
+	Language        string
+	PosterURL       string
+	VideoURL        string
+	RecommendationPct float64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type Genre struct {
+	ID          int64
+	Name        string
+	Description string
+}
+
+type CastMember struct {
+	ID           int64
+	ArtisticName string
+	RealName     string
+	Nationality  string
+	Character    string
+}
+
+type Rating struct {
+	ContentID string
+	ProfileID string
+	Reaction  ReactionType
+}
+
+type ContentDetail struct {
+	Content
+	TotalLikes    int
+	TotalDislikes int
+	Genres        []Genre
+	Cast          []CastMember
+}
+
+// ─── Repositorio (puerto) ─────────────────────────────────────────────────────
+
+type ContentRepository interface {
+	List(ctx context.Context) ([]Content, error)
+	Search(ctx context.Context, query string) ([]Content, error)
+	FilterByGenres(ctx context.Context, genreIDs []int64) ([]Content, error)
+	GetDetail(ctx context.Context, id string) (*ContentDetail, error)
+	Create(ctx context.Context, c *Content, genreIDs []int64) (string, error)
+	Update(ctx context.Context, id string, c *Content) error
+	Delete(ctx context.Context, id string) error
+	Rate(ctx context.Context, r *Rating) (float64, error)
+}
