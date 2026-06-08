@@ -73,4 +73,4 @@
 - **CDU-007.2**: Convertir Precio a Moneda Local
 - **CDU-007.3**: Actualizar Caché de Tasas de Cambio
 
-![Primera Descomposicion](./img/primeraDescomposicion.png)
+![Primera Descomposicion](./img/PrimeraDescomposicion.png)
