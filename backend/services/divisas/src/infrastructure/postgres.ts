@@ -7,7 +7,7 @@ export function createPool(): Pool {
   if (pool) return pool;
 
   const connectionString =
-    process.env.DATABASE_URL ?? 'postgres://quetzal:quetzal@localhost:5432/divisas_db';
+    process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/quetzal_divisas';
 
   pool = new Pool({ connectionString });
 

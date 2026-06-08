@@ -1,6 +1,6 @@
 import { pool } from '../infrastructure/postgres';
 import { sendMail } from '../infrastructure/mailer';
-import type { Notificacion, TipoNotificacion } from '../domain/notification';
+import type { ResultadoEnvioNotificacion, TipoNotificacion } from '../domain/notification';
 
 // ── Paleta y SVG icons ───────────────────────────────────────────────────────
 
@@ -380,7 +380,7 @@ async function registrarNotificacion(opts: {
 export async function enviarConfirmacionRegistro(
   correo: string,
   nombre: string,
-): Promise<Notificacion['id']> {
+): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplConfirmacionRegistro(nombre);
   let estado: 'enviado' | 'fallido' = 'enviado';
   let errorMsg: string | null = null;
@@ -393,13 +393,15 @@ export async function enviarConfirmacionRegistro(
     console.error('[notificaciones] confirmacion_registro send error:', errorMsg);
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'confirmacion_registro',
     correo_destino: correo,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }
 
 export async function enviarRecibo(opts: {
@@ -410,7 +412,7 @@ export async function enviarRecibo(opts: {
   monto: number;
   moneda: string;
   fecha: string;
-}): Promise<Notificacion['id']> {
+}): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplRecibo({
     nombre: opts.nombre_usuario,
     id_transaccion: opts.id_transaccion,
@@ -430,13 +432,15 @@ export async function enviarRecibo(opts: {
     console.error('[notificaciones] recibo send error:', errorMsg);
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'recibo',
     correo_destino: opts.correo_destino,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }
 
 export async function enviarAlertaPublicacion(opts: {
@@ -444,7 +448,7 @@ export async function enviarAlertaPublicacion(opts: {
   titulo_contenido: string;
   tipo_contenido: string;
   descripcion: string;
-}): Promise<Notificacion['id']> {
+}): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplAlertaPublicacion({
     titulo: opts.titulo_contenido,
     tipo: opts.tipo_contenido,
@@ -464,11 +468,13 @@ export async function enviarAlertaPublicacion(opts: {
     console.error('[notificaciones] alerta_publicacion send error:', errorMsg);
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'alerta_publicacion',
     correo_destino: primerCorreo,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }

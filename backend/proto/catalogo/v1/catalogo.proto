@@ -44,6 +44,7 @@ message Contenido {
   string        url_portada              = 6;
   string        fecha_lanzamiento        = 7;
   double        porcentaje_recomendacion = 8;
+  string        url_trailer              = 9;
 }
 
 message DetalleContenido {
@@ -57,7 +58,7 @@ message DetalleContenido {
   int32                duracion_minutos         = 8;
   string               idioma                   = 9;
   string               url_portada              = 10;
-  string               url_video                = 11;
+  string               url_trailer              = 11;
   int32                total_likes              = 12;
   int32                total_dislikes           = 13;
   double               porcentaje_recomendacion = 14;
@@ -109,7 +110,7 @@ message CrearContenidoRequest {
   int32         duracion_minutos     = 7;
   string        idioma               = 8;
   string        url_portada          = 9;
-  string        url_video            = 10;
+  string        url_trailer          = 10;
   string        creado_por_cuenta_id = 11;
   repeated int64 genero_ids          = 12;
 }
@@ -122,7 +123,7 @@ message ActualizarContenidoRequest {
   string clasificacion_edad = 5;
   int32  duracion_minutos   = 6;
   string url_portada        = 7;
-  string url_video          = 8;
+  string url_trailer        = 8;
 }
 
 message EliminarContenidoRequest {

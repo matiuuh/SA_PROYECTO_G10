@@ -10,6 +10,7 @@ Esta primera version implementa:
 - inicio de sesion
 - consulta del usuario autenticado
 - cierre de sesion
+- servidor gRPC para validacion de token y consulta de cuentas
 
 La implementacion soporta dos modos:
 
@@ -40,6 +41,16 @@ usuario/
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/logout`
 - `GET /health`
+
+## gRPC
+
+Puerto por defecto: `5001`
+
+Operaciones expuestas:
+
+- `ValidateToken`
+- `GetAccountById`
+- `GetAccountByEmail`
 
 ## Ejecutar localmente
 

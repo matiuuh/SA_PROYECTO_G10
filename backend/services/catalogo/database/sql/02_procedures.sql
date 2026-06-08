@@ -8,7 +8,7 @@
 -- Parametros de entrada:
 --   p_titulo, p_tipo, p_sinopsis, p_ficha_tecnica,
 --   p_fecha_lanzamiento, p_clasificacion_edad,
---   p_duracion_minutos, p_idioma, p_url_portada, p_url_video,
+--   p_duracion_minutos, p_idioma, p_url_portada, p_url_trailer,
 --   p_creado_por     : UUID de la cuenta administradora
 --   p_genero_ids     : arreglo de IDs de genero a asociar
 --
@@ -26,7 +26,7 @@ CREATE OR REPLACE PROCEDURE sp_registrar_contenido_completo(
     IN  p_duracion_minutos     INTEGER,
     IN  p_idioma               VARCHAR(50),
     IN  p_url_portada          TEXT,
-    IN  p_url_video            TEXT,
+    IN  p_url_trailer          TEXT,
     IN  p_creado_por           UUID,
     IN  p_genero_ids           BIGINT[],
     INOUT p_id                 UUID DEFAULT NULL
@@ -37,12 +37,12 @@ BEGIN
         titulo, tipo, sinopsis, ficha_tecnica,
         fecha_lanzamiento, clasificacion_edad,
         duracion_minutos, idioma,
-        url_portada, url_video, creado_por_cuenta_id
+        url_portada, url_trailer, creado_por_cuenta_id
     ) VALUES (
         p_titulo, p_tipo, p_sinopsis, p_ficha_tecnica,
         p_fecha_lanzamiento, p_clasificacion_edad,
         p_duracion_minutos, p_idioma,
-        p_url_portada, p_url_video, p_creado_por
+        p_url_portada, p_url_trailer, p_creado_por
     )
     RETURNING id INTO p_id;
 

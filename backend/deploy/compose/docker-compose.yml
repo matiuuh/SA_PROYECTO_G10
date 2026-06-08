@@ -1,0 +1,189 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: quetzal-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init/00-create-multiple-dbs.sh:/docker-entrypoint-initdb.d/00-create-multiple-dbs.sh:ro
+      - ../../services/usuario/database/sql/01_usuarios.sql:/init-scripts/10-usuarios.sql:ro
+      - ../../services/suscripcion/database/sql/04_suscripciones.sql:/init-scripts/20-suscripciones.sql:ro
+      - ../../services/catalogo/database/sql/01_schema.sql:/init-scripts/30-catalogo-schema.sql:ro
+      - ../../services/catalogo/database/sql/02_procedures.sql:/init-scripts/31-catalogo-procedures.sql:ro
+      - ../../services/streaming/database/sql/01_schema.sql:/init-scripts/40-streaming-schema.sql:ro
+      - ../../services/streaming/database/sql/02_procedures.sql:/init-scripts/41-streaming-procedures.sql:ro
+      - ../../services/divisas/database/sql/01_schema.sql:/init-scripts/45-divisas-schema.sql:ro
+      - ../../services/divisas/database/sql/02_procedures.sql:/init-scripts/46-divisas-procedures.sql:ro
+      - ../../services/notificaciones/database/sql/01_schema.sql:/init-scripts/47-notificaciones-schema.sql:ro
+      - ../../services/cobros/database/sql/01_schema.sql:/init-scripts/50-cobros-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: quetzal-redis-local
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  usuario-service:
+    build:
+      context: ../../services/usuario
+      dockerfile: Dockerfile
+    container_name: quetzal-usuario-service-local
+    restart: unless-stopped
+    environment:
+      APP_NAME: usuario-service
+      APP_ENV: development
+      APP_PORT: 8001
+      GRPC_PORT: 5001
+      STORAGE_BACKEND: postgres
+      JWT_SECRET: change-me-local
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quetzal_usuario
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8001:8001"
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  suscripcion-service:
+    build:
+      context: ../../services/suscripcion
+      dockerfile: Dockerfile
+    container_name: quetzal-suscripcion-service-local
+    restart: unless-stopped
+    environment:
+      APP_NAME: suscripcion-service
+      APP_ENV: development
+      APP_PORT: 8002
+      GRPC_PORT: 5002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: quetzal_suscripcion
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    ports:
+      - "8002:8002"
+      - "5002:5002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  catalogo-service:
+    build:
+      context: ../..
+      dockerfile: services/catalogo/Dockerfile
+    container_name: quetzal-catalogo-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_catalogo
+      GRPC_PORT: 5003
+    ports:
+      - "5003:5003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  streaming-service:
+    build:
+      context: ../..
+      dockerfile: services/streaming/Dockerfile
+    container_name: quetzal-streaming-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming
+      GRPC_PORT: 5004
+    ports:
+      - "5004:5004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  divisas-service:
+    build:
+      context: ../..
+      dockerfile: services/divisas/Dockerfile
+    container_name: quetzal-divisas-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_divisas
+      REDIS_URL: redis://redis:6379
+      GRPC_PORT: 5005
+    ports:
+      - "5005:5005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notificaciones-service:
+    build:
+      context: ../..
+      dockerfile: services/notificaciones/Dockerfile
+    container_name: quetzal-notificaciones-service-local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_notificaciones
+      GRPC_PORT: 5007
+    ports:
+      - "5007:5007"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  cobros-service:
+    build:
+      context: ../..
+      dockerfile: services/cobros/Dockerfile
+    container_name: quetzal-cobros-service-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_cobros
+      DIVISAS_GRPC_TARGET: divisas-service:5005
+      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      DEFAULT_NOTIFICATION_USER_NAME: Usuario
+      BASE_CURRENCY: USD
+      GRPC_PORT: 5006
+    ports:
+      - "5006:5006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      divisas-service:
+        condition: service_started
+      notificaciones-service:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -27,8 +27,12 @@ async function handleEnviarConfirmacionRegistro(
       grpcError(callback, grpcStatus.INVALID_ARGUMENT, 'correo_destino es requerido');
       return;
     }
-    const id = await enviarConfirmacionRegistro(req.correo_destino, req.nombre_usuario);
-    callback(null, { enviado: true, mensaje: 'Correo de confirmación enviado', notificacion_id: id });
+    const result = await enviarConfirmacionRegistro(req.correo_destino, req.nombre_usuario);
+    callback(null, {
+      enviado: result.enviado,
+      mensaje: result.enviado ? 'Correo de confirmacion enviado' : `Envio fallido: ${result.error_mensaje ?? 'error desconocido'}`,
+      notificacion_id: result.id,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[handler] EnviarConfirmacionRegistro error:', msg);
@@ -51,8 +55,12 @@ async function handleEnviarRecibo(call: AnyCall, callback: AnyCallback): Promise
       grpcError(callback, grpcStatus.INVALID_ARGUMENT, 'correo_destino e id_transaccion son requeridos');
       return;
     }
-    const id = await enviarRecibo(req);
-    callback(null, { enviado: true, mensaje: 'Recibo enviado', notificacion_id: id });
+    const result = await enviarRecibo(req);
+    callback(null, {
+      enviado: result.enviado,
+      mensaje: result.enviado ? 'Recibo enviado' : `Envio fallido: ${result.error_mensaje ?? 'error desconocido'}`,
+      notificacion_id: result.id,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[handler] EnviarRecibo error:', msg);
@@ -75,11 +83,13 @@ async function handleEnviarAlertaNuevaPublicacion(
       grpcError(callback, grpcStatus.INVALID_ARGUMENT, 'correos_destino no puede estar vacío');
       return;
     }
-    const id = await enviarAlertaPublicacion(req);
+    const result = await enviarAlertaPublicacion(req);
     callback(null, {
-      enviado: true,
-      mensaje: `Alerta enviada a ${req.correos_destino.length} destinatario(s)`,
-      notificacion_id: id,
+      enviado: result.enviado,
+      mensaje: result.enviado
+        ? `Alerta enviada a ${req.correos_destino.length} destinatario(s)`
+        : `Envio fallido: ${result.error_mensaje ?? 'error desconocido'}`,
+      notificacion_id: result.id,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

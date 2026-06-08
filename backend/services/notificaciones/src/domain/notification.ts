@@ -16,3 +16,9 @@ export interface Notificacion {
   creado_en: Date;
   enviado_en: Date | null;
 }
+
+export interface ResultadoEnvioNotificacion {
+  id: string;
+  enviado: boolean;
+  error_mensaje: string | null;
+}

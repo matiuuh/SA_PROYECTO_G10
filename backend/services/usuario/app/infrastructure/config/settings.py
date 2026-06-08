@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "usuario-service"
     app_env: str = "development"
     app_port: int = 8001
+    grpc_port: int = 5001
     storage_backend: str = "inmemory"
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"

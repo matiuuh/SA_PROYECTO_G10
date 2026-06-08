@@ -79,6 +79,7 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE PROCEDURE sp_registrar_compra(
     p_cuenta_id UUID,
+    p_suscripcion_id UUID,
     p_plan_id UUID,
     p_tipo_operacion tipo_operacion_pago,
     p_monto_base NUMERIC(10,2),
@@ -95,6 +96,7 @@ DECLARE
 BEGIN
     INSERT INTO transacciones (
         cuenta_id,
+        suscripcion_id,
         plan_id,
         tipo_operacion,
         monto_base,
@@ -105,6 +107,7 @@ BEGIN
         pagado_en
     ) VALUES (
         p_cuenta_id,
+        p_suscripcion_id,
         p_plan_id,
         p_tipo_operacion,
         p_monto_base,

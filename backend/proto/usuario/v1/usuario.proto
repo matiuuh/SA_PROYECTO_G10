@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package usuario.v1;
+
+message Account {
+  string id = 1;
+  string nombre = 2;
+  string correo = 3;
+  string pais = 4;
+  string rol = 5;
+  string creado_en = 6;
+}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string session_id = 2;
+  Account account = 3;
+}
+
+message GetAccountByIdRequest {
+  string account_id = 1;
+}
+
+message GetAccountByEmailRequest {
+  string email = 1;
+}
+
+service UsuarioService {
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetAccountById (GetAccountByIdRequest) returns (Account);
+  rpc GetAccountByEmail (GetAccountByEmailRequest) returns (Account);
+}
