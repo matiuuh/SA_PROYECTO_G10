@@ -1,0 +1,23 @@
+# Archivos de entorno — nunca subir al repo
+.env
+.env.*
+!.env.example
+
+# Contexto personal de Claude Code
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Dependencias
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Archivos de prueba local
+test-catalogo.ps1
+test-streaming.ps1
+test-divisas.ps1
+test-cobros.ps1
+req.json
+grpc_tmp.json
