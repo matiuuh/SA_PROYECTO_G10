@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package catalogo.v1;
+
+// El codigo Go generado se deposita en pkg/pb/catalogo/v1/ dentro del modulo del servicio.
+option go_package = "quetzaltv/services/catalogo/pkg/pb/catalogo/v1;catalogov1";
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum TipoContenido {
+  TIPO_CONTENIDO_UNSPECIFIED = 0;
+  TIPO_CONTENIDO_PELICULA    = 1;
+  TIPO_CONTENIDO_SERIE       = 2;
+}
+
+enum TipoReaccion {
+  TIPO_REACCION_UNSPECIFIED = 0;
+  TIPO_REACCION_LIKE        = 1;
+  TIPO_REACCION_DISLIKE     = 2;
+}
+
+// ─── Mensajes base ────────────────────────────────────────────────────────────
+
+message Genero {
+  int64  id          = 1;
+  string nombre      = 2;
+  string descripcion = 3;
+}
+
+message MiembroReparto {
+  int64  id               = 1;
+  string nombre_artistico = 2;
+  string nombre_real      = 3;
+  string nacionalidad     = 4;
+  string personaje        = 5;
+}
+
+message Contenido {
+  string        id                       = 1;
+  string        titulo                   = 2;
+  TipoContenido tipo                     = 3;
+  string        sinopsis                 = 4;
+  string        idioma                   = 5;
+  string        url_portada              = 6;
+  string        fecha_lanzamiento        = 7;
+  double        porcentaje_recomendacion = 8;
+}
+
+message DetalleContenido {
+  string               id                       = 1;
+  string               titulo                   = 2;
+  TipoContenido        tipo                     = 3;
+  string               sinopsis                 = 4;
+  string               ficha_tecnica            = 5;
+  string               fecha_lanzamiento        = 6;
+  string               clasificacion_edad       = 7;
+  int32                duracion_minutos         = 8;
+  string               idioma                   = 9;
+  string               url_portada              = 10;
+  string               url_video                = 11;
+  int32                total_likes              = 12;
+  int32                total_dislikes           = 13;
+  double               porcentaje_recomendacion = 14;
+  repeated Genero      generos                  = 15;
+  repeated MiembroReparto reparto               = 16;
+}
+
+// ─── Requests / Responses ─────────────────────────────────────────────────────
+
+message ListarContenidoRequest {}
+
+message ListarContenidoResponse {
+  repeated Contenido contenidos = 1;
+}
+
+message BuscarContenidoRequest {
+  string query = 1;
+}
+
+message FiltrarContenidoRequest {
+  repeated int64 genero_ids = 1;
+}
+
+message ObtenerDetalleRequest {
+  string contenido_id = 1;
+}
+
+message ObtenerDetalleResponse {
+  DetalleContenido detalle = 1;
+}
+
+message CalificarContenidoRequest {
+  string       contenido_id = 1;
+  string       perfil_id    = 2;
+  TipoReaccion reaccion     = 3;
+}
+
+message CalificarContenidoResponse {
+  double porcentaje_recomendacion = 1;
+}
+
+message CrearContenidoRequest {
+  string        titulo               = 1;
+  TipoContenido tipo                 = 2;
+  string        sinopsis             = 3;
+  string        ficha_tecnica        = 4;
+  string        fecha_lanzamiento    = 5;
+  string        clasificacion_edad   = 6;
+  int32         duracion_minutos     = 7;
+  string        idioma               = 8;
+  string        url_portada          = 9;
+  string        url_video            = 10;
+  string        creado_por_cuenta_id = 11;
+  repeated int64 genero_ids          = 12;
+}
+
+message ActualizarContenidoRequest {
+  string contenido_id       = 1;
+  string titulo             = 2;
+  string sinopsis           = 3;
+  string ficha_tecnica      = 4;
+  string clasificacion_edad = 5;
+  int32  duracion_minutos   = 6;
+  string url_portada        = 7;
+  string url_video          = 8;
+}
+
+message EliminarContenidoRequest {
+  string contenido_id = 1;
+}
+
+message EliminarContenidoResponse {
+  bool ok = 1;
+}
+
+// ─── Servicio ─────────────────────────────────────────────────────────────────
+
+service CatalogoService {
+  // Lectura publica
+  rpc ListarContenido   (ListarContenidoRequest)   returns (ListarContenidoResponse);
+  rpc BuscarContenido   (BuscarContenidoRequest)   returns (ListarContenidoResponse);
+  rpc FiltrarContenido  (FiltrarContenidoRequest)  returns (ListarContenidoResponse);
+  rpc ObtenerDetalle    (ObtenerDetalleRequest)    returns (ObtenerDetalleResponse);
+
+  // Calificacion (perfil autenticado)
+  rpc CalificarContenido (CalificarContenidoRequest) returns (CalificarContenidoResponse);
+
+  // Administracion de contenido
+  rpc CrearContenido      (CrearContenidoRequest)      returns (Contenido);
+  rpc ActualizarContenido (ActualizarContenidoRequest) returns (Contenido);
+  rpc EliminarContenido   (EliminarContenidoRequest)   returns (EliminarContenidoResponse);
+}
