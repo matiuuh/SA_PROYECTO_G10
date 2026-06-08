@@ -3,7 +3,6 @@
 ## Core del negocio
 | Representación | Actor | Descripción |
 |----|-------------|-------------|
-|![Cliente](./img/actor.png)  | **Persona** | Persona que no está registrada en el sistema. |
 |![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles, gestionar su suscripción, explorar el catálogo, reproducir contenido y calificarlo. |
 |![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar y eliminar películas o series. |
 |![Pasarela de Pago](./img/actor.png)  | **Pasarela de Pago** | Servicio externo que procesa las transacciones asociadas a la contratación, modificación o cancelación de planes de suscripción. |
@@ -476,7 +475,7 @@
 
 ### Expandidos de CDU006: Administración de Contenido
 
-![CDU006](./img/CDU_CDU_006.png)
+![CDU006](./img/CDU_CDU006.png)
 
 - **CDU-006.1**: Registro de Contenido
 - **CDU-006.2**: Envío de Alerta de Nuevo Contenido
@@ -544,6 +543,7 @@
 | Reglas de calidad | La acción debe requerir confirmación explícita para evitar errores.<br>El sistema debe mostrar un mensaje claro sobre el resultado final. |
 
 
+[Volver al documentación](../Documentación.md)
 
 ## Archivo Crudo
 

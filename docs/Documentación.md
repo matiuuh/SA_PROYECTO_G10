@@ -24,7 +24,7 @@ Integrantes:
 
 ### Vista de Arquitectura 4+1
 
-- [Vistas 4+1](./Vistas4+1/Vistas_4+1.md)
+- [Vistas 4+1](./vistas_4_+_1/vista4+1.md)
 
 ### Diagramas Estructurales, Comportamentales y Persistencia
 
