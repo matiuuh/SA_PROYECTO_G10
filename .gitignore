@@ -1,0 +1,45 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Docker / compose local overrides
+docker-compose.override.yml
+
+# Build artifacts
+build/
+dist/
+
+# Frontend artifacts when working from repo root
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/storybook-static/
