@@ -1,3 +1,7 @@
+-- =========================================================
+-- ENUMS Y ESQUEMA
+-- =========================================================
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE tipo_notificacion AS ENUM ('registro', 'recibo_compra', 'nuevo_contenido');
@@ -17,6 +21,24 @@ CREATE TABLE notificaciones.envios_correo (
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     procesado_en TIMESTAMPTZ
 );
+
+-- =========================================================
+-- VISTAS
+-- =========================================================
+
+CREATE VIEW notificaciones.v_envios_exitosos AS
+SELECT *
+FROM notificaciones.envios_correo
+WHERE estado_envio = 'enviado';
+
+CREATE VIEW notificaciones.v_envios_fallidos AS
+SELECT *
+FROM notificaciones.envios_correo
+WHERE estado_envio = 'fallido';
+
+-- =========================================================
+-- ÍNDICES
+-- =========================================================
 
 CREATE INDEX idx_envios_correo_estado ON notificaciones.envios_correo(estado_envio);
 CREATE INDEX idx_envios_correo_tipo ON notificaciones.envios_correo(tipo_notificacion);

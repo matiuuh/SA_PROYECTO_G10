@@ -1,9 +1,17 @@
+-- =========================================================
+-- ENUMS Y ESQUEMA
+-- =========================================================
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE estado_historial AS ENUM ('en_progreso', 'finalizado');
 CREATE TYPE evento_instantanea AS ENUM ('insercion', 'actualizacion', 'eliminacion');
 
 CREATE SCHEMA IF NOT EXISTS streaming;
+
+-- =========================================================
+-- TABLAS
+-- =========================================================
 
 CREATE TABLE streaming.historial_reproduccion (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,6 +35,68 @@ CREATE TABLE streaming.instantaneas (
     usuario_accion UUID,
     fecha_evento TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- =========================================================
+-- FUNCIONES
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION streaming.fn_actualizar_actualizado_en()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.actualizado_en = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION streaming.fn_registrar_instantanea()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        INSERT INTO streaming.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
+        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NOW());
+        RETURN OLD;
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO streaming.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW), NOW());
+        RETURN NEW;
+    ELSE
+        INSERT INTO streaming.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW), NOW());
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =========================================================
+-- VISTAS
+-- =========================================================
+
+CREATE VIEW streaming.v_historial_reciente AS
+SELECT *
+FROM streaming.historial_reproduccion
+ORDER BY actualizado_en DESC;
+
+CREATE VIEW streaming.v_continuar_viendo AS
+SELECT *
+FROM streaming.historial_reproduccion
+WHERE estado = 'en_progreso' AND progreso_segundos > 0
+ORDER BY actualizado_en DESC;
+
+-- =========================================================
+-- TRIGGERS
+-- =========================================================
+
+CREATE TRIGGER trg_actualizar_actualizado_en_historial
+BEFORE UPDATE ON streaming.historial_reproduccion
+FOR EACH ROW EXECUTE FUNCTION streaming.fn_actualizar_actualizado_en();
+
+CREATE TRIGGER trg_snapshot_historial_reproduccion
+AFTER INSERT OR UPDATE OR DELETE ON streaming.historial_reproduccion
+FOR EACH ROW EXECUTE FUNCTION streaming.fn_registrar_instantanea();
+
+-- =========================================================
+-- ÍNDICES
+-- =========================================================
 
 CREATE INDEX idx_historial_perfil ON streaming.historial_reproduccion(perfil_id);
 CREATE INDEX idx_historial_contenido ON streaming.historial_reproduccion(contenido_id);
