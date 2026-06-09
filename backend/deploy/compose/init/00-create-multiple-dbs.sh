@@ -12,10 +12,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'E
 EOSQL
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "quetzal_usuario" \
-  -f /init-scripts/10-usuarios.sql
+  -f /init-scripts/10-usuarios.sql \
+  -f /init-scripts/11-usuarios-seed-admin.sql
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "quetzal_suscripcion" \
-  -f /init-scripts/20-suscripciones.sql
+  -f /init-scripts/20-suscripciones.sql \
+  -f /init-scripts/21-suscripciones-seed-planes.sql
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "quetzal_catalogo" \
   -f /init-scripts/30-catalogo-schema.sql \

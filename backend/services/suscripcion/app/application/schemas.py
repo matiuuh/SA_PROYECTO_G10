@@ -24,8 +24,24 @@ class PlanResponse(BaseModel):
     actualizado_en: datetime
 
 
+class PlanQuoteResponse(BaseModel):
+    plan_id: str
+    nombre_plan: str
+    precio_base: Decimal
+    moneda_base: str
+    moneda_local: str | None
+    monto_local: Decimal | None
+    tasa_cambio: Decimal | None
+    conversion_disponible: bool
+    mensaje: str
+
+
 class CreateSubscriptionRequest(BaseModel):
     cuenta_id: str
+    plan_id: str
+
+
+class ChangeSubscriptionPlanRequest(BaseModel):
     plan_id: str
 
 
@@ -38,6 +54,15 @@ class SubscriptionResponse(BaseModel):
     fecha_fin: datetime | None
     creado_en: datetime
     actualizado_en: datetime
+
+
+class SubscriptionStatusResponse(BaseModel):
+    tiene_suscripcion: bool
+    suscripcion: SubscriptionResponse | None
+
+
+class ActiveSubscriptionAccountsResponse(BaseModel):
+    cuenta_ids: list[str]
 
 
 class MessageResponse(BaseModel):

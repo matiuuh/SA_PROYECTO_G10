@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 
 	"quetzaltv/services/catalogo/internal/domain"
 )
@@ -42,6 +43,22 @@ func (s *CatalogoService) GetDetail(ctx context.Context, id string) (*domain.Con
 // ─── Escritura ────────────────────────────────────────────────────────────────
 
 func (s *CatalogoService) Create(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error) {
+	c.Title = strings.TrimSpace(c.Title)
+	c.Synopsis = strings.TrimSpace(c.Synopsis)
+	c.TechnicalSheet = strings.TrimSpace(c.TechnicalSheet)
+	c.AgeRating = strings.TrimSpace(c.AgeRating)
+	c.Language = strings.TrimSpace(c.Language)
+	c.PosterURL = strings.TrimSpace(c.PosterURL)
+	c.TrailerURL = strings.TrimSpace(c.TrailerURL)
+
+	exists, err := s.repo.ExistsByTitleAndType(ctx, c.Title, c.Type)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return "", domain.ErrDuplicateContent
+	}
+
 	return s.repo.Create(ctx, c, genreIDs)
 }
 
@@ -57,4 +74,22 @@ func (s *CatalogoService) Delete(ctx context.Context, id string) error {
 
 func (s *CatalogoService) Rate(ctx context.Context, r *domain.Rating) (float64, error) {
 	return s.repo.Rate(ctx, r)
+}
+
+func (s *CatalogoService) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
+	return s.repo.ListSeasonsByContent(ctx, strings.TrimSpace(contentID))
+}
+
+func (s *CatalogoService) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch) ([]domain.Episode, error) {
+	contentID = strings.TrimSpace(contentID)
+	batch.SeasonTitle = strings.TrimSpace(batch.SeasonTitle)
+	batch.SeasonDescription = strings.TrimSpace(batch.SeasonDescription)
+
+	for index := range batch.Episodes {
+		batch.Episodes[index].Title = strings.TrimSpace(batch.Episodes[index].Title)
+		batch.Episodes[index].Synopsis = strings.TrimSpace(batch.Episodes[index].Synopsis)
+		batch.Episodes[index].VideoURL = strings.TrimSpace(batch.Episodes[index].VideoURL)
+	}
+
+	return s.repo.CreateEpisodeBatch(ctx, contentID, batch)
 }

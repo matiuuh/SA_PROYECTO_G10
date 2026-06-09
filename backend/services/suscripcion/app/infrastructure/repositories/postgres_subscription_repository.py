@@ -69,6 +69,20 @@ class PostgresSubscriptionRepository:
                 row = cursor.fetchone()
         return self._map_row(row) if row else None
 
+    def list_active_account_ids(self) -> list[str]:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT cuenta_id
+                    FROM suscripciones.suscripciones
+                    WHERE estado = 'activa'
+                    ORDER BY cuenta_id
+                    """
+                )
+                rows = cursor.fetchall()
+        return [str(row["cuenta_id"]) for row in rows]
+
     def update(self, subscription: Subscription) -> Subscription:
         with self._database.connection() as connection:
             with connection.cursor() as cursor:

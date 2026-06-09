@@ -1,9 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.application.schemas import (
+    ActiveSubscriptionAccountsResponse,
+    ChangeSubscriptionPlanRequest,
     CreateSubscriptionRequest,
     MessageResponse,
     SubscriptionResponse,
+    SubscriptionStatusResponse,
 )
 from app.domain.errors import ConflictError, NotFoundError
 from app.infrastructure.container import Container
@@ -32,12 +35,44 @@ def build_subscription_router(container: Container) -> APIRouter:
 
         return SubscriptionResponse(**subscription.__dict__)
 
+    @router.get("/account/{cuenta_id}/status", response_model=SubscriptionStatusResponse)
+    def get_subscription_status_by_account(cuenta_id: str) -> SubscriptionStatusResponse:
+        subscription = container.subscription_service.get_subscription_status_by_account(cuenta_id)
+
+        return SubscriptionStatusResponse(
+            tiene_suscripcion=subscription is not None,
+            suscripcion=SubscriptionResponse(**subscription.__dict__) if subscription is not None else None,
+        )
+
+    @router.get("/active/accounts", response_model=ActiveSubscriptionAccountsResponse)
+    def list_active_subscription_accounts() -> ActiveSubscriptionAccountsResponse:
+        return ActiveSubscriptionAccountsResponse(
+            cuenta_ids=container.subscription_service.list_active_account_ids()
+        )
+
+    @router.put("/{suscripcion_id}/plan", response_model=SubscriptionResponse)
+    def change_subscription_plan(
+        suscripcion_id: str, request: ChangeSubscriptionPlanRequest
+    ) -> SubscriptionResponse:
+        try:
+            subscription = container.subscription_service.change_subscription_plan(
+                suscripcion_id, request
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConflictError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+        return SubscriptionResponse(**subscription.__dict__)
+
     @router.post("/{suscripcion_id}/cancel", response_model=MessageResponse)
     def cancel_subscription(suscripcion_id: str) -> MessageResponse:
         try:
             container.subscription_service.cancel_subscription(suscripcion_id)
         except NotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConflictError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
         return MessageResponse(message="Suscripcion cancelada correctamente.")
 

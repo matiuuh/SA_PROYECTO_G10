@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,12 +15,15 @@ import (
 	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 	"quetzaltv/services/catalogo/internal/application"
 	grpchandler "quetzaltv/services/catalogo/internal/interfaces/grpc"
+	httphandler "quetzaltv/services/catalogo/internal/interfaces/http"
+	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
 	"quetzaltv/services/catalogo/internal/infrastructure/postgres"
 )
 
 func main() {
 	dbURL := mustEnv("DATABASE_URL")
 	port := getEnv("GRPC_PORT", "5003")
+	httpPort := getEnv("HTTP_PORT", "8003")
 
 	ctx := context.Background()
 
@@ -36,7 +40,9 @@ func main() {
 
 	repo := postgres.NewContentRepository(pool)
 	svc := application.New(repo)
-	handler := grpchandler.NewHandler(svc)
+	alertDispatcher := alerts.NewDispatcherFromEnv()
+	handler := grpchandler.NewHandler(svc, alertDispatcher)
+	httpHandler := httphandler.NewHandler(svc, alertDispatcher)
 
 	grpcServer := grpc.NewServer()
 	catalogov1.RegisterCatalogoServiceServer(grpcServer, handler)
@@ -46,6 +52,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("no se pudo iniciar el listener: %v", err)
 	}
+
+	httpMux := http.NewServeMux()
+	httpHandler.RegisterRoutes(httpMux)
+
+	go func() {
+		log.Printf("catalogo-service HTTP escuchando en :%s", httpPort)
+		if err := http.ListenAndServe(fmt.Sprintf(":%s", httpPort), httpMux); err != nil {
+			log.Fatalf("error al servir HTTP: %v", err)
+		}
+	}()
 
 	log.Printf("catalogo-service escuchando en :%s", port)
 	if err := grpcServer.Serve(lis); err != nil {

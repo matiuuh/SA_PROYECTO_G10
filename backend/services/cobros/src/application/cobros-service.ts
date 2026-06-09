@@ -111,15 +111,35 @@ export async function procesarPago(input: ProcesarPagoInput): Promise<ProcesarPa
       try {
         await enviarReciboNotificacion({
           correo_destino: recibo.correo_destino,
+          nombre_usuario: input.nombre_usuario,
           id_transaccion: transaccion.id,
-          descripcion_plan: `Plan ${transaccion.plan_id}`,
+          descripcion_plan:
+            input.descripcion_plan?.trim() || `Plan ${transaccion.plan_id}`,
           monto: transaccion.monto_local,
           moneda: transaccion.moneda_local,
           fecha: (transaccion.pagado_en ?? transaccion.creado_en).toISOString(),
         });
+        await client.query(
+          `UPDATE recibos
+             SET enviado = TRUE,
+                 enviado_en = NOW()
+           WHERE id = $1`,
+          [recibo.id],
+        );
+        recibo.enviado = true;
+        recibo.enviado_en = new Date();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn('[cobros] no se pudo enviar notificacion de recibo:', msg);
+        await client.query(
+          `UPDATE recibos
+             SET enviado = FALSE,
+                 enviado_en = NULL
+           WHERE id = $1`,
+          [recibo.id],
+        );
+        recibo.enviado = false;
+        recibo.enviado_en = null;
       }
     }
 

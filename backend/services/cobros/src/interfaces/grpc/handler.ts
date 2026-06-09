@@ -90,6 +90,8 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
       monto_base: number;
       moneda_local: string;
       correo_destino: string;
+      nombre_usuario?: string;
+      descripcion_plan?: string;
     };
 
     const tipoOp = TIPO_OP_REVERSE[req.tipo_operacion];
@@ -106,6 +108,8 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
       monto_base: req.monto_base,
       moneda_local: req.moneda_local,
       correo_destino: req.correo_destino,
+      nombre_usuario: req.nombre_usuario,
+      descripcion_plan: req.descripcion_plan,
     });
 
     callback(null, {

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Download, Check, Copy, Film, Calendar, Clock, CreditCard } from 'lucide-react'
 import { Button } from '@/components/atoms'
-import type { SubscriptionPlan } from '@/types/subscription'
+import type { UiSubscriptionPlan } from '@/types/subscription'
 
 interface PurchaseReceiptProps {
-  plan: SubscriptionPlan
+  plan: UiSubscriptionPlan
   orderId: string
   orderDate: string
   paymentMethod?: string

@@ -13,7 +13,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init/00-create-multiple-dbs.sh:/docker-entrypoint-initdb.d/00-create-multiple-dbs.sh:ro
       - ../../services/usuario/database/sql/01_usuarios.sql:/init-scripts/10-usuarios.sql:ro
+      - ../../services/usuario/database/seed/01_admin_seed.sql:/init-scripts/11-usuarios-seed-admin.sql:ro
       - ../../services/suscripcion/database/sql/04_suscripciones.sql:/init-scripts/20-suscripciones.sql:ro
+      - ../../services/suscripcion/database/seed/01_planes_seed.sql:/init-scripts/21-suscripciones-seed-planes.sql:ro
       - ../../services/catalogo/database/sql/01_schema.sql:/init-scripts/30-catalogo-schema.sql:ro
       - ../../services/catalogo/database/sql/02_procedures.sql:/init-scripts/31-catalogo-procedures.sql:ro
       - ../../services/streaming/database/sql/01_schema.sql:/init-scripts/40-streaming-schema.sql:ro
@@ -53,6 +55,9 @@ services:
       APP_ENV: development
       APP_PORT: 8001
       GRPC_PORT: 5001
+      NOTIFICATIONS_ENABLED: "true"
+      NOTIFICATIONS_GRPC_TARGET: notificaciones-service:5007
+      NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
       STORAGE_BACKEND: postgres
       JWT_SECRET: change-me-local
       JWT_ALGORITHM: HS256
@@ -84,6 +89,8 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 5002
+      DIVISAS_GRPC_TARGET: divisas-service:5005
+      CONVERSION_TIMEOUT_SECONDS: 3.0
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: quetzal_suscripcion
@@ -105,8 +112,14 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_catalogo
       GRPC_PORT: 5003
+      HTTP_PORT: 8003
+      JWT_SECRET: change-me-local
+      SUBSCRIPCION_API_URL: http://suscripcion-service:8002
+      USUARIO_API_URL: http://usuario-service:8001
+      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
     ports:
       - "5003:5003"
+      - "8003:8003"
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,8 +133,10 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming
       GRPC_PORT: 5004
+      HTTP_PORT: 8004
     ports:
       - "5004:5004"
+      - "8004:8004"
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,8 +189,10 @@ services:
       DEFAULT_NOTIFICATION_USER_NAME: Usuario
       BASE_CURRENCY: USD
       GRPC_PORT: 5006
+      HTTP_PORT: 8006
     ports:
       - "5006:5006"
+      - "8006:8006"
     depends_on:
       postgres:
         condition: service_healthy

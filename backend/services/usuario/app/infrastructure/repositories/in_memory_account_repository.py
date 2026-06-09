@@ -15,3 +15,7 @@ class InMemoryAccountRepository:
 
     def get_by_id(self, account_id: str) -> Account | None:
         return self._accounts_by_id.get(account_id)
+
+    def update(self, account: Account) -> None:
+        self._accounts_by_id[account.id] = account
+        self._accounts_by_email[account.correo.lower()] = account
