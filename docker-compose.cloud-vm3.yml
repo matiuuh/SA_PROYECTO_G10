@@ -1,27 +1,30 @@
-name: quetzaltv-local
+name: quetzaltv-databases
 
-# ─── Servicios activos en esta fase ───────────────────────────────────────────
-#   Cada microservicio tiene su propio contenedor PostgreSQL (Database per
-#   Microservice estricto). Divisas usa API externa (sin contenedor propio).
+# ─── VM3 — Bases de datos ──────────────────────────────────────────────────────
+#   Contiene los seis PostgreSQL del proyecto (Database per Microservice).
+#   Los servicios en VM1/VM2 se conectan usando la IP interna de esta VM.
 #
-#   Servicio          REST     gRPC    DB (contenedor)
-#   ─────────────────────────────────────────────────────────────────────
-#   usuario           :8001    :5001   postgres-usuario        :5437
-#   suscripcion       :8002    :50052  postgres-suscripcion    :5438
-#   catalogo           —       :5003   postgres-catalogo       :5433
-#   streaming          —       :5004   postgres-streaming      :5434
-#   cobros             —       :5006   postgres-cobros         :5436
-#   notificaciones     —       :5007   postgres-notificaciones :5439
+#   DB                     Puerto expuesto en VM3
+#   ────────────────────────────────────────────
+#   postgres-usuario        5437
+#   postgres-suscripcion    5438
+#   postgres-catalogo       5433
+#   postgres-streaming      5434
+#   postgres-cobros         5436
+#   postgres-notificaciones 5439
 #
-# Levantar todo:            docker compose -f docker-compose.local.yml up --build --remove-orphans
-# Solo un servicio y su DB: docker compose -f docker-compose.local.yml up --build catalogo postgres-catalogo
-# Reconstruir un servicio:  docker compose -f docker-compose.local.yml up --build catalogo
-# Ver logs en tiempo real:  docker compose -f docker-compose.local.yml logs -f
+#   Variables requeridas en .env (en esta VM):
+#     DB_PASSWORD   — contraseña de producción para el usuario "quetzal"
+#
+#   GCP: los puertos 5433-5439 deben abrirse solo a las IPs internas de VM1 y VM2
+#        mediante reglas de firewall en la VPC. No exponer a internet.
+#
+#   Levantar: docker compose -f docker-compose.cloud-vm3.yml up -d
 
 services:
 
   # ════════════════════════════════════════════════════════════════════════════
-  # USUARIO  (Python · FastAPI + gRPC)
+  # USUARIO
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-usuario:
@@ -29,7 +32,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: usuario_db
     volumes:
       - pg_usuario_data:/var/lib/postgresql/data
@@ -38,33 +41,12 @@ services:
       - "5437:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d usuario_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
-  usuario:
-    build:
-      context: ./backend/services/usuario
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      STORAGE_BACKEND: postgres
-      DB_HOST: postgres-usuario
-      DB_PORT: "5432"
-      DB_NAME: usuario_db
-      DB_USER: quetzal
-      DB_PASSWORD: quetzal
-      JWT_SECRET: quetzal-dev-secret-change-in-prod
-      GRPC_PORT: "5001"
-    ports:
-      - "8001:8001"
-      - "5001:5001"
-    depends_on:
-      postgres-usuario:
-        condition: service_healthy
-
   # ════════════════════════════════════════════════════════════════════════════
-  # SUSCRIPCIÓN  (Python · FastAPI + gRPC)
+  # SUSCRIPCIÓN
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-suscripcion:
@@ -72,7 +54,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: suscripcion_db
     volumes:
       - pg_suscripcion_data:/var/lib/postgresql/data
@@ -81,31 +63,12 @@ services:
       - "5438:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d suscripcion_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
-  suscripcion:
-    build:
-      context: ./backend/services/suscripcion
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      DB_HOST: postgres-suscripcion
-      DB_PORT: "5432"
-      DB_NAME: suscripcion_db
-      DB_USER: quetzal
-      DB_PASSWORD: quetzal
-      GRPC_PORT: "50052"
-    ports:
-      - "8002:8002"
-      - "50052:50052"
-    depends_on:
-      postgres-suscripcion:
-        condition: service_healthy
-
   # ════════════════════════════════════════════════════════════════════════════
-  # CATÁLOGO  (Go · gRPC)
+  # CATÁLOGO
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-catalogo:
@@ -113,7 +76,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: catalogo_db
     volumes:
       - pg_catalogo_data:/var/lib/postgresql/data
@@ -122,26 +85,12 @@ services:
       - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d catalogo_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
-  catalogo:
-    build:
-      context: ./backend
-      dockerfile: services/catalogo/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-catalogo:5432/catalogo_db?sslmode=disable
-      GRPC_PORT: "5003"
-    ports:
-      - "5003:5003"
-    depends_on:
-      postgres-catalogo:
-        condition: service_healthy
-
   # ════════════════════════════════════════════════════════════════════════════
-  # STREAMING  (Go · gRPC)
+  # STREAMING
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-streaming:
@@ -149,7 +98,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: streaming_db
     volumes:
       - pg_streaming_data:/var/lib/postgresql/data
@@ -158,43 +107,12 @@ services:
       - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d streaming_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  streaming:
-    build:
-      context: ./backend
-      dockerfile: services/streaming/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
-      GRPC_PORT: "5004"
-    ports:
-      - "5004:5004"
-    depends_on:
-      postgres-streaming:
-        condition: service_healthy
-
-  # ════════════════════════════════════════════════════════════════════════════
-  # INFRAESTRUCTURA COMPARTIDA
-  # ════════════════════════════════════════════════════════════════════════════
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
   # ════════════════════════════════════════════════════════════════════════════
-  # COBROS  (TypeScript · gRPC)
-  #   Servicio financiero: procesa pagos, convierte divisas via API externa
-  #   y cachea los tipos de cambio en Redis con TTL.
+  # COBROS
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-cobros:
@@ -202,7 +120,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: cobros_db
     volumes:
       - pg_cobros_data:/var/lib/postgresql/data
@@ -211,33 +129,12 @@ services:
       - "5436:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d cobros_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
-  cobros:
-    build:
-      context: ./backend
-      dockerfile: services/cobros/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-cobros:5432/cobros_db?sslmode=disable
-      REDIS_URL: redis://redis:6379
-      FX_API_URL: ${FX_API_URL:-https://open.er-api.com/v6/latest}
-      NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
-      GRPC_PORT: "5006"
-    ports:
-      - "5006:5006"
-    depends_on:
-      postgres-cobros:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      notificaciones:
-        condition: service_started
-
   # ════════════════════════════════════════════════════════════════════════════
-  # NOTIFICACIONES  (TypeScript · gRPC)
+  # NOTIFICACIONES
   # ════════════════════════════════════════════════════════════════════════════
 
   postgres-notificaciones:
@@ -245,7 +142,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: notificaciones_db
     volumes:
       - pg_notificaciones_data:/var/lib/postgresql/data
@@ -254,29 +151,12 @@ services:
       - "5439:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d notificaciones_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
-  notificaciones:
-    build:
-      context: ./backend
-      dockerfile: services/notificaciones/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-notificaciones:5432/notificaciones_db?sslmode=disable
-      GRPC_PORT: "5007"
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASS: ${EMAIL_PASS}
-      EMAIL_FROM: ${EMAIL_FROM}
-    ports:
-      - "5007:5007"
-    depends_on:
-      postgres-notificaciones:
-        condition: service_healthy
-
 # ════════════════════════════════════════════════════════════════════════════
-# VOLÚMENES — uno por base de datos (aislamiento físico completo)
+# VOLÚMENES
 # ════════════════════════════════════════════════════════════════════════════
 
 volumes:

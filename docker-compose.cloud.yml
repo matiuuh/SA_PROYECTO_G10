@@ -1,8 +1,9 @@
-name: quetzaltv-local
+name: quetzaltv-cloud
 
-# ─── Servicios activos en esta fase ───────────────────────────────────────────
-#   Cada microservicio tiene su propio contenedor PostgreSQL (Database per
-#   Microservice estricto). Divisas usa API externa (sin contenedor propio).
+# ─── Orquestación completa — un solo host ─────────────────────────────────────
+#   Todos los microservicios y sus bases de datos en una sola máquina.
+#   Útil para staging, demos, o cuando solo se dispone de una VM grande.
+#   Para despliegue distribuido en 3 VMs usar los archivos cloud-vm{1,2,3}.yml.
 #
 #   Servicio          REST     gRPC    DB (contenedor)
 #   ─────────────────────────────────────────────────────────────────────
@@ -13,10 +14,18 @@ name: quetzaltv-local
 #   cobros             —       :5006   postgres-cobros         :5436
 #   notificaciones     —       :5007   postgres-notificaciones :5439
 #
-# Levantar todo:            docker compose -f docker-compose.local.yml up --build --remove-orphans
-# Solo un servicio y su DB: docker compose -f docker-compose.local.yml up --build catalogo postgres-catalogo
-# Reconstruir un servicio:  docker compose -f docker-compose.local.yml up --build catalogo
-# Ver logs en tiempo real:  docker compose -f docker-compose.local.yml logs -f
+#   Variables requeridas en .env:
+#     DB_PASSWORD   — contraseña de producción para el usuario "quetzal"
+#     JWT_SECRET    — clave secreta para firmar/verificar JWT
+#     EMAIL_USER    — cuenta de correo SMTP
+#     EMAIL_PASS    — contraseña o app-password del correo
+#     EMAIL_FROM    — dirección remitente
+#     FX_API_URL    — (opcional) URL de la API de tipos de cambio
+#                     por defecto: https://open.er-api.com/v6/latest
+#
+#   Levantar todo:      docker compose -f docker-compose.cloud.yml up -d --build
+#   Ver logs:           docker compose -f docker-compose.cloud.yml logs -f
+#   Detener todo:       docker compose -f docker-compose.cloud.yml down
 
 services:
 
@@ -29,7 +38,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: usuario_db
     volumes:
       - pg_usuario_data:/var/lib/postgresql/data
@@ -38,7 +47,7 @@ services:
       - "5437:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d usuario_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -53,8 +62,8 @@ services:
       DB_PORT: "5432"
       DB_NAME: usuario_db
       DB_USER: quetzal
-      DB_PASSWORD: quetzal
-      JWT_SECRET: quetzal-dev-secret-change-in-prod
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
       GRPC_PORT: "5001"
     ports:
       - "8001:8001"
@@ -72,7 +81,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: suscripcion_db
     volumes:
       - pg_suscripcion_data:/var/lib/postgresql/data
@@ -81,7 +90,7 @@ services:
       - "5438:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d suscripcion_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -95,7 +104,7 @@ services:
       DB_PORT: "5432"
       DB_NAME: suscripcion_db
       DB_USER: quetzal
-      DB_PASSWORD: quetzal
+      DB_PASSWORD: ${DB_PASSWORD}
       GRPC_PORT: "50052"
     ports:
       - "8002:8002"
@@ -113,7 +122,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: catalogo_db
     volumes:
       - pg_catalogo_data:/var/lib/postgresql/data
@@ -122,7 +131,7 @@ services:
       - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d catalogo_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -132,7 +141,7 @@ services:
       dockerfile: services/catalogo/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-catalogo:5432/catalogo_db?sslmode=disable
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@postgres-catalogo:5432/catalogo_db?sslmode=disable
       GRPC_PORT: "5003"
     ports:
       - "5003:5003"
@@ -149,7 +158,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: streaming_db
     volumes:
       - pg_streaming_data:/var/lib/postgresql/data
@@ -158,7 +167,7 @@ services:
       - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d streaming_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -168,7 +177,7 @@ services:
       dockerfile: services/streaming/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@postgres-streaming:5432/streaming_db?sslmode=disable
       GRPC_PORT: "5004"
     ports:
       - "5004:5004"
@@ -187,7 +196,7 @@ services:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -202,7 +211,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: cobros_db
     volumes:
       - pg_cobros_data:/var/lib/postgresql/data
@@ -211,7 +220,7 @@ services:
       - "5436:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d cobros_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -221,10 +230,9 @@ services:
       dockerfile: services/cobros/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-cobros:5432/cobros_db?sslmode=disable
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@postgres-cobros:5432/cobros_db?sslmode=disable
       REDIS_URL: redis://redis:6379
       FX_API_URL: ${FX_API_URL:-https://open.er-api.com/v6/latest}
-      NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
       GRPC_PORT: "5006"
     ports:
       - "5006:5006"
@@ -233,8 +241,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      notificaciones:
-        condition: service_started
 
   # ════════════════════════════════════════════════════════════════════════════
   # NOTIFICACIONES  (TypeScript · gRPC)
@@ -245,7 +251,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: notificaciones_db
     volumes:
       - pg_notificaciones_data:/var/lib/postgresql/data
@@ -254,7 +260,7 @@ services:
       - "5439:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quetzal -d notificaciones_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -264,7 +270,7 @@ services:
       dockerfile: services/notificaciones/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres-notificaciones:5432/notificaciones_db?sslmode=disable
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@postgres-notificaciones:5432/notificaciones_db?sslmode=disable
       GRPC_PORT: "5007"
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
@@ -276,7 +282,7 @@ services:
         condition: service_healthy
 
 # ════════════════════════════════════════════════════════════════════════════
-# VOLÚMENES — uno por base de datos (aislamiento físico completo)
+# VOLÚMENES — uno por base de datos
 # ════════════════════════════════════════════════════════════════════════════
 
 volumes:

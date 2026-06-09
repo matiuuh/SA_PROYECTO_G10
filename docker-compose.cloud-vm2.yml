@@ -1,0 +1,96 @@
+name: quetzaltv-vm2
+
+# ─── VM2 — Servicios: notificaciones · streaming · cobros ─────────────────────
+#   Las bases de datos viven en VM3. Cada servicio se conecta usando la IP
+#   interna de VM3 y el puerto expuesto por el contenedor correspondiente.
+#
+#   Servicio          REST    gRPC    DB en VM3 (puerto)
+#   ──────────────────────────────────────────────────────
+#   notificaciones     —      :5007   postgres-notificaciones (5439)
+#   streaming          —      :5004   postgres-streaming      (5434)
+#   cobros             —      :5006   postgres-cobros         (5436)
+#
+#   Redis corre en esta misma VM (usado por cobros para caché de divisas).
+#
+#   Variables requeridas en .env (en esta VM):
+#     DB_VM3_HOST  — IP interna de VM3 en GCP (ej. 10.128.0.X)
+#     DB_PASSWORD  — contraseña del usuario "quetzal" en PostgreSQL
+#     EMAIL_USER   — cuenta de correo para notificaciones (ej. SMTP user)
+#     EMAIL_PASS   — contraseña o app-password del correo
+#     EMAIL_FROM   — dirección remitente (ej. noreply@quetzaltv.com)
+#     FX_API_URL   — (opcional) URL de la API de tipos de cambio
+#
+#   Levantar: docker compose -f docker-compose.cloud-vm2.yml up -d --build
+#
+#   Nota: no hay depends_on hacia las BDs porque están en otra VM.
+#         Los servicios deben manejar reintentos de conexión en su arranque.
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # INFRAESTRUCTURA COMPARTIDA
+  # ════════════════════════════════════════════════════════════════════════════
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NOTIFICACIONES  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  notificaciones:
+    build:
+      context: ./backend
+      dockerfile: services/notificaciones/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@${DB_VM3_HOST}:5439/notificaciones_db?sslmode=disable
+      GRPC_PORT: "5007"
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      EMAIL_FROM: ${EMAIL_FROM}
+    ports:
+      - "5007:5007"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STREAMING  (Go · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  streaming:
+    build:
+      context: ./backend
+      dockerfile: services/streaming/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@${DB_VM3_HOST}:5434/streaming_db?sslmode=disable
+      GRPC_PORT: "5004"
+    ports:
+      - "5004:5004"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # COBROS  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  cobros:
+    build:
+      context: ./backend
+      dockerfile: services/cobros/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:${DB_PASSWORD}@${DB_VM3_HOST}:5436/cobros_db?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      FX_API_URL: ${FX_API_URL:-https://open.er-api.com/v6/latest}
+      GRPC_PORT: "5006"
+    ports:
+      - "5006:5006"
+    depends_on:
+      redis:
+        condition: service_healthy
