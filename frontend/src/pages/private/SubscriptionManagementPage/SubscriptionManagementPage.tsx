@@ -57,7 +57,7 @@ export function SubscriptionManagementPage() {
 
       try {
         const [subscription, activePlans] = await Promise.all([
-          getSubscriptionByAccount(accessToken, accountId),
+          getSubscriptionByAccount(accountId),
           listActivePlans(),
         ])
 
@@ -147,7 +147,7 @@ export function SubscriptionManagementPage() {
     setErrorMessage('')
 
     try {
-      const updatedSubscription = await changeSubscriptionPlan(accessToken, subscriptionId, selectedPlan.id)
+      const updatedSubscription = await changeSubscriptionPlan(subscriptionId, selectedPlan.id)
       let paymentWarning = ''
 
       try {
@@ -193,7 +193,7 @@ export function SubscriptionManagementPage() {
     setErrorMessage('')
 
     try {
-      const response = await cancelSubscription(accessToken, subscriptionId)
+      const response = await cancelSubscription(subscriptionId)
       if (accessToken) {
         await syncProfilesAvailability(accessToken, 1)
       }
