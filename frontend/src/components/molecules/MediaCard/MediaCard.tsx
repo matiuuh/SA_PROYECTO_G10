@@ -1,10 +1,10 @@
-import { Play, Star, Film, Plus } from 'lucide-react'
+import { Play, Star, Film, Plus, ThumbsUp } from 'lucide-react'
 
 export interface MediaCardProps {
   title: string
   genre: string
   year: number
-  rating: number
+  rating: number | null
   posterUrl?: string
   isNew?: boolean
   onClick?: () => void
@@ -64,10 +64,17 @@ export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false
       <div className="px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-medium text-white text-sm leading-tight line-clamp-1 flex-1">{title}</h3>
-          <span className="shrink-0 flex items-center gap-0.5 text-[11px] text-[var(--color-warning)] font-semibold">
-            <Star size={10} fill="currentColor" strokeWidth={0} />
-            {rating.toFixed(1)}
-          </span>
+          {rating != null ? (
+            <span className="shrink-0 flex items-center gap-1 text-[11px] text-[var(--color-warning)] font-semibold">
+              <ThumbsUp size={10} fill="currentColor" strokeWidth={0} />
+              {Math.round(rating * 10)}%
+            </span>
+          ) : (
+            <span className="shrink-0 flex items-center gap-0.5 text-[11px] text-[var(--color-denim-500)] font-semibold">
+              <Star size={10} strokeWidth={1.75} />
+              Sin recomendacion
+            </span>
+          )}
         </div>
         <p className="text-[11px] text-[var(--color-denim-500)] mt-0.5">{genre} · {year}</p>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Play,
@@ -21,10 +21,12 @@ import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
-import { getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
+import { getCatalogDetail, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { getPlaybackProgress, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent, CatalogDetail } from '@/types/catalog'
+import type { PlaybackProgress } from '@/types/streaming'
 
 function getReleaseYear(date?: string): number {
   if (!date) return new Date().getFullYear()
@@ -33,12 +35,13 @@ function getReleaseYear(date?: string): number {
 }
 
 function mapCatalogToContentItem(content: CatalogContent): ContentItem {
+  const hasRecommendation = content.porcentaje_recomendacion > 0
   return {
     id: content.id,
     title: content.titulo,
     genre: content.tipo === 'serie' ? 'Serie' : 'Pelicula',
     year: getReleaseYear(content.fecha_lanzamiento),
-    rating: Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)),
+    rating: hasRecommendation ? Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)) : null,
     posterUrl: content.url_portada,
     isNew: getReleaseYear(content.fecha_lanzamiento) >= new Date().getFullYear() - 1,
   }
@@ -84,7 +87,11 @@ function extractYouTubeVideoId(url: string): string | null {
   return null
 }
 
-function resolveTrailerSource(url: string | undefined, muted: boolean): TrailerSource {
+function resolveTrailerSource(
+  url: string | undefined,
+  muted: boolean,
+  startSeconds: number,
+): TrailerSource {
   const normalized = url?.trim() ?? ''
   if (!normalized) return null
 
@@ -92,7 +99,7 @@ function resolveTrailerSource(url: string | undefined, muted: boolean): TrailerS
   if (youtubeId) {
     return {
       type: 'youtube',
-      src: `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=${muted ? '1' : '0'}&rel=0&modestbranding=1&playsinline=1`,
+      src: `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=${muted ? '1' : '0'}&rel=0&modestbranding=1&playsinline=1&start=${Math.max(0, Math.floor(startSeconds))}`,
     }
   }
 
@@ -101,6 +108,23 @@ function resolveTrailerSource(url: string | undefined, muted: boolean): TrailerS
   }
 
   return null
+}
+
+function formatProgress(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const remainingSeconds = safeSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
+function buildLikeStorageKey(profileId: string, contentId: string): string {
+  return `quetzal_content_like:${profileId}:${contentId}`
 }
 
 export function MovieDetailPage() {
@@ -114,11 +138,17 @@ export function MovieDetailPage() {
   const [muted, setMuted] = useState(false)
   const [inList, setInList] = useState(false)
   const [liked, setLiked] = useState(false)
+  const [isSubmittingLike, setIsSubmittingLike] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [related, setRelated] = useState<ContentItem[]>([])
+  const [savedProgress, setSavedProgress] = useState<PlaybackProgress | null>(null)
+  const [resumeFromSeconds, setResumeFromSeconds] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [playbackError, setPlaybackError] = useState('')
+  const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
@@ -139,6 +169,45 @@ export function MovieDetailPage() {
 
     void loadSubscriptionStatus()
   }, [accessToken, accountId, activeProfile, navigate])
+
+  useEffect(() => {
+    async function loadSavedProgress() {
+      if (!id || !hasSubscription) return
+
+      const currentProfile = getStoredActiveProfile()
+      if (!currentProfile?.id) return
+
+      try {
+        const progress = await getPlaybackProgress(currentProfile.id, id)
+        if (!progress || progress.progreso_segundos <= 0) {
+          setSavedProgress(null)
+          setResumeFromSeconds(0)
+          return
+        }
+
+        setSavedProgress(progress)
+        setResumeFromSeconds(progress.progreso_segundos)
+      } catch (error) {
+        setPlaybackError(
+          error instanceof Error ? error.message : 'No se pudo recuperar el ultimo progreso guardado.',
+        )
+      }
+    }
+
+    void loadSavedProgress()
+  }, [hasSubscription, id])
+
+  useEffect(() => {
+    if (!id) return
+
+    const currentProfile = getStoredActiveProfile()
+    if (!currentProfile?.id) {
+      setLiked(false)
+      return
+    }
+
+    setLiked(localStorage.getItem(buildLikeStorageKey(currentProfile.id, id)) === '1')
+  }, [id])
 
   useEffect(() => {
     async function loadDetail() {
@@ -174,6 +243,7 @@ export function MovieDetailPage() {
     if (!detail) return 0
     return Math.max(0, Math.min(10, detail.porcentaje_recomendacion / 10))
   }, [detail])
+  const hasCommunityRecommendation = (detail?.total_likes ?? 0) + (detail?.total_dislikes ?? 0) > 0
 
   const duration = useMemo(() => {
     if (!detail?.duracion_minutos) return 'Sin duracion registrada'
@@ -186,13 +256,143 @@ export function MovieDetailPage() {
   const genres = detail?.generos ?? []
   const cast = detail?.reparto ?? []
   const trailerSource = useMemo(
-    () => resolveTrailerSource(detail?.url_trailer, muted),
-    [detail?.url_trailer, muted],
+    () => resolveTrailerSource(detail?.url_trailer, muted, resumeFromSeconds),
+    [detail?.url_trailer, muted, resumeFromSeconds],
   )
+
+  useEffect(() => {
+    if (!playing) return
+    if (trailerSource?.type !== 'video') return
+    if (!videoRef.current) return
+    if (resumeFromSeconds <= 0) return
+
+    const video = videoRef.current
+    const setCurrentTime = () => {
+      try {
+        video.currentTime = resumeFromSeconds
+      } catch {
+        // Ignore seek errors and keep default start.
+      }
+    }
+
+    if (video.readyState >= 1) {
+      setCurrentTime()
+      return
+    }
+
+    video.addEventListener('loadedmetadata', setCurrentTime, { once: true })
+    return () => video.removeEventListener('loadedmetadata', setCurrentTime)
+  }, [playing, resumeFromSeconds, trailerSource])
 
   const handlePlay = () => {
     if (!hasSubscription) return
+    setResumeFromSeconds(0)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
     setPlaying(true)
+  }
+
+  const handleResume = () => {
+    if (!hasSubscription) return
+    const nextResumePoint = savedProgress?.progreso_segundos ?? 0
+    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }
+
+  const persistPlaybackProgress = async (forceSeconds?: number) => {
+    const currentProfile = getStoredActiveProfile()
+    if (!hasSubscription || !currentProfile?.id || !detail?.id) return
+
+    let nextProgress = forceSeconds ?? resumeFromSeconds
+
+    if (forceSeconds == null && playbackStartedAt != null) {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - playbackStartedAt) / 1000))
+      nextProgress = resumeFromSeconds + elapsedSeconds
+    }
+
+    if (!Number.isFinite(nextProgress) || nextProgress < 0) {
+      return
+    }
+
+    const totalDurationSeconds = detail.duracion_minutos ? detail.duracion_minutos * 60 : 0
+    if (totalDurationSeconds > 0 && nextProgress > totalDurationSeconds) {
+      nextProgress = totalDurationSeconds
+    }
+
+    try {
+      await updatePlaybackProgress({
+        perfil_id: currentProfile.id,
+        contenido_id: detail.id,
+        episodio_id: '',
+        progreso_segundos: nextProgress,
+        duracion_total_segundos: totalDurationSeconds,
+      })
+
+      if (nextProgress > 0) {
+        setSavedProgress((prev) => ({
+          id: prev?.id ?? '',
+          perfil_id: currentProfile.id,
+          contenido_id: detail.id,
+          episodio_id: '',
+          estado:
+            totalDurationSeconds > 0 && nextProgress >= totalDurationSeconds * 0.9
+              ? 'finalizado'
+              : 'en_progreso',
+          progreso_segundos: nextProgress,
+          actualizado_en: new Date().toISOString(),
+        }))
+      }
+    } catch (error) {
+      setPlaybackError(
+        error instanceof Error ? error.message : 'No se pudo guardar el progreso de reproduccion.',
+      )
+    }
+  }
+
+  const closePlayback = async () => {
+    await persistPlaybackProgress()
+    setPlaying(false)
+    setPlaybackStartedAt(null)
+  }
+
+  const handleLike = async () => {
+    if (!detail?.id || !accessToken) {
+      setPlaybackError('Debes iniciar sesion para registrar tu reaccion.')
+      return
+    }
+
+    const currentProfile = getStoredActiveProfile()
+    if (!currentProfile?.id) {
+      setPlaybackError('Debes seleccionar un perfil activo para registrar tu reaccion.')
+      return
+    }
+
+    setIsSubmittingLike(true)
+    setPlaybackError('')
+
+    try {
+      const response = await likeCatalogContent(accessToken, detail.id, currentProfile.id)
+      localStorage.setItem(buildLikeStorageKey(currentProfile.id, detail.id), '1')
+      setLiked(true)
+      setDetail((previous) =>
+        previous
+          ? {
+              ...previous,
+              total_likes: response.total_likes,
+              total_dislikes: response.total_dislikes,
+              porcentaje_recomendacion: response.porcentaje_recomendacion,
+            }
+          : previous,
+      )
+    } catch (error) {
+      setPlaybackError(
+        error instanceof Error ? error.message : 'No se pudo registrar tu like en este momento.',
+      )
+    } finally {
+      setIsSubmittingLike(false)
+    }
   }
 
   if (isLoading) {
@@ -233,6 +433,7 @@ export function MovieDetailPage() {
             ) : trailerSource?.type === 'video' ? (
               <video
                 key={trailerSource.src}
+                ref={videoRef}
                 src={trailerSource.src}
                 className="h-full w-full bg-black"
                 controls
@@ -266,7 +467,9 @@ export function MovieDetailPage() {
                 <Maximize2 size={16} />
               </button>
               <button
-                onClick={() => setPlaying(false)}
+                onClick={() => {
+                  void closePlayback()
+                }}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white transition-colors duration-200 hover:bg-black/70"
               >
                 <X size={16} />
@@ -280,7 +483,9 @@ export function MovieDetailPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setPlaying(false)}
+                    onClick={() => {
+                      void closePlayback()
+                    }}
                     className="flex h-10 w-10 items-center justify-center rounded-full bg-white transition-colors duration-200 hover:bg-white/90"
                   >
                     <Pause size={18} fill="#080c14" strokeWidth={0} />
@@ -366,13 +571,30 @@ export function MovieDetailPage() {
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {hasSubscription ? (
-              <button
-                onClick={handlePlay}
-                className="inline-flex items-center gap-2.5 rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[#080c14] shadow-lg shadow-black/40 transition-colors duration-200 hover:bg-white/90"
-              >
-                <Play size={17} fill="#080c14" strokeWidth={0} className="shrink-0" />
-                Reproducir
-              </button>
+              <>
+                {savedProgress?.progreso_segundos && savedProgress.progreso_segundos > 0 ? (
+                  <>
+                    <button
+                      onClick={handleResume}
+                      className="inline-flex items-center gap-2.5 rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[#080c14] shadow-lg shadow-black/40 transition-colors duration-200 hover:bg-white/90"
+                    >
+                      <Play size={17} fill="#080c14" strokeWidth={0} className="shrink-0" />
+                      Reanudar desde {formatProgress(savedProgress.progreso_segundos)}
+                    </button>
+                    <Button variant="outline" onClick={handlePlay}>
+                      Ver desde el inicio
+                    </Button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handlePlay}
+                    className="inline-flex items-center gap-2.5 rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[#080c14] shadow-lg shadow-black/40 transition-colors duration-200 hover:bg-white/90"
+                  >
+                    <Play size={17} fill="#080c14" strokeWidth={0} className="shrink-0" />
+                    Reproducir
+                  </button>
+                )}
+              </>
             ) : (
               <Link to="/subscription/plans">
                 <Button className="gap-2">
@@ -395,13 +617,16 @@ export function MovieDetailPage() {
             </button>
 
             <button
-              onClick={() => setLiked((value) => !value)}
+              onClick={() => {
+                void handleLike()
+              }}
+              disabled={isSubmittingLike}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
                 liked
                   ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-[var(--color-denim-300)]'
                   : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
-              }`}
-              aria-label="Me gusta"
+              } ${isSubmittingLike ? 'cursor-wait opacity-70' : ''}`}
+              aria-label={liked ? 'Contenido marcado con like' : 'Marcar contenido con like'}
             >
               <ThumbsUp size={15} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
             </button>
@@ -413,6 +638,10 @@ export function MovieDetailPage() {
               <Share2 size={15} strokeWidth={1.75} />
             </button>
           </div>
+
+          {playbackError ? (
+            <p className="text-sm text-[var(--color-warning)]">{playbackError}</p>
+          ) : null}
         </div>
       </div>
 
@@ -465,24 +694,22 @@ export function MovieDetailPage() {
         <div className="flex w-full shrink-0 flex-col gap-3 lg:w-72">
           <ScrollReveal variant="fade-up" delay={80}>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">
-              Calificacion
+              Recomendacion
             </h3>
             <div className="rounded-xl border border-white/[0.06] bg-[#0d1220] p-4">
               <div className="flex items-end gap-3">
-                <span className="text-5xl font-bold leading-none text-white">{rating.toFixed(1)}</span>
+                <span className="text-5xl font-bold leading-none text-white">
+                  {hasCommunityRecommendation ? `${Math.round(detail.porcentaje_recomendacion)}%` : 'N/D'}
+                </span>
                 <div className="flex flex-col gap-0.5 pb-1">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <Star
-                        key={index}
-                        size={12}
-                        strokeWidth={0}
-                        fill={index < Math.round(rating / 2) ? 'var(--color-warning)' : 'rgba(255,255,255,0.12)'}
-                      />
-                    ))}
+                  <div className="flex items-center gap-1 text-[var(--color-warning)]">
+                    <ThumbsUp size={12} fill="currentColor" strokeWidth={0} />
+                    <span className="text-xs font-semibold uppercase tracking-wide">Aprobacion global</span>
                   </div>
                   <span className="text-xs text-[var(--color-denim-500)]">
-                    {detail.total_likes} likes y {detail.total_dislikes} dislikes
+                    {hasCommunityRecommendation
+                      ? `${detail.total_likes} like${detail.total_likes === 1 ? '' : 's'} registrados`
+                      : 'Sin recomendacion disponible todavia'}
                   </span>
                 </div>
               </div>

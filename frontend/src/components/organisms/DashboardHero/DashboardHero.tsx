@@ -1,4 +1,4 @@
-import { Play, Info, Star } from 'lucide-react'
+import { Play, Info, Star, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { Badge } from '@/components/atoms'
 
@@ -7,7 +7,7 @@ interface DashboardHeroProps {
   description: string
   genre: string
   year: number
-  rating: number
+  rating: number | null
   backdropUrl?: string
 }
 
@@ -20,17 +20,17 @@ export function DashboardHero({
   backdropUrl,
 }: DashboardHeroProps) {
   return (
-    <section className="relative w-full h-[56vh] min-h-[380px] max-h-[580px] overflow-hidden">
+    <section className="relative h-[56vh] max-h-[580px] min-h-[380px] w-full overflow-hidden">
       <div className="absolute inset-0 bg-[#0a0e19]">
         {backdropUrl ? (
           <img
             src={backdropUrl}
             alt={title}
-            className="w-full h-full object-cover opacity-40"
+            className="h-full w-full object-cover opacity-40"
           />
         ) : (
           <div
-            className="w-full h-full"
+            className="h-full w-full"
             style={{
               background:
                 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(22,95,180,0.18) 0%, rgba(16,35,65,0.6) 50%, transparent 100%)',
@@ -40,35 +40,42 @@ export function DashboardHero({
       </div>
 
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
             'linear-gradient(to right, rgba(8,12,20,0.96) 0%, rgba(8,12,20,0.60) 50%, rgba(8,12,20,0.10) 100%)',
         }}
       />
       <div
-        className="absolute bottom-0 inset-x-0 h-32 pointer-events-none"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-32"
         style={{
           background: 'linear-gradient(to top, #080c14 0%, transparent 100%)',
         }}
       />
 
-      <div className="relative z-10 h-full flex items-end pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-end px-4 pb-12 sm:px-6 lg:px-8">
         <div className="max-w-xl animate-[fadeSlideUp_0.7s_ease-out_both]">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="mb-3 flex items-center gap-2">
             <Badge variant="info">Destacado</Badge>
-            <span className="flex items-center gap-1 text-xs text-[var(--color-warning)] font-semibold">
-              <Star size={11} fill="currentColor" strokeWidth={0} />
-              {rating.toFixed(1)}
-            </span>
+            {rating != null ? (
+              <span className="flex items-center gap-1 text-xs font-semibold text-[var(--color-warning)]">
+                <ThumbsUp size={11} fill="currentColor" strokeWidth={0} />
+                {Math.round(rating * 10)}% de aprobacion
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs font-semibold text-[var(--color-denim-400)]">
+                <Star size={11} strokeWidth={1.75} />
+                Sin recomendacion disponible
+              </span>
+            )}
             <span className="text-xs text-[var(--color-denim-400)]">{genre} · {year}</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-3 leading-tight drop-shadow-lg">
+          <h1 className="mb-3 text-4xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">
             {title}
           </h1>
 
-          <p className="text-sm text-[var(--color-denim-300)] mb-6 leading-relaxed line-clamp-3 max-w-md">
+          <p className="mb-6 max-w-md line-clamp-3 text-sm leading-relaxed text-[var(--color-denim-300)]">
             {description}
           </p>
 
@@ -77,9 +84,13 @@ export function DashboardHero({
               <Play size={16} fill="currentColor" strokeWidth={0} />
               Reproducir
             </Button>
-            <Button variant="ghost" size="md" className="gap-2 border border-white/[0.12] hover:border-white/25 hover:bg-white/[0.06]">
+            <Button
+              variant="ghost"
+              size="md"
+              className="gap-2 border border-white/[0.12] hover:border-white/25 hover:bg-white/[0.06]"
+            >
               <Info size={16} strokeWidth={1.75} />
-              Más info
+              Mas info
             </Button>
           </div>
         </div>

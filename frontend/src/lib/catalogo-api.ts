@@ -5,6 +5,7 @@ import type {
   CatalogListResponse,
   CreateCatalogContentPayload,
   CreateCatalogContentResponse,
+  LikeCatalogContentResponse,
 } from '@/types/catalog'
 
 const API_BASE_URL = import.meta.env.VITE_CATALOGO_API_URL ?? 'http://localhost:8003'
@@ -83,4 +84,27 @@ export async function createCatalogContent(
   }
 
   return (await response.json()) as CreateCatalogContentResponse
+}
+
+export async function likeCatalogContent(
+  accessToken: string,
+  contentId: string,
+  perfilId: string,
+): Promise<LikeCatalogContentResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/${contentId}/like`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      perfil_id: perfilId,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as LikeCatalogContentResponse
 }

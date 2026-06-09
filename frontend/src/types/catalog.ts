@@ -47,6 +47,13 @@ export interface CatalogDetailResponse {
   detalle: CatalogDetail
 }
 
+export interface LikeCatalogContentResponse {
+  message: string
+  total_likes: number
+  total_dislikes: number
+  porcentaje_recomendacion: number
+}
+
 export interface CreateCatalogContentPayload {
   titulo: string
   tipo: 'pelicula' | 'serie'

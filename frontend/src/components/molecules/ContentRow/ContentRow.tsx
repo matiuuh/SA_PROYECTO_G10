@@ -7,7 +7,7 @@ export interface ContentItem {
   title: string
   genre: string
   year: number
-  rating: number
+  rating: number | null
   posterUrl?: string
   isNew?: boolean
 }

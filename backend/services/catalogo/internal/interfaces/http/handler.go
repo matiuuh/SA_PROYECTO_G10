@@ -85,6 +85,17 @@ type createContentResponse struct {
 	Message string `json:"message"`
 }
 
+type likeContentRequest struct {
+	PerfilID string `json:"perfil_id"`
+}
+
+type likeContentResponse struct {
+	Message                 string  `json:"message"`
+	TotalLikes              int     `json:"total_likes"`
+	TotalDislikes           int     `json:"total_dislikes"`
+	PorcentajeRecomendacion float64 `json:"porcentaje_recomendacion"`
+}
+
 type jwtClaims struct {
 	Role  string `json:"role"`
 	Email string `json:"email"`
@@ -163,17 +174,34 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		writePreflight(w)
 		return
 	}
+
+	path := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/catalog/"))
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
+		return
+	}
+
+	if strings.HasSuffix(path, "/like") {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/like"))
+		id = strings.TrimSuffix(id, "/")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
+			return
+		}
+		h.handleLikeContent(w, r, id)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w)
 		return
 	}
 
-	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/catalog/"))
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
-		return
-	}
-
+	id := path
 	detail, err := h.svc.GetDetail(r.Context(), id)
 	if errors.Is(err, domain.ErrContentNotFound) {
 		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
@@ -187,6 +215,93 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"detalle": toDetailResponse(detail),
 	})
+}
+
+func (h *Handler) handleLikeContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	if _, err := h.requireAuthenticated(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	var req likeContentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	profileID := strings.TrimSpace(req.PerfilID)
+	if profileID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el perfil que emite la reaccion.")
+		return
+	}
+
+	_, err := h.svc.Rate(r.Context(), &domain.Rating{
+		ContentID: contentID,
+		ProfileID: profileID,
+		Reaction:  domain.ReactionLike,
+	})
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo registrar el like del contenido.")
+		return
+	}
+
+	detail, err := h.svc.GetDetail(r.Context(), contentID)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo actualizar el detalle del contenido.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, likeContentResponse{
+		Message:                 "Like registrado correctamente.",
+		TotalLikes:              detail.TotalLikes,
+		TotalDislikes:           detail.TotalDislikes,
+		PorcentajeRecomendacion: detail.RecommendationPct,
+	})
+}
+
+func (h *Handler) requireAuthenticated(r *http.Request) (*jwtClaims, error) {
+	if len(h.jwtSecret) == 0 {
+		return nil, errors.New("server_jwt_secret_missing")
+	}
+
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return nil, errors.New("missing_bearer")
+	}
+
+	tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	if tokenString == "" {
+		return nil, errors.New("missing_bearer")
+	}
+
+	token, err := jwt.ParseWithClaims(tokenString, &jwtClaims{}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("invalid_signing_method")
+		}
+		return h.jwtSecret, nil
+	})
+	if err != nil {
+		return nil, errors.New("invalid_token")
+	}
+
+	claims, ok := token.Claims.(*jwtClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("invalid_token")
+	}
+
+	if strings.TrimSpace(claims.Subject) == "" {
+		return nil, errors.New("invalid_token")
+	}
+
+	return claims, nil
 }
 
 func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
@@ -237,33 +352,9 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) requireAdmin(r *http.Request) (string, error) {
-	if len(h.jwtSecret) == 0 {
-		return "", errors.New("server_jwt_secret_missing")
-	}
-
-	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", errors.New("missing_bearer")
-	}
-
-	tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-	if tokenString == "" {
-		return "", errors.New("missing_bearer")
-	}
-
-	token, err := jwt.ParseWithClaims(tokenString, &jwtClaims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("invalid_signing_method")
-		}
-		return h.jwtSecret, nil
-	})
+	claims, err := h.requireAuthenticated(r)
 	if err != nil {
-		return "", errors.New("invalid_token")
-	}
-
-	claims, ok := token.Claims.(*jwtClaims)
-	if !ok || !token.Valid {
-		return "", errors.New("invalid_token")
+		return "", err
 	}
 
 	if strings.TrimSpace(claims.Role) != "administrador" {

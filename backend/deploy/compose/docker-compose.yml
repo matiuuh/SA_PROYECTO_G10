@@ -131,8 +131,10 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming
       GRPC_PORT: 5004
+      HTTP_PORT: 8004
     ports:
       - "5004:5004"
+      - "8004:8004"
     depends_on:
       postgres:
         condition: service_healthy

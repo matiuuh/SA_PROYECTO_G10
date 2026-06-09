@@ -22,12 +22,13 @@ function getTypeLabel(type: string): string {
 }
 
 function mapCatalogToContentItem(content: CatalogContent): ContentItem {
+  const hasRecommendation = content.porcentaje_recomendacion > 0
   return {
     id: content.id,
     title: content.titulo,
     genre: getTypeLabel(content.tipo),
     year: getReleaseYear(content.fecha_lanzamiento),
-    rating: Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)),
+    rating: hasRecommendation ? Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)) : null,
     posterUrl: content.url_portada,
     isNew: getReleaseYear(content.fecha_lanzamiento) >= new Date().getFullYear() - 1,
   }
@@ -106,20 +107,23 @@ export function PanelPage() {
           description: topContent.sinopsis || 'Disponible en Quetzal TV.',
           genre: getTypeLabel(topContent.tipo),
           year: getReleaseYear(topContent.fecha_lanzamiento),
-          rating: Math.max(0, Math.min(10, topContent.porcentaje_recomendacion / 10)),
+          rating:
+            topContent.porcentaje_recomendacion > 0
+              ? Math.max(0, Math.min(10, topContent.porcentaje_recomendacion / 10))
+              : null,
         }
       : {
           title: 'Catalogo Quetzal TV',
           description: 'Explora las peliculas y series disponibles en la plataforma.',
           genre: 'Streaming',
           year: new Date().getFullYear(),
-          rating: 0,
+          rating: null,
         }
   }, [catalog])
 
   const rows = useMemo(() => {
     const recommended = allContent
-      .filter((item) => item.rating >= 7)
+      .filter((item) => item.rating != null && item.rating >= 7)
       .slice(0, 8)
     const movies = allContent
       .filter((item) => item.genre === 'Pelicula')

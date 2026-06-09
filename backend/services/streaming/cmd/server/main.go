@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,12 +15,14 @@ import (
 	streamingv1 "quetzaltv/services/streaming/pkg/pb/streaming/v1"
 	"quetzaltv/services/streaming/internal/application"
 	grpchandler "quetzaltv/services/streaming/internal/interfaces/grpc"
+	httphandler "quetzaltv/services/streaming/internal/interfaces/http"
 	"quetzaltv/services/streaming/internal/infrastructure/postgres"
 )
 
 func main() {
 	dbURL := mustEnv("DATABASE_URL")
 	port := getEnv("GRPC_PORT", "5004")
+	httpPort := getEnv("HTTP_PORT", "8004")
 
 	ctx := context.Background()
 
@@ -37,6 +40,7 @@ func main() {
 	repo := postgres.NewPlaybackRepository(pool)
 	svc := application.New(repo)
 	handler := grpchandler.NewHandler(svc)
+	httpHandler := httphandler.NewHandler(svc)
 
 	grpcServer := grpc.NewServer()
 	streamingv1.RegisterStreamingServiceServer(grpcServer, handler)
@@ -46,6 +50,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("no se pudo iniciar el listener: %v", err)
 	}
+
+	httpMux := http.NewServeMux()
+	httpHandler.RegisterRoutes(httpMux)
+
+	go func() {
+		log.Printf("streaming-service HTTP escuchando en :%s", httpPort)
+		if err := http.ListenAndServe(fmt.Sprintf(":%s", httpPort), httpMux); err != nil {
+			log.Fatalf("error al servir HTTP: %v", err)
+		}
+	}()
 
 	log.Printf("streaming-service escuchando en :%s", port)
 	if err := grpcServer.Serve(lis); err != nil {
