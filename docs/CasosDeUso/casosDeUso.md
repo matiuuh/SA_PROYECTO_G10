@@ -5,10 +5,10 @@
 |----|-------------|-------------|
 |![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles, gestionar su suscripción, explorar el catálogo, reproducir contenido y calificarlo. |
 |![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar y eliminar películas o series. |
-|![Pasarela de Pago](./img/actor.png)  | **Pasarela de Pago** | Servicio externo que procesa las transacciones asociadas a la contratación, modificación o cancelación de planes de suscripción. |
+
 |![Proveedor de Divisas](./img/actor.png)  | **Proveedor de Divisas** | Servicio externo que suministra los tipos de cambio utilizados por la plataforma para mostrar precios en la moneda local del usuario. |
 |![Proveedor de Correo SMTP](./img/actor.png)  | **Proveedor de Correo SMTP** | Servicio externo encargado de entregar los correos de confirmación de registro, recibos de compra y alertas de nuevo contenido. |
-|![Proveedor OAuth](./img/actor.png)  | **Proveedor OAuth** | Servicio externo de identidad utilizado cuando la plataforma delega procesos de autenticación o autorización mediante OAuth. |
+
 
 ## Casos de uso de alto nivel
 
@@ -39,13 +39,12 @@
 - **CDU-001.1**: Registro de Cuenta
 - **CDU-001.2**: Envío de Notificación de Registro
 - **CDU-001.3**: Inicio de sesión
-- **CDU-001.4**: Inicio de sesión con OAuth
-- **CDU-001.5**: Cierre de sesión
-- **CDU-001.6**: Actualización de Credenciales de Acceso
-- **CDU-001.7**: Selección de Perfil
-- **CDU-001.8**: Creación de Perfil
-- **CDU-001.9**: Modificación de Perfil
-- **CDU-001.10**: Eliminación de Perfil
+- **CDU-001.4**: Cierre de sesión
+- **CDU-001.5**: Actualización de Credenciales de Acceso
+- **CDU-001.6**: Selección de Perfil
+- **CDU-001.7**: Creación de Perfil
+- **CDU-001.8**: Modificación de Perfil
+- **CDU-001.9**: Eliminación de Perfil
 
 #### CDU-001.1 Registro de Cuenta
 
@@ -53,11 +52,11 @@
 |----|----|
 | Nombre | Registro de Cuenta |
 | Código | CDU-001.1 |
-| Actores | Persona |
-| Descripción | Permite a una persona crear una cuenta en la plataforma ingresando sus datos básicos y su ubicación para habilitar el acceso al sistema y la creación automática de su primer perfil. |
-| Precondiciones | La persona no debe tener una cuenta registrada con el mismo correo electrónico. |
+| Actores | Usuario |
+| Descripción | Permite a un usuario crear una cuenta en la plataforma ingresando sus datos básicos y su ubicación para habilitar el acceso al sistema y la creación automática de su primer perfil. |
+| Precondiciones | El usuario no debe tener una cuenta registrada con el mismo correo electrónico. |
 | Postcondiciones | Cuenta registrada correctamente y perfil principal creado con el nombre de la cuenta; o registro rechazado por datos inválidos o duplicados. |
-| Flujo principal | 1. La persona ingresa nombre, correo, contraseña y ubicación.<br>2. La persona confirma el registro.<br>3. El sistema valida la información.<br>4. El sistema crea la cuenta.<br>5. El sistema crea automáticamente el perfil principal usando el nombre de la cuenta.<br>6. El sistema confirma el registro exitoso. |
+| Flujo principal | 1. El usuario ingresa nombre, correo, contraseña y ubicación.<br>2. El usuario confirma el registro.<br>3. El sistema valida la información.<br>4. El sistema crea la cuenta.<br>5. El sistema crea automáticamente el perfil principal usando el nombre de la cuenta.<br>6. El sistema confirma el registro exitoso. |
 | Flujos alternos | FA1. El correo ya existe.<br>FA1.1 El sistema informa que la cuenta ya está registrada.<br>FA2. Faltan datos obligatorios.<br>FA2.1 El sistema solicita completar la información requerida. |
 | Reglas de negocio | El correo debe ser único en la plataforma.<br>La ubicación debe registrarse como parte de la cuenta.<br>La cuenta debe crear un perfil principal automáticamente.<br>El nombre del primer perfil debe corresponder al nombre de la cuenta registrada. |
 | Reglas de calidad | El formulario debe validar campos obligatorios antes del envío.<br>La confirmación del registro debe mostrarse en un tiempo razonable. |
@@ -68,7 +67,7 @@
 |----|----|
 | Nombre | Envío de Notificación de Registro |
 | Código | CDU-001.2 |
-| Actores | Persona, Proveedor de Correo SMTP |
+| Actores | Usuario, Proveedor de Correo SMTP |
 | Descripción | Permite al sistema enviar un correo de confirmación al usuario luego de completar el registro de cuenta de forma satisfactoria. |
 | Precondiciones | La cuenta debe haberse registrado correctamente y el correo electrónico debe estar disponible. |
 | Postcondiciones | Correo de bienvenida enviado; o fallo de envío registrado por el sistema. |
@@ -86,48 +85,33 @@
 | Actores | Usuario, Administrador |
 | Descripción | Permite a un usuario o administrador autenticarse en la plataforma mediante sus credenciales registradas para acceder a las funciones disponibles de su cuenta. |
 | Precondiciones | El usuario o administrador debe tener una cuenta registrada y activa. |
-| Postcondiciones | sesión iniciada correctamente; o acceso denegado por credenciales inválidas. |
+| Postcondiciones | Sesión iniciada correctamente; o acceso denegado por credenciales inválidas. |
 | Flujo principal | 1. El usuario o administrador ingresa su correo y contraseña.<br>2. El usuario o administrador confirma el inicio de sesión.<br>3. El sistema valida las credenciales.<br>4. El sistema crea la sesión segura de la cuenta.<br>5. El sistema muestra acceso a la cuenta. |
 | Flujos alternos | FA1. Credenciales incorrectas.<br>FA1.1 El sistema informa que el acceso fue rechazado.<br>FA2. La cuenta no existe.<br>FA2.1 El sistema informa que no fue posible autenticar la cuenta. |
 | Reglas de negocio | Solo cuentas registradas pueden iniciar sesión con correo y contraseña.<br>La sesión debe quedar asociada a una cuenta válida. |
 | Reglas de calidad | Las credenciales no deben mostrarse en texto plano.<br>El sistema debe informar errores sin exponer detalles sensibles. |
 
-#### CDU-001.4 Inicio de sesión con OAuth
-
-| Campo | Especificación |
-|----|----|
-| Nombre | Inicio de sesión con OAuth |
-| Código | CDU-001.4 |
-| Actores | Usuario, Proveedor OAuth |
-| Descripción | Permite a un usuario autenticarse en la plataforma mediante un proveedor OAuth externo para acceder a una cuenta previamente registrada en el sistema. |
-| Precondiciones | El proveedor OAuth debe estar disponible y configurado en la plataforma. |
-| Postcondiciones | sesión iniciada correctamente sobre una cuenta registrada; o autenticación rechazada por el proveedor externo o por inexistencia de la cuenta en la plataforma. |
-| Flujo principal | 1. El usuario selecciona iniciar sesión con OAuth.<br>2. El sistema redirige al proveedor OAuth.<br>3. El usuario autoriza el acceso con su cuenta externa.<br>4. El proveedor OAuth devuelve la identidad validada y el correo asociado.<br>5. El sistema verifica si el correo existe en su base de datos.<br>6. El sistema abre la sesión de la cuenta registrada sin solicitar la contraseña local. |
-| Flujos alternos | FA1. El usuario cancela la autorización externa.<br>FA1.1 El sistema cancela el proceso de acceso.<br>FA2. El proveedor OAuth rechaza o no valida la identidad.<br>FA2.1 El sistema informa que no pudo completarse la autenticación.<br>FA3. El correo devuelto por el proveedor no existe en la plataforma.<br>FA3.1 El sistema rechaza el acceso y solicita registro previo. |
-| Reglas de negocio | El acceso con OAuth solo aplica para cuentas previamente registradas en la plataforma.<br>El sistema debe validar la existencia del correo en su base de datos antes de abrir la sesión.<br>La identidad devuelta por el proveedor debe ser válida y verificable. |
-| Reglas de calidad | El flujo de redireccion debe ser claro para el usuario.<br>Los errores del proveedor externo deben manejarse sin interrumpir la aplicación. |
-
-#### CDU-001.5 Cierre de sesión
+#### CDU-001.4 Cierre de sesión
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Cierre de sesión |
-| Código | CDU-001.5 |
+| Código | CDU-001.4 |
 | Actores | Usuario, Administrador |
 | Descripción | Permite al usuario o administrador cerrar su sesión activa para finalizar de forma segura el acceso a la plataforma desde el dispositivo actual. |
 | Precondiciones | El usuario o administrador debe tener una sesión activa. |
-| Postcondiciones | sesión cerrada correctamente e invalidada en el cliente; o la solicitud no se procesa por ausencia de sesión válida. |
-| Flujo principal | 1. El usuario o administrador selecciona cerrar sesión.<br>2. El sistema verifica la sesión activa.<br>3. El sistema inválida la sesión y limpia las credenciales de acceso del cliente.<br>4. El sistema redirige a la pantalla pública de acceso. |
-| Flujos alternos | FA1. La sesión ya no es válida.<br>FA1.1 El sistema fuerza la salida y redirige a la pantalla de acceso.<br>FA2. Ocurre un error al inválidar la sesión o limpiar las credenciales locales.<br>FA2.1 El sistema informa que no fue posible completar el cierre de sesión e invita a reintentar. |
-| Reglas de negocio | El cierre de sesión debe inválidar el acceso activo del usuario.<br>La salida debe aplicarse sobre la sesión actual. |
-| Reglas de calidad | El cierre de sesión debe ser inmediato y visible para el usuario.<br>Las credenciales no deben permanecer activas en el cliente. |
+| Postcondiciones | Sesión cerrada correctamente e invalidada en el cliente; o la solicitud no se procesa por ausencia de sesión válida. |
+| Flujo principal | 1. El usuario o administrador selecciona cerrar sesión.<br>2. El sistema verifica la sesión activa.<br>3. El sistema invalida el token de sesión.<br>4. El sistema redirige a la pantalla pública de acceso. |
+| Flujos alternos | FA1. La sesión ya no es válida.<br>FA1.1 El sistema fuerza la salida y redirige a la pantalla de acceso.<br>FA2. Ocurre un error al invalidar el token.<br>FA2.1 El sistema informa que no fue posible completar el cierre de sesión e invita a reintentar. |
+| Reglas de negocio | El cierre de sesión debe invalidar el token activo del usuario.<br>La salida debe aplicarse sobre la sesión actual. |
+| Reglas de calidad | El cierre de sesión debe ser inmediato y visible para el usuario.<br>El token no debe permanecer activo en el cliente. |
 
-#### CDU-001.6 Actualización de Credenciales de Acceso
+#### CDU-001.5 Actualización de Credenciales de Acceso
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Actualización de Credenciales de Acceso |
-| Código | CDU-001.6 |
+| Código | CDU-001.5 |
 | Actores | Usuario |
 | Descripción | Permite al usuario actualizar la contraseña asociada a su cuenta desde la configuración para mantener segura su información de acceso. |
 | Precondiciones | El usuario debe haber iniciado sesión. |
@@ -137,12 +121,12 @@
 | Reglas de negocio | La contraseña debe cumplir la política de seguridad definida por la plataforma.<br>La nueva contraseña debe ser diferente de la contraseña actual. |
 | Reglas de calidad | La actualización debe requerir validaciones claras para el usuario.<br>La información sensible no debe exponerse en pantalla ni en registros. |
 
-#### CDU-001.7 Selección de Perfil
+#### CDU-001.6 Selección de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Selección de Perfil |
-| Código | CDU-001.7 |
+| Código | CDU-001.6 |
 | Actores | Usuario |
 | Descripción | Permite al usuario elegir uno de los perfiles asociados a su cuenta para navegar con preferencias, historial y valoraciónes aisladas. |
 | Precondiciones | El usuario debe haber iniciado sesión y contar con al menos un perfil asociado a su cuenta. |
@@ -152,12 +136,12 @@
 | Reglas de negocio | Toda cuenta debe contar con al menos un perfil creado automáticamente al momento del registro.<br>Un usuario solo puede seleccionar perfiles de su propia cuenta.<br>Cada perfil debe mantener su información aislada. |
 | Reglas de calidad | La selección debe mostrar claramente cuál perfil quedo activo.<br>El cambio de perfil no debe mezclar historiales ni preferencias. |
 
-#### CDU-001.8 Creación de Perfil
+#### CDU-001.7 Creación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Creación de Perfil |
-| Código | CDU-001.8 |
+| Código | CDU-001.7 |
 | Actores | Usuario |
 | Descripción | Permite al usuario crear perfiles adicionales dentro de su cuenta para separar preferencias, historial de reproducción y calificaciónes. |
 | Precondiciones | El usuario debe haber iniciado sesión y no haber alcanzado el limite de perfiles permitidos. |
@@ -167,12 +151,12 @@
 | Reglas de negocio | Una cuenta puede tener como máximo cinco perfiles.<br>Cada perfil debe pertenecer a una única cuenta. |
 | Reglas de calidad | La creación debe completarse con validaciones simples y claras.<br>La respuesta del sistema debe indicar el resultado de la operación. |
 
-#### CDU-001.9 Modificación de Perfil
+#### CDU-001.8 Modificación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Modificación de Perfil |
-| Código | CDU-001.9 |
+| Código | CDU-001.8 |
 | Actores | Usuario |
 | Descripción | Permite al usuario modificar la información visible de uno de sus perfiles para actualizar su identificación dentro de la cuenta. |
 | Precondiciones | El usuario debe haber iniciado sesión y el perfil a modificar debe pertenecer a su cuenta. |
@@ -182,12 +166,12 @@
 | Reglas de negocio | Solo pueden modificarse perfiles pertenecientes a la cuenta autenticada.<br>La modificación no debe afectar el historial ni las calificaciónes existentes. |
 | Reglas de calidad | La actualización debe reflejarse inmediatamente en la interfaz.<br>Los cambios deben conservar la integridad de la información del perfil. |
 
-#### CDU-001.10 Eliminación de Perfil
+#### CDU-001.9 Eliminación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Eliminación de Perfil |
-| Código | CDU-001.10 |
+| Código | CDU-001.9 |
 | Actores | Usuario |
 | Descripción | Permite al usuario eliminar perfiles adicionales de su cuenta cuando ya no desea conservar su historial y preferencias asociadas. |
 | Precondiciones | El usuario debe haber iniciado sesión y el perfil debe pertenecer a su cuenta. |
@@ -290,14 +274,14 @@
 |----|----|
 | Nombre | Procesamiento de Pago |
 | Código | CDU-002.6 |
-| Actores | Usuario, Pasarela de Pago |
-| Descripción | Permite procesar el cobro correspondiente a la contratación o modificación de un plan de suscripción mediante una pasarela de pago externa. |
-| Precondiciones | El usuario debe haber confirmado una operación de suscripción y la pasarela de pago debe estar disponible. |
-| Postcondiciones | Pago aprobado y operación continuada; o pago rechazado, cancelado o pendiente de confirmación. |
-| Flujo principal | 1. El sistema presenta el resumen del pago al usuario.<br>2. El usuario ingresa la información requerida de pago.<br>3. El sistema envía la transacción a la pasarela externa.<br>4. La pasarela procesa el cobro y responde con el resultado.<br>5. El sistema registra el estado final del pago. |
-| Flujos alternos | FA1. La pasarela rechaza la transacción.<br>FA1.1 El sistema informa que el pago fue rechazado.<br>FA2. El usuario abandona el flujo de pago.<br>FA2.1 El sistema cancela la operación asociada. |
-| Reglas de negocio | El pago debe asociarse a una operación válida de suscripción.<br>La activación o cambio del plan depende del resultado del cobro. |
-| Reglas de calidad | El formulario de pago debe proteger la información sensible.<br>El resultado de la transacción debe notificarse claramente al usuario. |
+| Actores | Usuario |
+| Descripción | Permite al sistema registrar el cobro correspondiente a la contratación o modificación de un plan de suscripción mediante el procesamiento interno de pago. |
+| Precondiciones | El usuario debe haber confirmado una operación de suscripción. |
+| Postcondiciones | Pago registrado correctamente; o pago rechazado, cancelado o pendiente de confirmación. |
+| Flujo principal | 1. El sistema presenta el resumen del pago al usuario.<br>2. El usuario confirma la operación de pago.<br>3. El sistema valida los datos de la operación.<br>4. El sistema registra la transacción con estado correspondiente.<br>5. El sistema confirma el resultado al usuario. |
+| Flujos alternos | FA1. El sistema rechaza la transacción por datos inválidos.<br>FA1.1 El sistema informa que el pago fue rechazado.<br>FA2. El usuario abandona el flujo de pago.<br>FA2.1 El sistema cancela la operación asociada. |
+| Reglas de negocio | El pago debe asociarse a una operación válida de suscripción.<br>La activación o cambio del plan depende del resultado del registro de pago. |
+| Reglas de calidad | El resultado de la transacción debe notificarse claramente al usuario.<br>El registro de pago no debe bloquear la operación principal. |
 
 #### CDU-002.7 Envío de Recibo de Compra
 
