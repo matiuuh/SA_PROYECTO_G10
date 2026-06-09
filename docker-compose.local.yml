@@ -412,7 +412,7 @@ services:
     environment:
       PORT: 80
       JWT_SECRET: quetzal-dev-secret
-      FRONTEND_URL: http://frontend:3000
+      FRONTEND_URL: http://frontend:80
       USUARIO_SERVICE_URL:        http://usuario:8001
       SUSCRIPCION_SERVICE_URL:    http://suscripcion:8002
       CATALOGO_SERVICE_URL:       http://catalogo:8003

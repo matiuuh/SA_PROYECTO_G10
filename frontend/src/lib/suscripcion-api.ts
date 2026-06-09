@@ -54,9 +54,7 @@ export async function getPlanQuote(planId: string, pais: string): Promise<PlanQu
 
 export async function getSubscriptionByAccount(cuentaId: string): Promise<SubscriptionRecord | null> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}`, {
-    headers: {
-      ...authHeaders(),
-    },
+    headers: { ...authHeaders() },
   })
 
   if (response.status === 404) {
@@ -72,9 +70,7 @@ export async function getSubscriptionByAccount(cuentaId: string): Promise<Subscr
 
 export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<SubscriptionStatus> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`, {
-    headers: {
-      ...authHeaders(),
-    },
+    headers: { ...authHeaders() },
   })
 
   if (!response.ok) {
@@ -132,9 +128,7 @@ export async function changeSubscriptionPlan(
 export async function cancelSubscription(suscripcionId: string): Promise<SubscriptionMessage> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/${suscripcionId}/cancel`, {
     method: 'POST',
-    headers: {
-      ...authHeaders(),
-    },
+    headers: { ...authHeaders() },
   })
 
   if (!response.ok) {

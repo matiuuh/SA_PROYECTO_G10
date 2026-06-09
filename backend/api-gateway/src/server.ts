@@ -15,7 +15,10 @@ const ROUTES: Array<{ prefix: string; target: keyof typeof config.services }> = 
 ];
 
 function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'access-control-allow-origin': '*',
+  });
   res.end(JSON.stringify(body));
 }
 
