@@ -48,8 +48,10 @@ services:
       DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5435/quetzal_divisas?sslmode=disable
       REDIS_URL: redis://redis:6379
       GRPC_PORT: 5005
+      HTTP_PORT: 8005
     ports:
       - "5005:5005"
+      - "8005:8005"
     depends_on:
       redis:
         condition: service_healthy
@@ -67,6 +69,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5439/quetzal_notificaciones?sslmode=disable
       GRPC_PORT: 5007
+      HTTP_PORT: 8007
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
       EMAIL_FROM: ${EMAIL_FROM}
@@ -103,8 +106,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5436/quetzal_cobros?sslmode=disable
-      DIVISAS_GRPC_TARGET: divisas-service:5005
-      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      API_GATEWAY_URL: http://${VM4_HOST}:80
       REDIS_URL: redis://redis:6379
       DEFAULT_NOTIFICATION_USER_NAME: Usuario
       BASE_CURRENCY: USD

@@ -24,7 +24,7 @@ def build_container() -> Container:
         plan_repository=PostgresPlanRepository(database),
         subscription_repository=PostgresSubscriptionRepository(database),
         divisas_client=DivisasClient(
-            target=settings.divisas_grpc_target,
+            target=settings.api_gateway_url,
             timeout_seconds=settings.conversion_timeout_seconds,
         ),
     )

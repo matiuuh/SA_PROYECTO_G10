@@ -93,7 +93,7 @@ services:
       APP_PORT: 8001
       GRPC_PORT: 5001
       NOTIFICATIONS_ENABLED: "true"
-      NOTIFICATIONS_GRPC_TARGET: notificaciones-service:5007
+      API_GATEWAY_URL: http://api-gateway:4000
       NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
       STORAGE_BACKEND: postgres
       JWT_SECRET: change-me-local
@@ -130,7 +130,7 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 5002
-      DIVISAS_GRPC_TARGET: divisas-service:5005
+      API_GATEWAY_URL: http://api-gateway:4000
       CONVERSION_TIMEOUT_SECONDS: 3.0
       JWT_SECRET: change-me-local
       DB_HOST: postgres
@@ -160,9 +160,9 @@ services:
       GRPC_PORT: 5003
       HTTP_PORT: 8003
       JWT_SECRET: change-me-local
-      SUBSCRIPCION_API_URL: http://suscripcion-service:8002
-      USUARIO_API_URL: http://usuario-service:8001
-      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      SUBSCRIPCION_API_URL: http://api-gateway:4000/api/suscripcion
+      USUARIO_API_URL: http://api-gateway:4000/api/usuario
+      API_GATEWAY_URL: http://api-gateway:4000
     ports:
       - "5003:5003"
       - "8003:8003"
@@ -205,8 +205,10 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_divisas?sslmode=disable
       REDIS_URL: redis://redis:6379
       GRPC_PORT: 5005
+      HTTP_PORT: 8005
     ports:
       - "5005:5005"
+      - "8005:8005"
     depends_on:
       postgres:
         condition: service_healthy
@@ -228,8 +230,10 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_notificaciones?sslmode=disable
       GRPC_PORT: 5007
+      HTTP_PORT: 8007
     ports:
       - "5007:5007"
+      - "8007:8007"
     depends_on:
       postgres:
         condition: service_healthy
@@ -246,8 +250,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_cobros?sslmode=disable
-      DIVISAS_GRPC_TARGET: divisas-service:5005
-      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      API_GATEWAY_URL: http://api-gateway:4000
       DEFAULT_NOTIFICATION_USER_NAME: Usuario
       BASE_CURRENCY: USD
       GRPC_PORT: 5006
@@ -262,6 +265,36 @@ services:
         condition: service_started
       notificaciones-service:
         condition: service_started
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # API GATEWAY  (Node.js/TypeScript — proxy + validación JWT)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  api-gateway:
+    build:
+      context: ../../api-gateway
+      dockerfile: Dockerfile
+    container_name: quetzal-api-gateway-local
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      JWT_SECRET: change-me-local
+      # Sin FRONTEND_URL en local — el frontend corre con pnpm dev por separado
+      USUARIO_SERVICE_URL:        http://usuario-service:8001
+      SUSCRIPCION_SERVICE_URL:    http://suscripcion-service:8002
+      CATALOGO_SERVICE_URL:       http://catalogo-service:8003
+      STREAMING_SERVICE_URL:      http://streaming-service:8004
+      COBROS_SERVICE_URL:         http://cobros-service:8006
+      DIVISAS_SERVICE_URL:        http://divisas-service:8005
+      NOTIFICACIONES_SERVICE_URL: http://notificaciones-service:8007
+    ports:
+      - "4000:4000"
+    depends_on:
+      - usuario-service
+      - suscripcion-service
+      - catalogo-service
+      - streaming-service
+      - cobros-service
 
 # ════════════════════════════════════════════════════════════════════════════
 # VOLÚMENES
