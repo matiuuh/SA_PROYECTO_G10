@@ -1,12 +1,36 @@
-export type PlanTier = 'basic' | 'standard' | 'premium'
-
 export interface SubscriptionPlan {
-  id: PlanTier
+  id: string
+  nombre: string
+  descripcion?: string | null
+  precio_base: string
+  moneda_base: string
+  perfiles_maximos: number
+  activo: boolean
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface UiSubscriptionPlan {
+  id: string
   name: string
+  description: string
   price: number
+  currency: string
   interval: 'month'
+  profileLimit: number
   features: string[]
   popular?: boolean
+}
+
+export interface SubscriptionRecord {
+  id: string
+  cuenta_id: string
+  plan_id: string
+  estado: string
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  creado_en: string
+  actualizado_en: string
 }
 
 export interface PaymentMethod {
@@ -27,7 +51,7 @@ export interface CheckoutFormData {
 
 export interface Order {
   id: string
-  planId: PlanTier
+  planId: string
   planName: string
   amount: number
   date: string

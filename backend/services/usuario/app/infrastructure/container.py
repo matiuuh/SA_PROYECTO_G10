@@ -6,11 +6,17 @@ from app.infrastructure.database import Database
 from app.infrastructure.repositories.in_memory_account_repository import (
     InMemoryAccountRepository,
 )
+from app.infrastructure.repositories.in_memory_profile_repository import (
+    InMemoryProfileRepository,
+)
 from app.infrastructure.repositories.in_memory_session_repository import (
     InMemorySessionRepository,
 )
 from app.infrastructure.repositories.postgres_account_repository import (
     PostgresAccountRepository,
+)
+from app.infrastructure.repositories.postgres_profile_repository import (
+    PostgresProfileRepository,
 )
 from app.infrastructure.repositories.postgres_session_repository import (
     PostgresSessionRepository,
@@ -32,9 +38,11 @@ def build_container() -> Container:
 
     if settings.storage_backend == "postgres":
         account_repository = PostgresAccountRepository(database)
+        profile_repository = PostgresProfileRepository(database)
         session_repository = PostgresSessionRepository(database)
     else:
         account_repository = InMemoryAccountRepository()
+        profile_repository = InMemoryProfileRepository()
         session_repository = InMemorySessionRepository()
 
     password_hasher = PasswordHasher()
@@ -42,6 +50,7 @@ def build_container() -> Container:
 
     auth_service = AuthService(
         account_repository=account_repository,
+        profile_repository=profile_repository,
         session_repository=session_repository,
         password_hasher=password_hasher,
         jwt_service=jwt_service,

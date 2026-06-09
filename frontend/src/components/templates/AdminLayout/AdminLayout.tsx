@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Film,
@@ -12,6 +12,8 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
+import { clearSession, getActiveSession } from '@/lib/auth'
+import { logoutUser } from '@/lib/usuario-api'
 
 interface NavItem {
   label: string
@@ -30,6 +32,22 @@ const NAV_ITEMS: NavItem[] = [
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
+  const session = getActiveSession()
+
+  if (!session) {
+    return <Navigate to="/login" replace />
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser(session.accessToken)
+    } catch {
+      // Ignore backend logout errors and clear local state anyway.
+    } finally {
+      clearSession()
+      navigate('/login', { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#080c14] flex">
@@ -91,7 +109,7 @@ export function AdminLayout() {
             </div>
           </div>
           <button
-            onClick={() => navigate('/')}
+            onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[var(--color-error)] hover:bg-white/[0.04] transition-colors duration-150"
           >
             <LogOut size={15} strokeWidth={1.75} />

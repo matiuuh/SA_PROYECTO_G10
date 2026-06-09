@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Settings,
   LogOut,
@@ -10,15 +10,19 @@ import {
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
+import { clearSession, getActiveSession } from '@/lib/auth'
+import { logoutUser } from '@/lib/usuario-api'
 
 export function AppNavbar() {
-  const [profileOpen, setProfileOpen]   = useState(false)
-  const [searchOpen, setSearchOpen]     = useState(false)
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [hidden, setHidden]             = useState(false)
-  const [hovered, setHovered]           = useState(false)
-  const lastScrollY                     = useRef(0)
-  const searchInputRef                  = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
+  const session = getActiveSession()
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [hidden, setHidden] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const lastScrollY = useRef(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const onScroll = () => {
@@ -26,18 +30,39 @@ export function AppNavbar() {
       setHidden(current > lastScrollY.current && current > 80)
       lastScrollY.current = current
     }
+
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   const isVisible = !hidden || hovered
+  const accountName = session?.account.nombre ?? 'Usuario'
+  const accountEmail = session?.account.correo ?? 'usuario@quetzal.tv'
+  const accountInitial = accountName.charAt(0).toUpperCase() || 'U'
 
   const handleSearchToggle = () => {
-    setSearchOpen((v) => {
-      if (!v) setTimeout(() => searchInputRef.current?.focus(), 50)
-      else setSearchQuery('')
-      return !v
+    setSearchOpen((value) => {
+      if (!value) {
+        setTimeout(() => searchInputRef.current?.focus(), 50)
+      } else {
+        setSearchQuery('')
+      }
+      return !value
     })
+  }
+
+  const handleLogout = async () => {
+    try {
+      if (session?.accessToken) {
+        await logoutUser(session.accessToken)
+      }
+    } catch {
+      // Ignore logout errors and clear the local session anyway.
+    } finally {
+      clearSession()
+      setProfileOpen(false)
+      navigate('/login', { replace: true })
+    }
   }
 
   return (
@@ -56,13 +81,11 @@ export function AppNavbar() {
         onMouseLeave={() => setHovered(false)}
       >
         <div className="h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-
           <Link to="/panel">
             <Logo />
           </Link>
 
           <div className="flex items-center gap-2">
-
             {searchOpen ? (
               <div className="flex items-center gap-2">
                 <div className="relative flex items-center">
@@ -73,13 +96,13 @@ export function AppNavbar() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar películas, series..."
+                    placeholder="Buscar peliculas, series..."
                     className="relative z-10 w-56 sm:w-80 h-9 pl-9 pr-8 bg-transparent text-sm text-white placeholder:text-[var(--color-denim-600)] focus:outline-none"
                   />
                   {searchQuery.length > 0 && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      aria-label="Limpiar búsqueda"
+                      aria-label="Limpiar busqueda"
                       className="absolute right-2.5 z-10 w-5 h-5 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors duration-200"
                     >
                       <X size={11} className="text-white" />
@@ -88,7 +111,7 @@ export function AppNavbar() {
                 </div>
                 <button
                   onClick={handleSearchToggle}
-                  aria-label="Cerrar búsqueda"
+                  aria-label="Cerrar busqueda"
                   className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
                 >
                   <X size={17} strokeWidth={1.75} />
@@ -119,12 +142,12 @@ export function AppNavbar() {
 
             <div className="relative">
               <button
-                onClick={() => setProfileOpen((v) => !v)}
+                onClick={() => setProfileOpen((value) => !value)}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors duration-200"
-                aria-label="Menú de perfil"
+                aria-label="Menu de perfil"
               >
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-denim-600)] to-[var(--color-denim-900)] flex items-center justify-center shrink-0">
-                  <User size={13} className="text-white" strokeWidth={2} />
+                  <span className="text-white text-xs font-bold">{accountInitial}</span>
                 </div>
                 <ChevronDown
                   size={13}
@@ -139,7 +162,7 @@ export function AppNavbar() {
                   <div className="absolute right-0 top-full mt-2 z-20 w-52 rounded-xl border border-white/[0.08] bg-[#0d1220] shadow-2xl shadow-black/60 overflow-hidden">
                     <div className="px-4 py-3 border-b border-white/[0.06]">
                       <p className="text-xs text-[var(--color-denim-400)]">Conectado como</p>
-                      <p className="text-sm font-medium text-white truncate">usuario@quetzal.tv</p>
+                      <p className="text-sm font-medium text-white truncate">{accountEmail}</p>
                     </div>
                     <div className="py-1">
                       <Link
@@ -159,20 +182,19 @@ export function AppNavbar() {
                         Ajustes
                       </Link>
                       <div className="mx-3 my-1 h-px bg-white/[0.06]" />
-                      <Link
-                        to="/"
-                        onClick={() => setProfileOpen(false)}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--color-error)] hover:bg-white/[0.04] transition-colors duration-150"
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--color-error)] hover:bg-white/[0.04] transition-colors duration-150"
                       >
                         <LogOut size={13} strokeWidth={1.75} />
-                        Cerrar sesión
-                      </Link>
+                        Cerrar sesion
+                      </button>
                     </div>
                   </div>
                 </>
               )}
             </div>
-
           </div>
         </div>
       </header>

@@ -1,10 +1,19 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.application.repositories import AccountRepository, SessionRepository
-from app.application.schemas import LoginRequest, RegisterRequest
+from app.application.repositories import (
+    AccountRepository,
+    ProfileRepository,
+    SessionRepository,
+)
+from app.application.schemas import (
+    CreateProfileRequest,
+    LoginRequest,
+    RegisterRequest,
+    UpdateProfileRequest,
+)
 from app.domain.errors import AuthenticationError, ConflictError, NotFoundError
-from app.domain.models import Account, AuthTokens, Session
+from app.domain.models import Account, AuthTokens, Profile, Session
 from app.infrastructure.security.jwt_service import JwtService
 from app.infrastructure.security.password_hasher import PasswordHasher
 
@@ -13,12 +22,14 @@ class AuthService:
     def __init__(
         self,
         account_repository: AccountRepository,
+        profile_repository: ProfileRepository,
         session_repository: SessionRepository,
         password_hasher: PasswordHasher,
         jwt_service: JwtService,
         jwt_expire_minutes: int,
     ) -> None:
         self._account_repository = account_repository
+        self._profile_repository = profile_repository
         self._session_repository = session_repository
         self._password_hasher = password_hasher
         self._jwt_service = jwt_service
@@ -39,6 +50,7 @@ class AuthService:
             creado_en=datetime.now(timezone.utc),
         )
         self._account_repository.create(account)
+        self._create_default_profile(account)
 
         return self._issue_session(account)
 
@@ -111,6 +123,72 @@ class AuthService:
         session.cerrada_en = datetime.now(timezone.utc)
         self._session_repository.update(session)
 
+    def list_profiles(self, token: str) -> list[Profile]:
+        account = self.get_current_account(token)
+        return self._profile_repository.list_by_account_id(account.id)
+
+    def create_profile(self, token: str, request: CreateProfileRequest) -> Profile:
+        account = self.get_current_account(token)
+        profile_count = self._profile_repository.count_by_account_id(account.id)
+        if profile_count >= 5:
+            raise ConflictError("La cuenta ya alcanzo el maximo de 5 perfiles.")
+
+        existing_profile = self._profile_repository.get_by_name(account.id, request.nombre)
+        if existing_profile is not None:
+            raise ConflictError("Ya existe un perfil con ese nombre.")
+
+        now = datetime.now(timezone.utc)
+        profile = Profile(
+            id=str(uuid4()),
+            cuenta_id=account.id,
+            nombre=request.nombre.strip(),
+            color=request.color,
+            es_principal=request.es_principal or profile_count == 0,
+            creado_en=now,
+            actualizado_en=now,
+        )
+        self._profile_repository.create(profile)
+        return profile
+
+    def update_profile(self, token: str, profile_id: str, request: UpdateProfileRequest) -> Profile:
+        account = self.get_current_account(token)
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None or profile.cuenta_id != account.id:
+            raise NotFoundError("Perfil no encontrado.")
+
+        if request.nombre is not None:
+            normalized_name = request.nombre.strip()
+            existing_profile = self._profile_repository.get_by_name(account.id, normalized_name)
+            if existing_profile is not None and existing_profile.id != profile.id:
+                raise ConflictError("Ya existe un perfil con ese nombre.")
+            profile.nombre = normalized_name
+
+        if request.color is not None:
+            profile.color = request.color
+
+        if request.es_principal is not None:
+            if request.es_principal is False and profile.es_principal:
+                raise ConflictError(
+                    "No puedes quitar el perfil principal directamente. Asigna otro perfil como principal."
+                )
+            profile.es_principal = request.es_principal
+
+        profile.actualizado_en = datetime.now(timezone.utc)
+        self._profile_repository.update(profile)
+        return profile
+
+    def delete_profile(self, token: str, profile_id: str) -> None:
+        account = self.get_current_account(token)
+        profiles = self._profile_repository.list_by_account_id(account.id)
+        profile = next((item for item in profiles if item.id == profile_id), None)
+        if profile is None:
+            raise NotFoundError("Perfil no encontrado.")
+
+        if len(profiles) == 1:
+            raise ConflictError("La cuenta debe conservar al menos un perfil.")
+
+        self._profile_repository.delete(profile_id)
+
     def _issue_session(self, account: Account) -> AuthTokens:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=self._jwt_expire_minutes)
@@ -141,3 +219,17 @@ class AuthService:
             expires_at=expires_at,
             account=account,
         )
+
+    def _create_default_profile(self, account: Account) -> None:
+        now = datetime.now(timezone.utc)
+        default_name = account.nombre.strip().split(" ")[0] or "Perfil"
+        profile = Profile(
+            id=str(uuid4()),
+            cuenta_id=account.id,
+            nombre=default_name[:80],
+            color="#6D28D9",
+            es_principal=True,
+            creado_en=now,
+            actualizado_en=now,
+        )
+        self._profile_repository.create(profile)

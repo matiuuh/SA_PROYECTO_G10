@@ -1,22 +1,30 @@
 import { useState } from 'react'
 import { ProfileInfo } from '@/components/organisms'
+import { getActiveSession } from '@/lib/auth'
 
-const mockProfile = {
-  name: 'María González',
-  email: 'maria.gonzalez@example.com',
+const session = getActiveSession()
+
+const initialProfile = {
+  name: session?.account.nombre ?? 'Usuario Quetzal',
+  email: session?.account.correo ?? 'usuario@quetzal.tv',
   avatarUrl: undefined,
-  memberSince: 'Enero 2024',
-  plan: 'Premium',
+  memberSince: session?.account.creado_en
+    ? new Date(session.account.creado_en).toLocaleDateString('es-GT', {
+        year: 'numeric',
+        month: 'long',
+      })
+    : 'Reciente',
+  plan: 'Activo',
   stats: {
-    moviesWatched: 142,
-    hoursWatched: 287,
-    favoriteGenre: 'Acción',
-    watchStreak: 15,
+    moviesWatched: 0,
+    hoursWatched: 0,
+    favoriteGenre: 'Sin datos',
+    watchStreak: 0,
   },
 }
 
 export function UserProfilePage() {
-  const [profile] = useState(mockProfile)
+  const [profile] = useState(initialProfile)
 
   const handleAvatarChange = () => {
     console.log('Cambiar avatar')
@@ -28,7 +36,7 @@ export function UserProfilePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Mi Perfil</h1>
           <p className="text-[var(--color-denim-400)]">
-            Visualiza tu información y estadísticas de visualización
+            Visualiza tu informacion y estadisticas de visualizacion
           </p>
         </div>
 

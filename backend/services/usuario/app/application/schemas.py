@@ -31,5 +31,27 @@ class AuthResponse(BaseModel):
     account: AccountResponse
 
 
+class ProfileResponse(BaseModel):
+    id: str
+    cuenta_id: str
+    nombre: str
+    color: str
+    es_principal: bool
+    creado_en: datetime
+    actualizado_en: datetime
+
+
+class CreateProfileRequest(BaseModel):
+    nombre: str = Field(min_length=1, max_length=80)
+    color: str = Field(default="#6D28D9", min_length=7, max_length=7)
+    es_principal: bool = False
+
+
+class UpdateProfileRequest(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=80)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    es_principal: bool | None = None
+
+
 class MessageResponse(BaseModel):
     message: str

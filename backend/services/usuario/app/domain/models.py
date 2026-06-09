@@ -14,6 +14,17 @@ class Account:
 
 
 @dataclass
+class Profile:
+    id: str
+    cuenta_id: str
+    nombre: str
+    color: str
+    es_principal: bool
+    creado_en: datetime
+    actualizado_en: datetime
+
+
+@dataclass
 class Session:
     id: str
     cuenta_id: str

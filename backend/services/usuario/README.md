@@ -10,6 +10,7 @@ Esta primera version implementa:
 - inicio de sesion
 - consulta del usuario autenticado
 - cierre de sesion
+- gestion de perfiles por cuenta
 - servidor gRPC para validacion de token y consulta de cuentas
 
 La implementacion soporta dos modos:
@@ -40,6 +41,10 @@ usuario/
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/logout`
+- `GET /api/v1/profiles`
+- `POST /api/v1/profiles`
+- `PATCH /api/v1/profiles/{profile_id}`
+- `DELETE /api/v1/profiles/{profile_id}`
 - `GET /health`
 
 ## gRPC
@@ -79,6 +84,9 @@ DB_USER=postgres
 DB_PASSWORD=postgres
 ```
 
-## Siguiente paso sugerido
+## Reglas de perfiles
 
-Agregar migraciones versionadas y luego extender autenticacion con `refresh tokens`, `oauth` y manejo de perfiles.
+- al registrar una cuenta se crea automaticamente un perfil principal
+- cada cuenta puede tener hasta `5` perfiles
+- no se puede dejar una cuenta sin perfiles
+- si se elimina el perfil principal, el sistema promueve otro automaticamente
