@@ -70,6 +70,28 @@ class PostgresAccountRepository:
 
         return self._map_row(row) if row else None
 
+    def update(self, account: Account) -> None:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE usuarios.cuentas
+                    SET nombre = %s,
+                        contrasena_hash = %s,
+                        pais = %s,
+                        actualizado_en = NOW()
+                    WHERE id = %s
+                      AND eliminado_en IS NULL
+                    """,
+                    (
+                        account.nombre,
+                        account.contrasena_hash,
+                        account.pais,
+                        account.id,
+                    ),
+                )
+            connection.commit()
+
     @staticmethod
     def _map_row(row: dict[str, str | datetime]) -> Account:
         return Account(

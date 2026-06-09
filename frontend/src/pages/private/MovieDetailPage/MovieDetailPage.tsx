@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Play,
   Plus,
@@ -14,6 +14,7 @@ import {
   X,
   Film,
   ThumbsUp,
+  ThumbsDown,
   Share2,
   Lock,
 } from 'lucide-react'
@@ -21,12 +22,12 @@ import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
-import { getCatalogDetail, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { dislikeCatalogContent, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getPlaybackProgress, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
-import type { CatalogContent, CatalogDetail } from '@/types/catalog'
+import type { CatalogContent, CatalogDetail, CatalogEpisode, CatalogSeason } from '@/types/catalog'
 import type { PlaybackProgress } from '@/types/streaming'
 
 function getReleaseYear(date?: string): number {
@@ -144,13 +145,34 @@ function parseTechnicalSheet(sheet?: string): Map<string, string> {
   return metadata
 }
 
-function buildLikeStorageKey(profileId: string, contentId: string): string {
-  return `quetzal_content_like:${profileId}:${contentId}`
+function buildReactionStorageKey(profileId: string, contentId: string): string {
+  return `quetzal_content_reaction:${profileId}:${contentId}`
+}
+
+function getInitialSelectedEpisode(seasons: CatalogSeason[]): CatalogEpisode | null {
+  for (const season of seasons) {
+    if (season.episodios.length > 0) {
+      return season.episodios[0]
+    }
+  }
+  return null
+}
+
+function parseRequestedStart(value: string | null): number {
+  if (!value) return 0
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Math.floor(parsed)
 }
 
 export function MovieDetailPage() {
   const navigate = useNavigate()
   const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const requestedEpisodeId = searchParams.get('episode')?.trim() ?? ''
+  const shouldAutoplay = searchParams.get('autoplay') === '1'
+  const shouldResumeFromQuery = searchParams.get('resume') === '1'
+  const requestedStartSeconds = parseRequestedStart(searchParams.get('start'))
   const session = getActiveSession()
   const activeProfile = getStoredActiveProfile()
   const accountId = session?.account.id ?? ''
@@ -158,10 +180,13 @@ export function MovieDetailPage() {
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
   const [inList, setInList] = useState(false)
-  const [liked, setLiked] = useState(false)
-  const [isSubmittingLike, setIsSubmittingLike] = useState(false)
+  const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null)
+  const [isSubmittingReaction, setIsSubmittingReaction] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
+  const [seasons, setSeasons] = useState<CatalogSeason[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState('')
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState('')
   const [related, setRelated] = useState<ContentItem[]>([])
   const [savedProgress, setSavedProgress] = useState<PlaybackProgress | null>(null)
   const [resumeFromSeconds, setResumeFromSeconds] = useState(0)
@@ -170,6 +195,24 @@ export function MovieDetailPage() {
   const [playbackError, setPlaybackError] = useState('')
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const hasConsumedAutoplayRef = useRef(false)
+
+  const selectedSeason = useMemo(
+    () => seasons.find((season) => season.id === selectedSeasonId) ?? null,
+    [seasons, selectedSeasonId],
+  )
+  const selectedEpisode = useMemo(() => {
+    if (selectedSeason) {
+      return selectedSeason.episodios.find((episode) => episode.id === selectedEpisodeId) ?? null
+    }
+
+    for (const season of seasons) {
+      const episode = season.episodios.find((currentEpisode) => currentEpisode.id === selectedEpisodeId)
+      if (episode) return episode
+    }
+
+    return null
+  }, [selectedEpisodeId, selectedSeason, seasons])
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
@@ -199,7 +242,7 @@ export function MovieDetailPage() {
       if (!currentProfile?.id) return
 
       try {
-        const progress = await getPlaybackProgress(currentProfile.id, id)
+        const progress = await getPlaybackProgress(currentProfile.id, id, selectedEpisode?.id ?? '')
         if (!progress || progress.progreso_segundos <= 0) {
           setSavedProgress(null)
           setResumeFromSeconds(0)
@@ -216,19 +259,20 @@ export function MovieDetailPage() {
     }
 
     void loadSavedProgress()
-  }, [hasSubscription, id])
+  }, [hasSubscription, id, selectedEpisode?.id])
 
   useEffect(() => {
     if (!id) return
 
     const currentProfile = getStoredActiveProfile()
     if (!currentProfile?.id) {
-      setLiked(false)
+      setReaction(null)
       setInList(false)
       return
     }
 
-    setLiked(localStorage.getItem(buildLikeStorageKey(currentProfile.id, id)) === '1')
+    const storedReaction = localStorage.getItem(buildReactionStorageKey(currentProfile.id, id))
+    setReaction(storedReaction === 'like' || storedReaction === 'dislike' ? storedReaction : null)
     setInList(isInMyList(currentProfile.id, id))
   }, [id])
 
@@ -246,6 +290,22 @@ export function MovieDetailPage() {
           listCatalogContent(),
         ])
         setDetail(detailData)
+        if (detailData.tipo === 'serie') {
+          const loadedSeasons = await getCatalogSeasons(id)
+          setSeasons(loadedSeasons)
+          const requestedEpisode = requestedEpisodeId
+            ? loadedSeasons
+                .flatMap((season) => season.episodios)
+                .find((episode) => episode.id === requestedEpisodeId) ?? null
+            : null
+          const initialEpisode = requestedEpisode ?? getInitialSelectedEpisode(loadedSeasons)
+          setSelectedSeasonId(initialEpisode?.temporada_id ?? loadedSeasons[0]?.id ?? '')
+          setSelectedEpisodeId(initialEpisode?.id ?? '')
+        } else {
+          setSeasons([])
+          setSelectedSeasonId('')
+          setSelectedEpisodeId('')
+        }
         setRelated(
           catalog
             .filter((content) => content.id !== id)
@@ -260,7 +320,7 @@ export function MovieDetailPage() {
     }
 
     void loadDetail()
-  }, [id])
+  }, [id, requestedEpisodeId])
 
   const rating = useMemo(() => {
     if (!detail) return 0
@@ -269,12 +329,18 @@ export function MovieDetailPage() {
   const hasCommunityRecommendation = (detail?.total_likes ?? 0) + (detail?.total_dislikes ?? 0) > 0
 
   const duration = useMemo(() => {
+    if (selectedEpisode?.duracion_minutos) {
+      const episodeHours = Math.floor(selectedEpisode.duracion_minutos / 60)
+      const episodeMinutes = selectedEpisode.duracion_minutos % 60
+      if (episodeHours <= 0) return `${episodeMinutes}min`
+      return `${episodeHours}h ${episodeMinutes}min`
+    }
     if (!detail?.duracion_minutos) return 'Sin duracion registrada'
     const hours = Math.floor(detail.duracion_minutos / 60)
     const minutes = detail.duracion_minutos % 60
     if (hours <= 0) return `${minutes}min`
     return `${hours}h ${minutes}min`
-  }, [detail])
+  }, [detail, selectedEpisode])
 
   const genres = detail?.generos ?? []
   const cast = detail?.reparto ?? []
@@ -285,9 +351,10 @@ export function MovieDetailPage() {
   const fallbackSubtitles = technicalSheetMetadata.get('subtitulos') ?? ''
   const fallbackSeasons = technicalSheetMetadata.get('temporadas') ?? ''
   const fallbackNotes = technicalSheetMetadata.get('notas') ?? ''
+  const currentPlaybackUrl = selectedEpisode?.url_video || detail?.url_trailer
   const trailerSource = useMemo(
-    () => resolveTrailerSource(detail?.url_trailer, muted, resumeFromSeconds),
-    [detail?.url_trailer, muted, resumeFromSeconds],
+    () => resolveTrailerSource(currentPlaybackUrl, muted, resumeFromSeconds),
+    [currentPlaybackUrl, muted, resumeFromSeconds],
   )
 
   useEffect(() => {
@@ -314,8 +381,36 @@ export function MovieDetailPage() {
     return () => video.removeEventListener('loadedmetadata', setCurrentTime)
   }, [playing, resumeFromSeconds, trailerSource])
 
+  useEffect(() => {
+    if (!shouldAutoplay || hasConsumedAutoplayRef.current) return
+    if (!hasSubscription || !detail) return
+    if (detail.tipo === 'serie' && !selectedEpisode) return
+
+    const nextResumePoint = shouldResumeFromQuery
+      ? requestedStartSeconds
+      : (savedProgress?.progreso_segundos ?? 0)
+
+    hasConsumedAutoplayRef.current = true
+    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }, [
+    detail,
+    hasSubscription,
+    requestedStartSeconds,
+    savedProgress?.progreso_segundos,
+    selectedEpisode,
+    shouldAutoplay,
+    shouldResumeFromQuery,
+  ])
+
   const handlePlay = () => {
     if (!hasSubscription) return
+    if (detail?.tipo === 'serie' && !selectedEpisode) {
+      setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
+      return
+    }
     setResumeFromSeconds(0)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
@@ -324,6 +419,10 @@ export function MovieDetailPage() {
 
   const handleResume = () => {
     if (!hasSubscription) return
+    if (detail?.tipo === 'serie' && !selectedEpisode) {
+      setPlaybackError('Selecciona un episodio para reanudar la reproduccion.')
+      return
+    }
     const nextResumePoint = savedProgress?.progreso_segundos ?? 0
     setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
     setPlaybackStartedAt(Date.now())
@@ -346,7 +445,11 @@ export function MovieDetailPage() {
       return
     }
 
-    const totalDurationSeconds = detail.duracion_minutos ? detail.duracion_minutos * 60 : 0
+    const totalDurationSeconds = selectedEpisode?.duracion_minutos
+      ? selectedEpisode.duracion_minutos * 60
+      : detail.duracion_minutos
+        ? detail.duracion_minutos * 60
+        : 0
     if (totalDurationSeconds > 0 && nextProgress > totalDurationSeconds) {
       nextProgress = totalDurationSeconds
     }
@@ -355,7 +458,7 @@ export function MovieDetailPage() {
       await updatePlaybackProgress({
         perfil_id: currentProfile.id,
         contenido_id: detail.id,
-        episodio_id: '',
+        episodio_id: selectedEpisode?.id ?? '',
         progreso_segundos: nextProgress,
         duracion_total_segundos: totalDurationSeconds,
       })
@@ -365,7 +468,7 @@ export function MovieDetailPage() {
           id: prev?.id ?? '',
           perfil_id: currentProfile.id,
           contenido_id: detail.id,
-          episodio_id: '',
+          episodio_id: selectedEpisode?.id ?? '',
           estado:
             totalDurationSeconds > 0 && nextProgress >= totalDurationSeconds * 0.9
               ? 'finalizado'
@@ -387,7 +490,7 @@ export function MovieDetailPage() {
     setPlaybackStartedAt(null)
   }
 
-  const handleLike = async () => {
+  const handleReaction = async (nextReaction: 'like' | 'dislike') => {
     if (!detail?.id || !accessToken) {
       setPlaybackError('Debes iniciar sesion para registrar tu reaccion.')
       return
@@ -399,13 +502,16 @@ export function MovieDetailPage() {
       return
     }
 
-    setIsSubmittingLike(true)
+    setIsSubmittingReaction(true)
     setPlaybackError('')
 
     try {
-      const response = await likeCatalogContent(accessToken, detail.id, currentProfile.id)
-      localStorage.setItem(buildLikeStorageKey(currentProfile.id, detail.id), '1')
-      setLiked(true)
+      const response =
+        nextReaction === 'like'
+          ? await likeCatalogContent(accessToken, detail.id, currentProfile.id)
+          : await dislikeCatalogContent(accessToken, detail.id, currentProfile.id)
+      localStorage.setItem(buildReactionStorageKey(currentProfile.id, detail.id), nextReaction)
+      setReaction(nextReaction)
       setDetail((previous) =>
         previous
           ? {
@@ -418,10 +524,12 @@ export function MovieDetailPage() {
       )
     } catch (error) {
       setPlaybackError(
-        error instanceof Error ? error.message : 'No se pudo registrar tu like en este momento.',
+        error instanceof Error
+          ? error.message
+          : `No se pudo registrar tu ${nextReaction === 'like' ? 'like' : 'dislike'} en este momento.`,
       )
     } finally {
-      setIsSubmittingLike(false)
+      setIsSubmittingReaction(false)
     }
   }
 
@@ -467,7 +575,7 @@ export function MovieDetailPage() {
               <iframe
                 key={trailerSource.src}
                 src={trailerSource.src}
-                title={`Trailer de ${detail.titulo}`}
+                title={`${selectedEpisode ? `${selectedEpisode.titulo} · ` : ''}${detail.titulo}`}
                 className="h-full w-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
@@ -494,7 +602,8 @@ export function MovieDetailPage() {
                   <Film size={40} strokeWidth={1} className="text-[var(--color-denim-400)]" />
                 </div>
                 <p className="text-sm text-[var(--color-denim-400)]">
-                  Reproduccion en curso ({detail.url_trailer ? 'vista previa del trailer' : 'demo'})
+                  Reproduccion en curso
+                  {selectedEpisode ? ` · ${selectedEpisode.titulo}` : detail.url_trailer ? ' (vista previa del trailer)' : ' (demo)'}
                 </p>
               </div>
             )}
@@ -533,10 +642,12 @@ export function MovieDetailPage() {
                   >
                     <Pause size={18} fill="#080c14" strokeWidth={0} />
                   </button>
-                  <span className="text-sm font-medium text-white">{detail.titulo}</span>
+                  <span className="text-sm font-medium text-white">
+                    {selectedEpisode ? `${detail.titulo} · ${selectedEpisode.titulo}` : detail.titulo}
+                  </span>
                 </div>
                 <span className="text-xs text-[var(--color-denim-400)]">
-                  {trailerSource ? 'Trailer' : duration}
+                  {selectedEpisode ? duration : trailerSource ? 'Trailer' : duration}
                 </span>
               </div>
             </div>
@@ -625,7 +736,7 @@ export function MovieDetailPage() {
                       Reanudar desde {formatProgress(savedProgress.progreso_segundos)}
                     </button>
                     <Button variant="outline" onClick={handlePlay}>
-                      Ver desde el inicio
+                      {detail.tipo === 'serie' ? 'Ver episodio desde el inicio' : 'Ver desde el inicio'}
                     </Button>
                   </>
                 ) : (
@@ -634,7 +745,7 @@ export function MovieDetailPage() {
                     className="inline-flex items-center gap-2.5 rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[#080c14] shadow-lg shadow-black/40 transition-colors duration-200 hover:bg-white/90"
                   >
                     <Play size={17} fill="#080c14" strokeWidth={0} className="shrink-0" />
-                    Reproducir
+                    {detail.tipo === 'serie' ? 'Reproducir episodio' : 'Reproducir'}
                   </button>
                 )}
               </>
@@ -661,17 +772,32 @@ export function MovieDetailPage() {
 
             <button
               onClick={() => {
-                void handleLike()
+                void handleReaction('like')
               }}
-              disabled={isSubmittingLike}
+              disabled={isSubmittingReaction}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
-                liked
+                reaction === 'like'
                   ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-[var(--color-denim-300)]'
                   : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
-              } ${isSubmittingLike ? 'cursor-wait opacity-70' : ''}`}
-              aria-label={liked ? 'Contenido marcado con like' : 'Marcar contenido con like'}
+              } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
+              aria-label={reaction === 'like' ? 'Contenido marcado con like' : 'Marcar contenido con like'}
             >
-              <ThumbsUp size={15} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
+              <ThumbsUp size={15} strokeWidth={1.75} fill={reaction === 'like' ? 'currentColor' : 'none'} />
+            </button>
+
+            <button
+              onClick={() => {
+                void handleReaction('dislike')
+              }}
+              disabled={isSubmittingReaction}
+              className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
+                reaction === 'dislike'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                  : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
+              } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
+              aria-label={reaction === 'dislike' ? 'Contenido marcado con dislike' : 'Marcar contenido con dislike'}
+            >
+              <ThumbsDown size={15} strokeWidth={1.75} fill={reaction === 'dislike' ? 'currentColor' : 'none'} />
             </button>
 
             <button
@@ -690,6 +816,88 @@ export function MovieDetailPage() {
 
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 sm:px-8 lg:flex-row lg:px-16">
         <div className="flex flex-1 flex-col gap-6">
+          {detail.tipo === 'serie' ? (
+            <ScrollReveal variant="fade-up" delay={40}>
+              <div className="rounded-2xl border border-white/[0.06] bg-[#0d1220] p-5">
+                <div className="mb-4 flex flex-col gap-1">
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-[var(--color-denim-300)]">
+                    Episodios disponibles
+                  </h3>
+                  <p className="text-sm text-[var(--color-denim-500)]">
+                    Selecciona una temporada y el capitulo que deseas reproducir.
+                  </p>
+                </div>
+
+                {seasons.length === 0 ? (
+                  <p className="text-sm text-[var(--color-denim-400)]">
+                    Esta serie aun no tiene episodios registrados.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {seasons.map((season) => (
+                        <button
+                          key={season.id}
+                          onClick={() => {
+                            setSelectedSeasonId(season.id)
+                            setSelectedEpisodeId(season.episodios[0]?.id ?? '')
+                            setPlaybackError('')
+                          }}
+                          className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                            selectedSeasonId === season.id
+                              ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-white'
+                              : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-300)] hover:bg-white/[0.07]'
+                          }`}
+                        >
+                          T{season.numero}
+                          {season.titulo ? ` · ${season.titulo}` : ''}
+                        </button>
+                      ))}
+                    </div>
+
+                    {selectedSeason ? (
+                      <div className="space-y-3">
+                        {selectedSeason.episodios.length === 0 ? (
+                          <p className="text-sm text-[var(--color-denim-400)]">
+                            Esta temporada aun no tiene episodios registrados.
+                          </p>
+                        ) : (
+                          selectedSeason.episodios.map((episode) => (
+                            <button
+                              key={episode.id}
+                              onClick={() => {
+                                setSelectedEpisodeId(episode.id)
+                                setPlaybackError('')
+                                setPlaying(false)
+                              }}
+                              className={`flex w-full items-start justify-between rounded-xl border px-4 py-3 text-left transition-colors ${
+                                selectedEpisodeId === episode.id
+                                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                                  : 'border-white/[0.06] bg-[#0a0f1c] hover:bg-white/[0.03]'
+                              }`}
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-white">
+                                  Episodio {episode.numero}: {episode.titulo}
+                                </p>
+                                <p className="mt-1 text-sm text-[var(--color-denim-400)]">
+                                  {episode.sinopsis || 'Sin sinopsis registrada.'}
+                                </p>
+                              </div>
+                              <span className="ml-4 shrink-0 text-xs text-[var(--color-denim-400)]">
+                                {episode.duracion_minutos} min
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </ScrollReveal>
+          ) : null}
+
           <ScrollReveal variant="fade-up" delay={60}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
@@ -719,9 +927,11 @@ export function MovieDetailPage() {
                 <span className="text-sm text-white">{fallbackSubtitles || 'Sin registro'}</span>
               </div>
               {detail.tipo === 'serie' ? (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Temporadas</span>
-                  <span className="text-sm text-white">{fallbackSeasons || 'Sin registro'}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Temporadas</span>
+                  <span className="text-sm text-white">
+                    {seasons.length > 0 ? String(seasons.length) : fallbackSeasons || 'Sin registro'}
+                  </span>
                 </div>
               ) : null}
               <div className="flex flex-col gap-0.5">
@@ -782,7 +992,7 @@ export function MovieDetailPage() {
                   </div>
                   <span className="text-xs text-[var(--color-denim-500)]">
                     {hasCommunityRecommendation
-                      ? `${detail.total_likes} like${detail.total_likes === 1 ? '' : 's'} registrados`
+                      ? `${detail.total_likes} like${detail.total_likes === 1 ? '' : 's'} y ${detail.total_dislikes} dislike${detail.total_dislikes === 1 ? '' : 's'} registrados`
                       : 'Sin recomendacion disponible todavia'}
                   </span>
                 </div>

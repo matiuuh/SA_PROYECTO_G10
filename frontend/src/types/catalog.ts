@@ -47,6 +47,29 @@ export interface CatalogDetailResponse {
   detalle: CatalogDetail
 }
 
+export interface CatalogEpisode {
+  id: string
+  temporada_id: string
+  numero: number
+  titulo: string
+  sinopsis: string
+  duracion_minutos: number
+  url_video: string
+}
+
+export interface CatalogSeason {
+  id: string
+  contenido_id: string
+  numero: number
+  titulo: string
+  descripcion: string
+  episodios: CatalogEpisode[]
+}
+
+export interface CatalogSeasonsResponse {
+  temporadas: CatalogSeason[]
+}
+
 export interface UpdateCatalogContentPayload {
   titulo: string
   sinopsis: string
@@ -59,7 +82,7 @@ export interface UpdateCatalogContentPayload {
   url_trailer?: string
 }
 
-export interface LikeCatalogContentResponse {
+export interface RateCatalogContentResponse {
   message: string
   total_likes: number
   total_dislikes: number
@@ -86,4 +109,19 @@ export interface CreateCatalogContentResponse {
 
 export interface DeleteCatalogContentResponse {
   message: string
+}
+
+export interface CreateSeriesEpisodePayload {
+  numero: number
+  titulo: string
+  sinopsis: string
+  duracion_minutos: number
+  url_video: string
+}
+
+export interface CreateSeriesEpisodeBatchPayload {
+  numero_temporada: number
+  titulo_temporada?: string
+  descripcion_temporada?: string
+  episodios: CreateSeriesEpisodePayload[]
 }

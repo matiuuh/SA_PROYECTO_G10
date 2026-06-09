@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowRight, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { PurchaseReceipt } from '@/components/organisms'
 import { listActivePlans } from '@/lib/suscripcion-api'
@@ -12,6 +12,8 @@ export function SubscriptionConfirmationPage() {
   const [searchParams] = useSearchParams()
   const subscriptionId = searchParams.get('subscription')
   const planId = searchParams.get('plan') ?? ''
+  const transactionId = searchParams.get('transaction') ?? ''
+  const receiptStatus = searchParams.get('receipt') ?? ''
 
   const [plans, setPlans] = useState<UiSubscriptionPlan[]>([])
 
@@ -54,12 +56,28 @@ export function SubscriptionConfirmationPage() {
           </p>
         </div>
 
+        {receiptStatus === 'failed' || receiptStatus === 'warning' ? (
+          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3 text-sm text-amber-100">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <p>
+                La suscripcion se activo correctamente, pero el recibo de compra no pudo confirmarse por correo.
+                Puedes continuar usando tu cuenta mientras se revisa el envio.
+              </p>
+            </div>
+          </div>
+        ) : receiptStatus === 'sent' ? (
+          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+            El recibo de compra fue enviado al correo asociado a tu cuenta.
+          </div>
+        ) : null}
+
         {selectedPlan && (
           <PurchaseReceipt
             plan={selectedPlan}
             orderId={subscriptionId}
             orderDate={orderDate}
-            transactionId={`SUB-${subscriptionId.slice(-8)}`}
+            transactionId={transactionId || `SUB-${subscriptionId.slice(-8)}`}
           />
         )}
 

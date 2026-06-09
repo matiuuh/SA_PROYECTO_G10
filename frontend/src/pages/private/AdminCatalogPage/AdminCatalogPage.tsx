@@ -3,9 +3,40 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard } from '@/components/molecules'
-import { deleteCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { deleteCatalogContent, getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
 import { getActiveSession } from '@/lib/auth'
 import type { CatalogContent } from '@/types/catalog'
+
+type AdminCatalogFilter = 'all' | 'pelicula' | 'serie'
+type AdminGenreFilter = 'all' | string
+
+function parseTechnicalSheetGenres(sheet?: string): string[] {
+  const source = sheet?.trim() ?? ''
+  if (!source) return []
+
+  for (const rawPart of source.split(/\n|\|/)) {
+    const part = rawPart.trim()
+    if (!part) continue
+
+    const separatorIndex = part.indexOf(':')
+    if (separatorIndex <= 0) continue
+
+    const key = part.slice(0, separatorIndex).trim().toLowerCase()
+    if (key !== 'genero' && key !== 'género' && key !== 'generos' && key !== 'géneros') {
+      continue
+    }
+
+    const value = part.slice(separatorIndex + 1).trim()
+    if (!value) return []
+
+    return value
+      .split(',')
+      .map((genre) => genre.trim())
+      .filter(Boolean)
+  }
+
+  return []
+}
 
 const CATALOG_SECTIONS = [
   {
@@ -33,12 +64,41 @@ export function AdminCatalogPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [busyContentId, setBusyContentId] = useState('')
+  const [catalogFilter, setCatalogFilter] = useState<AdminCatalogFilter>('all')
+  const [genreFilter, setGenreFilter] = useState<AdminGenreFilter>('all')
+  const [genreMap, setGenreMap] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     async function loadCatalog() {
       try {
         const contents = await listCatalogContent()
         setCatalog(contents)
+
+        const details = await Promise.all(
+          contents.map(async (content) => {
+            try {
+              const detail = await getCatalogDetail(content.id)
+              const genresFromRelations = detail.generos.map((genre) => genre.nombre.trim()).filter(Boolean)
+              const genresFromSheet = parseTechnicalSheetGenres(detail.ficha_tecnica)
+              return {
+                id: content.id,
+                genres: Array.from(new Set([...genresFromRelations, ...genresFromSheet])),
+              }
+            } catch {
+              return {
+                id: content.id,
+                genres: [] as string[],
+              }
+            }
+          }),
+        )
+
+        const nextGenreMap = details.reduce<Record<string, string[]>>((acc, item) => {
+          acc[item.id] = item.genres
+          return acc
+        }, {})
+
+        setGenreMap(nextGenreMap)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'No se pudo mostrar el catalogo.')
       } finally {
@@ -53,6 +113,32 @@ export function AdminCatalogPage() {
     try {
       const contents = await listCatalogContent()
       setCatalog(contents)
+
+      const details = await Promise.all(
+        contents.map(async (content) => {
+          try {
+            const detail = await getCatalogDetail(content.id)
+            const genresFromRelations = detail.generos.map((genre) => genre.nombre.trim()).filter(Boolean)
+            const genresFromSheet = parseTechnicalSheetGenres(detail.ficha_tecnica)
+            return {
+              id: content.id,
+              genres: Array.from(new Set([...genresFromRelations, ...genresFromSheet])),
+            }
+          } catch {
+            return {
+              id: content.id,
+              genres: [] as string[],
+            }
+          }
+        }),
+      )
+
+      const nextGenreMap = details.reduce<Record<string, string[]>>((acc, item) => {
+        acc[item.id] = item.genres
+        return acc
+      }, {})
+
+      setGenreMap(nextGenreMap)
       setErrorMessage('')
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo mostrar el catalogo.')
@@ -89,6 +175,34 @@ export function AdminCatalogPage() {
     }
   }, [catalog])
 
+  const filteredCatalog = useMemo(() => {
+    return catalog.filter((item) => {
+      const matchesCategory = catalogFilter === 'all' ? true : item.tipo === catalogFilter
+      const genres = genreMap[item.id] ?? []
+      const matchesGenre =
+        genreFilter === 'all'
+          ? true
+          : genres.some((genre) => genre.toLowerCase() === genreFilter.toLowerCase())
+
+      return matchesCategory && matchesGenre
+    })
+  }, [catalog, catalogFilter, genreFilter, genreMap])
+
+  const availableGenres = useMemo(
+    () =>
+      Array.from(new Set(Object.values(genreMap).flat()))
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right, 'es')),
+    [genreMap],
+  )
+
+  useEffect(() => {
+    if (genreFilter === 'all') return
+    if (!availableGenres.includes(genreFilter)) {
+      setGenreFilter('all')
+    }
+  }, [availableGenres, genreFilter])
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-6xl mx-auto">
       <ScrollReveal variant="fade-up">
@@ -120,24 +234,6 @@ export function AdminCatalogPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {CATALOG_SECTIONS.map((section, index) => (
-          <ScrollReveal key={section.title} variant="fade-up" delay={80 + index * 40}>
-            <section className="rounded-2xl border border-white/[0.07] bg-[#0a0f1c] p-6 h-full">
-              <div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[var(--color-denim-300)] mb-4">
-                {section.icon}
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">{section.title}</h3>
-              <p className="text-sm text-[var(--color-denim-400)] mb-6">{section.description}</p>
-              <Button onClick={() => navigate(section.actionTo)}>
-                <Upload size={15} />
-                {section.actionLabel}
-              </Button>
-            </section>
-          </ScrollReveal>
-        ))}
-      </div>
-
       {errorMessage && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300 mb-8">
           {errorMessage}
@@ -153,26 +249,77 @@ export function AdminCatalogPage() {
                 Consulta el contenido disponible y navega entre peliculas y series publicadas.
               </p>
             </div>
+            <div className="flex flex-wrap gap-3">
+              {CATALOG_SECTIONS.map((section) => (
+                <Button key={section.title} onClick={() => navigate(section.actionTo)}>
+                  <Upload size={15} />
+                  {section.actionLabel}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-wrap gap-3">
+              {[
+                { id: 'all', label: 'Todo' },
+                { id: 'pelicula', label: 'Peliculas' },
+                { id: 'serie', label: 'Series' },
+              ].map((filterOption) => {
+                const isActive = catalogFilter === filterOption.id
+                return (
+                  <button
+                    key={filterOption.id}
+                    onClick={() => setCatalogFilter(filterOption.id as AdminCatalogFilter)}
+                    className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                      isActive
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-white'
+                        : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-300)] hover:bg-white/[0.08] hover:text-white'
+                    }`}
+                  >
+                    {filterOption.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <label className="flex w-full max-w-xs flex-col gap-2 text-sm text-[var(--color-denim-300)]">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">
+                Genero
+              </span>
+              <select
+                value={genreFilter}
+                onChange={(event) => setGenreFilter(event.target.value)}
+                className="h-11 rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+              >
+                <option value="all">Todos los generos</option>
+                {availableGenres.map((genre) => (
+                  <option key={genre} value={genre}>
+                    {genre}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {isLoading ? (
             <div className="flex min-h-[220px] items-center justify-center text-white">
               Cargando catalogo...
             </div>
-          ) : catalog.length === 0 ? (
+          ) : filteredCatalog.length === 0 ? (
             <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
-              <p className="text-lg font-semibold text-white">El catalogo esta vacio.</p>
+              <p className="text-lg font-semibold text-white">No hay contenido para este filtro.</p>
               <p className="max-w-lg text-sm text-[var(--color-denim-400)]">
-                Todavia no hay contenido disponible. Usa las acciones de carga para publicar una pelicula o una serie.
+                Cambia el filtro o registra nuevo contenido para completar esta vista.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {catalog.map((item) => (
+              {filteredCatalog.map((item) => (
                 <div key={item.id} className="space-y-3">
                   <MediaCard
                     title={item.titulo}
-                    genre={item.tipo === 'serie' ? 'Serie' : 'Pelicula'}
+                    genre={(genreMap[item.id] ?? [])[0] || (item.tipo === 'serie' ? 'Serie' : 'Pelicula')}
                     year={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) : new Date().getFullYear()}
                     rating={
                       item.porcentaje_recomendacion > 0
@@ -183,7 +330,7 @@ export function AdminCatalogPage() {
                     isNew={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) >= new Date().getFullYear() - 1 : false}
                     onClick={() => navigate(`/movie/${item.id}`)}
                   />
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className={`grid gap-2 ${item.tipo === 'serie' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     <Button variant="ghost" onClick={() => navigate(`/movie/${item.id}`)}>
                       <Eye size={14} />
                       Ver
@@ -201,6 +348,15 @@ export function AdminCatalogPage() {
                       <Pencil size={14} />
                       Editar
                     </Button>
+                    {item.tipo === 'serie' ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => navigate(`/admin/series/${item.id}/episodes`)}
+                      >
+                        <List size={14} />
+                        Capitulos
+                      </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       onClick={() => {

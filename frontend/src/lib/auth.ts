@@ -19,6 +19,16 @@ export function storeSession(session: AuthSession): void {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
 }
 
+export function updateStoredSessionAccount(account: AuthSession['account']): void {
+  const session = getStoredSession()
+  if (!session) return
+
+  storeSession({
+    ...session,
+    account,
+  })
+}
+
 export function clearSession(): void {
   localStorage.removeItem(SESSION_STORAGE_KEY)
   localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY)

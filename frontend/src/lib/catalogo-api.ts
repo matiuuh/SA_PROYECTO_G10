@@ -2,11 +2,14 @@ import type {
   CatalogContent,
   CatalogDetail,
   CatalogDetailResponse,
+  CatalogSeasonsResponse,
   CatalogListResponse,
+  CatalogSeason,
   CreateCatalogContentPayload,
   CreateCatalogContentResponse,
+  CreateSeriesEpisodeBatchPayload,
   DeleteCatalogContentResponse,
-  LikeCatalogContentResponse,
+  RateCatalogContentResponse,
   UpdateCatalogContentPayload,
 } from '@/types/catalog'
 
@@ -144,7 +147,7 @@ export async function likeCatalogContent(
   accessToken: string,
   contentId: string,
   perfilId: string,
-): Promise<LikeCatalogContentResponse> {
+): Promise<RateCatalogContentResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/catalog/${contentId}/like`, {
     method: 'POST',
     headers: {
@@ -160,5 +163,58 @@ export async function likeCatalogContent(
     throw new Error(await parseError(response))
   }
 
-  return (await response.json()) as LikeCatalogContentResponse
+  return (await response.json()) as RateCatalogContentResponse
+}
+
+export async function dislikeCatalogContent(
+  accessToken: string,
+  contentId: string,
+  perfilId: string,
+): Promise<RateCatalogContentResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/${contentId}/dislike`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      perfil_id: perfilId,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as RateCatalogContentResponse
+}
+
+export async function getCatalogSeasons(contentId: string): Promise<CatalogSeason[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/${contentId}/seasons`)
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogSeasonsResponse
+  return data.temporadas ?? []
+}
+
+export async function createSeriesEpisodeBatch(
+  accessToken: string,
+  contentId: string,
+  payload: CreateSeriesEpisodeBatchPayload,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/series/${contentId}/episodes/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
 }

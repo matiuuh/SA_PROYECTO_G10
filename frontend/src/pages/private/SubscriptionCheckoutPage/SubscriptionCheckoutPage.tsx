@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { CheckoutForm, OrderSummary } from '@/components/organisms'
 import { getActiveSession } from '@/lib/auth'
+import { processPayment } from '@/lib/cobros-api'
 import { createSubscription, getPlanQuote, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
 import type { CheckoutFormData, UiPlanQuote, UiSubscriptionPlan } from '@/types/subscription'
@@ -14,6 +15,8 @@ export function SubscriptionCheckoutPage() {
   const planId = searchParams.get('plan') ?? ''
   const accountId = session?.account.id ?? ''
   const accountCountry = session?.account.pais ?? ''
+  const accountEmail = session?.account.correo ?? ''
+  const accountName = session?.account.nombre ?? ''
 
   const [plans, setPlans] = useState<UiSubscriptionPlan[]>([])
   const [quote, setQuote] = useState<UiPlanQuote | null>(null)
@@ -87,7 +90,43 @@ export function SubscriptionCheckoutPage() {
 
     try {
       const subscription = await createSubscription(accountId, selectedPlan.id)
-      navigate(`/subscription/confirmation?subscription=${subscription.id}&plan=${selectedPlan.id}`)
+      let transactionId = ''
+      let receiptStatus = 'not_requested'
+
+      try {
+        const payment = await processPayment({
+          cuenta_id: accountId,
+          suscripcion_id: subscription.id,
+          plan_id: selectedPlan.id,
+          tipo_operacion: 'contratacion',
+          monto_base: selectedPlan.price,
+          moneda_local: quote?.localCurrency ?? selectedPlan.currency,
+          correo_destino: accountEmail,
+          nombre_usuario: accountName,
+          descripcion_plan: selectedPlan.name,
+        })
+        transactionId = payment.transaccion.id
+        receiptStatus = payment.recibo?.enviado ? 'sent' : 'failed'
+      } catch (paymentError) {
+        receiptStatus = 'warning'
+        console.warn(
+          '[checkout] no se pudo completar el procesamiento de cobro o recibo:',
+          paymentError instanceof Error ? paymentError.message : paymentError,
+        )
+      }
+
+      const nextParams = new URLSearchParams({
+        subscription: subscription.id,
+        plan: selectedPlan.id,
+      })
+      if (transactionId) {
+        nextParams.set('transaction', transactionId)
+      }
+      if (receiptStatus) {
+        nextParams.set('receipt', receiptStatus)
+      }
+
+      navigate(`/subscription/confirmation?${nextParams.toString()}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo activar la suscripcion.')
     } finally {

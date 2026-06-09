@@ -67,6 +67,25 @@ type castMemberResponse struct {
 	Personaje       string `json:"personaje"`
 }
 
+type seasonResponse struct {
+	ID          string            `json:"id"`
+	ContenidoID string            `json:"contenido_id"`
+	Numero      int               `json:"numero"`
+	Titulo      string            `json:"titulo"`
+	Descripcion string            `json:"descripcion"`
+	Episodios   []episodeResponse `json:"episodios"`
+}
+
+type episodeResponse struct {
+	ID              string `json:"id"`
+	TemporadaID     string `json:"temporada_id"`
+	Numero          int    `json:"numero"`
+	Titulo          string `json:"titulo"`
+	Sinopsis        string `json:"sinopsis"`
+	DuracionMinutos int    `json:"duracion_minutos"`
+	UrlVideo        string `json:"url_video"`
+}
+
 type createContentRequest struct {
 	Titulo            string `json:"titulo"`
 	Tipo              string `json:"tipo"`
@@ -97,15 +116,30 @@ type createContentResponse struct {
 	Message string `json:"message"`
 }
 
-type likeContentRequest struct {
+type rateContentRequest struct {
 	PerfilID string `json:"perfil_id"`
 }
 
-type likeContentResponse struct {
+type rateContentResponse struct {
 	Message                 string  `json:"message"`
 	TotalLikes              int     `json:"total_likes"`
 	TotalDislikes           int     `json:"total_dislikes"`
 	PorcentajeRecomendacion float64 `json:"porcentaje_recomendacion"`
+}
+
+type createEpisodeBatchRequest struct {
+	NumeroTemporada      int                    `json:"numero_temporada"`
+	TituloTemporada      string                 `json:"titulo_temporada"`
+	DescripcionTemporada string                 `json:"descripcion_temporada"`
+	Episodios            []createEpisodeRequest `json:"episodios"`
+}
+
+type createEpisodeRequest struct {
+	Numero          int    `json:"numero"`
+	Titulo          string `json:"titulo"`
+	Sinopsis        string `json:"sinopsis"`
+	DuracionMinutos int    `json:"duracion_minutos"`
+	UrlVideo        string `json:"url_video"`
 }
 
 type jwtClaims struct {
@@ -124,6 +158,7 @@ func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher)
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
+	mux.HandleFunc("/api/v1/admin/catalog/series/", h.handleAdminSeries)
 	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
@@ -209,6 +244,36 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasSuffix(path, "/dislike") {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/dislike"))
+		id = strings.TrimSuffix(id, "/")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
+			return
+		}
+		h.handleDislikeContent(w, r, id)
+		return
+	}
+
+	if strings.HasSuffix(path, "/seasons") {
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/seasons"))
+		id = strings.TrimSuffix(id, "/")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
+			return
+		}
+		h.handleListSeasons(w, r, id)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w)
 		return
@@ -231,12 +296,27 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLikeContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	h.handleRateContent(w, r, contentID, domain.ReactionLike, "Like registrado correctamente.", "No se pudo registrar el like del contenido.")
+}
+
+func (h *Handler) handleDislikeContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	h.handleRateContent(w, r, contentID, domain.ReactionDislike, "Dislike registrado correctamente.", "No se pudo registrar el dislike del contenido.")
+}
+
+func (h *Handler) handleRateContent(
+	w http.ResponseWriter,
+	r *http.Request,
+	contentID string,
+	reaction domain.ReactionType,
+	successMessage string,
+	errorMessage string,
+) {
 	if _, err := h.requireAuthenticated(r); err != nil {
 		writeAuthError(w, err)
 		return
 	}
 
-	var req likeContentRequest
+	var req rateContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
 		return
@@ -251,14 +331,14 @@ func (h *Handler) handleLikeContent(w http.ResponseWriter, r *http.Request, cont
 	_, err := h.svc.Rate(r.Context(), &domain.Rating{
 		ContentID: contentID,
 		ProfileID: profileID,
-		Reaction:  domain.ReactionLike,
+		Reaction:  reaction,
 	})
 	if errors.Is(err, domain.ErrContentNotFound) {
 		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "No se pudo registrar el like del contenido.")
+		writeError(w, http.StatusInternalServerError, errorMessage)
 		return
 	}
 
@@ -272,11 +352,31 @@ func (h *Handler) handleLikeContent(w http.ResponseWriter, r *http.Request, cont
 		return
 	}
 
-	writeJSON(w, http.StatusOK, likeContentResponse{
-		Message:                 "Like registrado correctamente.",
+	writeJSON(w, http.StatusOK, rateContentResponse{
+		Message:                 successMessage,
 		TotalLikes:              detail.TotalLikes,
 		TotalDislikes:           detail.TotalDislikes,
 		PorcentajeRecomendacion: detail.RecommendationPct,
+	})
+}
+
+func (h *Handler) handleListSeasons(w http.ResponseWriter, r *http.Request, contentID string) {
+	seasons, err := h.svc.ListSeasonsByContent(r.Context(), contentID)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if errors.Is(err, domain.ErrInvalidSeriesContent) {
+		writeError(w, http.StatusBadRequest, "Solo las series pueden consultar temporadas y episodios.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo obtener la estructura de temporadas.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"temporadas": toSeasonResponseList(seasons),
 	})
 }
 
@@ -392,6 +492,44 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	path := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/admin/catalog/series/"))
+	path = strings.Trim(path, "/")
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar la serie a administrar.")
+		return
+	}
+
+	if !strings.HasSuffix(path, "episodes/batch") {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	contentID := strings.TrimSpace(strings.TrimSuffix(path, "episodes/batch"))
+	contentID = strings.Trim(contentID, "/")
+	if contentID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar la serie a administrar.")
+		return
+	}
+
+	h.handleCreateEpisodeBatch(w, r, contentID)
+}
+
 func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string) {
 	var req updateContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -442,6 +580,39 @@ func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, co
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Contenido eliminado correctamente.",
+	})
+}
+
+func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Request, contentID string) {
+	var req createEpisodeBatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	batch, err := parseEpisodeBatchRequest(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	episodes, err := h.svc.CreateEpisodeBatch(r.Context(), contentID, batch)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Serie no encontrada.")
+		return
+	}
+	if errors.Is(err, domain.ErrInvalidSeriesContent) {
+		writeError(w, http.StatusBadRequest, "El contenido seleccionado no corresponde a una serie.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudieron registrar los episodios.")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"message":   "Episodios registrados correctamente.",
+		"episodios": toEpisodeResponseList(episodes),
 	})
 }
 
@@ -568,6 +739,47 @@ func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error
 	return content, nil
 }
 
+func parseEpisodeBatchRequest(req createEpisodeBatchRequest) (domain.EpisodeBatch, error) {
+	if req.NumeroTemporada <= 0 {
+		return domain.EpisodeBatch{}, errors.New("Debes indicar un numero de temporada valido.")
+	}
+	if len(req.Episodios) == 0 {
+		return domain.EpisodeBatch{}, errors.New("Debes agregar al menos un episodio.")
+	}
+
+	batch := domain.EpisodeBatch{
+		SeasonNumber:      req.NumeroTemporada,
+		SeasonTitle:       strings.TrimSpace(req.TituloTemporada),
+		SeasonDescription: strings.TrimSpace(req.DescripcionTemporada),
+		Episodes:          make([]domain.Episode, 0, len(req.Episodios)),
+	}
+
+	for _, episode := range req.Episodios {
+		if episode.Numero <= 0 {
+			return domain.EpisodeBatch{}, errors.New("Todos los episodios deben tener un numero mayor que cero.")
+		}
+		if strings.TrimSpace(episode.Titulo) == "" {
+			return domain.EpisodeBatch{}, errors.New("Todos los episodios deben incluir titulo.")
+		}
+		if episode.DuracionMinutos <= 0 {
+			return domain.EpisodeBatch{}, errors.New("Todos los episodios deben incluir una duracion valida.")
+		}
+		if strings.TrimSpace(episode.UrlVideo) == "" {
+			return domain.EpisodeBatch{}, errors.New("Todos los episodios deben incluir la URL del video.")
+		}
+
+		batch.Episodes = append(batch.Episodes, domain.Episode{
+			Number:          episode.Numero,
+			Title:           strings.TrimSpace(episode.Titulo),
+			Synopsis:        strings.TrimSpace(episode.Sinopsis),
+			DurationMinutes: episode.DuracionMinutos,
+			VideoURL:        strings.TrimSpace(episode.UrlVideo),
+		})
+	}
+
+	return batch, nil
+}
+
 func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 	if h.alerts == nil || content == nil {
 		return
@@ -645,6 +857,37 @@ func toDetailResponse(detail *domain.ContentDetail) detailResponse {
 		})
 	}
 	return response
+}
+
+func toSeasonResponseList(seasons []domain.Season) []seasonResponse {
+	out := make([]seasonResponse, 0, len(seasons))
+	for _, season := range seasons {
+		out = append(out, seasonResponse{
+			ID:          season.ID,
+			ContenidoID: season.ContentID,
+			Numero:      season.Number,
+			Titulo:      season.Title,
+			Descripcion: season.Description,
+			Episodios:   toEpisodeResponseList(season.Episodes),
+		})
+	}
+	return out
+}
+
+func toEpisodeResponseList(episodes []domain.Episode) []episodeResponse {
+	out := make([]episodeResponse, 0, len(episodes))
+	for _, episode := range episodes {
+		out = append(out, episodeResponse{
+			ID:              episode.ID,
+			TemporadaID:     episode.SeasonID,
+			Numero:          episode.Number,
+			Titulo:          episode.Title,
+			Sinopsis:        episode.Synopsis,
+			DuracionMinutos: episode.DurationMinutes,
+			UrlVideo:        episode.VideoURL,
+		})
+	}
+	return out
 }
 
 func writePreflight(w http.ResponseWriter) {

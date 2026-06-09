@@ -428,18 +428,24 @@ export async function enviarRecibo(opts: {
   });
   let estado: 'enviado' | 'fallido' = 'enviado';
   let errorMsg: string | null = null;
+  const correoDestino = opts.correo_destino.trim();
 
-  try {
-    await sendMail({ to: opts.correo_destino, subject: asunto, html });
-  } catch (err) {
+  if (!correoDestino) {
     estado = 'fallido';
-    errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('[notificaciones] recibo send error:', errorMsg);
+    errorMsg = 'No existe correo asociado a la cuenta para enviar el recibo.';
+  } else {
+    try {
+      await sendMail({ to: correoDestino, subject: asunto, html });
+    } catch (err) {
+      estado = 'fallido';
+      errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[notificaciones] recibo send error:', errorMsg);
+    }
   }
 
   const id = await registrarNotificacion({
     tipo: 'recibo',
-    correo_destino: opts.correo_destino,
+    correo_destino: correoDestino,
     asunto,
     estado,
     error_mensaje: errorMsg,

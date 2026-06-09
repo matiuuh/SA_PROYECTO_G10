@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, User, Sliders, X, CreditCard, Crown } from 'lucide-react'
-import { AccountSettings, PreferencesSettings } from '@/components/organisms'
+import { CreditCard, Crown, KeyRound, Save, Settings, Users } from 'lucide-react'
 import { Button, Card } from '@/components/atoms'
-import { getActiveSession } from '@/lib/auth'
+import { getActiveSession, updateStoredSessionAccount } from '@/lib/auth'
+import { changePassword, updateCurrentAccount } from '@/lib/usuario-api'
 import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
 import type { UiSubscriptionPlan } from '@/types/subscription'
-
-type SettingsTab = 'account' | 'preferences'
-
-interface PendingActionState {
-  title: string
-  description: string
-}
 
 export function UserSettingsPage() {
   const navigate = useNavigate()
   const session = getActiveSession()
   const accountId = session?.account.id ?? ''
-  const [activeTab, setActiveTab] = useState<SettingsTab>('account')
   const [activePlan, setActivePlan] = useState<UiSubscriptionPlan | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
-  const [pendingAction, setPendingAction] = useState<PendingActionState | null>(null)
+  const [accountName, setAccountName] = useState(session?.account.nombre ?? '')
+  const [country, setCountry] = useState(session?.account.pais ?? '')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [accountFeedback, setAccountFeedback] = useState('')
+  const [passwordFeedback, setPasswordFeedback] = useState('')
+  const [accountError, setAccountError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [isSavingAccount, setIsSavingAccount] = useState(false)
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
 
   useEffect(() => {
     async function loadSubscriptionData() {
@@ -53,44 +55,61 @@ export function UserSettingsPage() {
     })
   }, [session?.account.creado_en])
 
-  const openPendingModal = (title: string, description: string) => {
-    setPendingAction({ title, description })
-  }
-
   const handleEditProfile = () => {
     navigate('/profiles')
-  }
-
-  const handleChangeEmail = () => {
-    openPendingModal(
-      'Cambiar correo electronico',
-      'Esta accion aun no esta conectada a backend. Falta implementar el endpoint para actualizar el correo de la cuenta.',
-    )
-  }
-
-  const handleChangePassword = () => {
-    openPendingModal(
-      'Cambiar contrasena',
-      'Esta accion aun no esta conectada a backend. Falta implementar el flujo de actualizacion de credenciales en usuario-service.',
-    )
   }
 
   const handleManagePayment = () => {
     navigate(hasSubscription ? '/subscription/manage' : '/subscription/plans?setup=1')
   }
 
-  const handlePrivacySettings = () => {
-    openPendingModal(
-      'Configuracion de privacidad',
-      'Por ahora las preferencias visuales existen solo en frontend. Todavia no se persisten en backend.',
-    )
+  const handleSaveAccount = async () => {
+    if (!session?.accessToken) return
+
+    setAccountFeedback('')
+    setAccountError('')
+    setIsSavingAccount(true)
+
+    try {
+      const updatedAccount = await updateCurrentAccount(session.accessToken, {
+        nombre: accountName,
+        pais: country,
+      })
+      updateStoredSessionAccount(updatedAccount)
+      setAccountFeedback('Cuenta actualizada correctamente.')
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'No se pudo actualizar la cuenta.')
+    } finally {
+      setIsSavingAccount(false)
+    }
   }
 
-  const handleDeleteAccount = () => {
-    openPendingModal(
-      'Eliminar cuenta',
-      'Eliminar cuenta aun no esta implementado en backend. Antes de habilitarlo debemos definir la regla de borrado de perfiles, sesiones y suscripciones.',
-    )
+  const handleChangePassword = async () => {
+    if (!session?.accessToken) return
+
+    setPasswordFeedback('')
+    setPasswordError('')
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('La confirmacion de la contrasena no coincide.')
+      return
+    }
+
+    setIsSavingPassword(true)
+    try {
+      await changePassword(session.accessToken, {
+        contrasena_actual: currentPassword,
+        contrasena_nueva: newPassword,
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordFeedback('Contrasena actualizada correctamente.')
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'No se pudo actualizar la contrasena.')
+    } finally {
+      setIsSavingPassword(false)
+    }
   }
 
   return (
@@ -102,7 +121,7 @@ export function UserSettingsPage() {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-white">Configuracion</h1>
-            <p className="text-[var(--color-denim-400)]">Administra tu cuenta y preferencias</p>
+            <p className="text-[var(--color-denim-400)]">Administra tu cuenta, tus perfiles y tu acceso</p>
           </div>
         </div>
 
@@ -153,86 +172,151 @@ export function UserSettingsPage() {
           </Card>
         </div>
 
-        <div className="flex gap-6">
-          <aside className="w-64 flex-shrink-0">
-            <nav className="space-y-2">
-              <button
-                onClick={() => setActiveTab('account')}
-                className={`w-full rounded-lg px-4 py-3 text-left transition-all duration-200 ${
-                  activeTab === 'account'
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-denim-300)] hover:bg-white/[0.05] hover:text-white'
-                }`}
-              >
-                <span className="flex items-center gap-3 font-medium">
-                  <User className="h-5 w-5" />
-                  Cuenta
-                </span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('preferences')}
-                className={`w-full rounded-lg px-4 py-3 text-left transition-all duration-200 ${
-                  activeTab === 'preferences'
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-denim-300)] hover:bg-white/[0.05] hover:text-white'
-                }`}
-              >
-                <span className="flex items-center gap-3 font-medium">
-                  <Sliders className="h-5 w-5" />
-                  Preferencias
-                </span>
-              </button>
-            </nav>
-          </aside>
-
-          <main className="flex-1">
-            {activeTab === 'account' && (
-              <AccountSettings
-                onEditProfile={handleEditProfile}
-                onChangeEmail={handleChangeEmail}
-                onChangePassword={handleChangePassword}
-                onManagePayment={handleManagePayment}
-                onPrivacySettings={handlePrivacySettings}
-                onDeleteAccount={handleDeleteAccount}
-              />
-            )}
-
-            {activeTab === 'preferences' && <PreferencesSettings />}
-          </main>
-        </div>
-      </div>
-
-      {pendingAction && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#0d1220] p-6 shadow-2xl shadow-black/60">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-white">{pendingAction.title}</h2>
-                <p className="mt-2 text-sm text-[var(--color-denim-300)]">{pendingAction.description}</p>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
+                <Settings className="h-5 w-5" />
               </div>
-              <button
-                type="button"
-                onClick={() => setPendingAction(null)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] text-[var(--color-denim-400)] transition-colors hover:text-white"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Editar cuenta</h2>
+                <p className="text-sm text-[var(--color-denim-400)]">Actualiza tu nombre y pais.</p>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 px-4 py-3 text-sm text-[var(--color-denim-200)]">
-              Esta opcion se puede habilitar despues, pero requiere endpoints adicionales en backend para funcionar de verdad.
-            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Nombre</label>
+                <input
+                  value={accountName}
+                  onChange={(event) => setAccountName(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                />
+              </div>
 
-            <div className="mt-6 flex justify-end">
-              <Button type="button" onClick={() => setPendingAction(null)}>
-                Entendido
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Correo</label>
+                <input
+                  value={session?.account.correo ?? ''}
+                  disabled
+                  className="h-11 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-[var(--color-denim-400)] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Pais</label>
+                <input
+                  value={country}
+                  onChange={(event) => setCountry(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                />
+              </div>
+
+              {accountError ? <p className="text-sm text-red-300">{accountError}</p> : null}
+              {accountFeedback ? <p className="text-sm text-emerald-300">{accountFeedback}</p> : null}
+
+              <Button type="button" onClick={handleSaveAccount} disabled={isSavingAccount} className="gap-2">
+                <Save size={16} />
+                {isSavingAccount ? 'Guardando...' : 'Guardar cambios'}
               </Button>
             </div>
-          </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Cambiar contrasena</h2>
+                <p className="text-sm text-[var(--color-denim-400)]">Protege tu acceso actualizando tus credenciales.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Contrasena actual</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Nueva contrasena</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Confirmar nueva contrasena</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                />
+              </div>
+
+              {passwordError ? <p className="text-sm text-red-300">{passwordError}</p> : null}
+              {passwordFeedback ? <p className="text-sm text-emerald-300">{passwordFeedback}</p> : null}
+
+              <Button type="button" onClick={handleChangePassword} disabled={isSavingPassword} className="gap-2">
+                <KeyRound size={16} />
+                {isSavingPassword ? 'Actualizando...' : 'Actualizar contrasena'}
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Perfiles</h2>
+                <p className="text-sm text-[var(--color-denim-400)]">Administra los perfiles asociados a tu cuenta.</p>
+              </div>
+            </div>
+
+            <p className="mb-4 text-sm text-[var(--color-denim-300)]">
+              Crea, edita o elimina perfiles segun el limite permitido por tu plan.
+            </p>
+
+            <Button type="button" variant="outline" onClick={handleEditProfile}>
+              Gestionar perfiles
+            </Button>
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
+                <CreditCard className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Suscripcion y pagos</h2>
+                <p className="text-sm text-[var(--color-denim-400)]">Consulta tu plan y cambia tu suscripcion cuando lo necesites.</p>
+              </div>
+            </div>
+
+            <p className="mb-4 text-sm text-[var(--color-denim-300)]">
+              {activePlan
+                ? `Tu plan actual permite hasta ${activePlan.profileLimit} perfiles.`
+                : 'Aun no tienes una suscripcion activa.'}
+            </p>
+
+            <Button type="button" variant={activePlan ? 'outline' : 'primary'} onClick={handleManagePayment}>
+              {activePlan ? 'Administrar suscripcion' : 'Activar suscripcion'}
+            </Button>
+          </Card>
         </div>
-      )}
+      </div>
     </div>
   )
 }

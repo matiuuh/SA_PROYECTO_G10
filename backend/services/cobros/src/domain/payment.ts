@@ -37,6 +37,8 @@ export interface ProcesarPagoInput {
   monto_base: number;
   moneda_local: string;
   correo_destino: string;
+  nombre_usuario?: string;
+  descripcion_plan?: string;
 }
 
 export interface ProcesarPagoResult {

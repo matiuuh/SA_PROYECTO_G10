@@ -1,8 +1,11 @@
 import type {
+  Account,
   AuthResponse,
+  ChangePasswordPayload,
   CreateProfilePayload,
   LoginPayload,
   RegisterPayload,
+  UpdateAccountPayload,
   UpdateProfilePayload,
   UserProfile,
 } from '@/types/auth'
@@ -61,6 +64,44 @@ export async function logoutUser(accessToken: string): Promise<void> {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+}
+
+export async function updateCurrentAccount(
+  accessToken: string,
+  payload: UpdateAccountPayload,
+): Promise<Account> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as Account
+}
+
+export async function changePassword(
+  accessToken: string,
+  payload: ChangePasswordPayload,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {

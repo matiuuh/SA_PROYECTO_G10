@@ -7,10 +7,12 @@ from app.application.repositories import (
     SessionRepository,
 )
 from app.application.schemas import (
+    ChangePasswordRequest,
     CreateProfileRequest,
     LoginRequest,
     RegisterRequest,
     SyncProfilesAvailabilityRequest,
+    UpdateAccountRequest,
     UpdateProfileRequest,
 )
 from app.domain.errors import AuthenticationError, ConflictError, NotFoundError
@@ -123,6 +125,25 @@ class AuthService:
 
         session.cerrada_en = datetime.now(timezone.utc)
         self._session_repository.update(session)
+
+    def update_current_account(self, token: str, request: UpdateAccountRequest) -> Account:
+        account = self.get_current_account(token)
+        account.nombre = request.nombre.strip()
+        account.pais = request.pais.strip()
+        self._account_repository.update(account)
+        return account
+
+    def change_password(self, token: str, request: ChangePasswordRequest) -> None:
+        account = self.get_current_account(token)
+
+        if not self._password_hasher.verify(request.contrasena_actual, account.contrasena_hash):
+            raise AuthenticationError("La contrasena actual es incorrecta.")
+
+        if request.contrasena_actual == request.contrasena_nueva:
+            raise ConflictError("La nueva contrasena debe ser diferente a la actual.")
+
+        account.contrasena_hash = self._password_hasher.hash(request.contrasena_nueva)
+        self._account_repository.update(account)
 
     def list_profiles(self, token: str) -> list[Profile]:
         account = self.get_current_account(token)

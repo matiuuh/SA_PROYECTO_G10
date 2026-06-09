@@ -15,6 +15,16 @@ class LoginRequest(BaseModel):
     contrasena: str = Field(min_length=8, max_length=128)
 
 
+class UpdateAccountRequest(BaseModel):
+    nombre: str = Field(min_length=3, max_length=150)
+    pais: str = Field(min_length=2, max_length=100)
+
+
+class ChangePasswordRequest(BaseModel):
+    contrasena_actual: str = Field(min_length=8, max_length=128)
+    contrasena_nueva: str = Field(min_length=8, max_length=128)
+
+
 class AccountResponse(BaseModel):
     id: str
     nombre: str

@@ -32,6 +32,16 @@ export interface UserProfile {
   actualizado_en: string
 }
 
+export interface UpdateAccountPayload {
+  nombre: string
+  pais: string
+}
+
+export interface ChangePasswordPayload {
+  contrasena_actual: string
+  contrasena_nueva: string
+}
+
 export interface LoginPayload {
   correo: string
   contrasena: string

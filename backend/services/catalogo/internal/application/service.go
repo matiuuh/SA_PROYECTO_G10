@@ -75,3 +75,21 @@ func (s *CatalogoService) Delete(ctx context.Context, id string) error {
 func (s *CatalogoService) Rate(ctx context.Context, r *domain.Rating) (float64, error) {
 	return s.repo.Rate(ctx, r)
 }
+
+func (s *CatalogoService) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
+	return s.repo.ListSeasonsByContent(ctx, strings.TrimSpace(contentID))
+}
+
+func (s *CatalogoService) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch) ([]domain.Episode, error) {
+	contentID = strings.TrimSpace(contentID)
+	batch.SeasonTitle = strings.TrimSpace(batch.SeasonTitle)
+	batch.SeasonDescription = strings.TrimSpace(batch.SeasonDescription)
+
+	for index := range batch.Episodes {
+		batch.Episodes[index].Title = strings.TrimSpace(batch.Episodes[index].Title)
+		batch.Episodes[index].Synopsis = strings.TrimSpace(batch.Episodes[index].Synopsis)
+		batch.Episodes[index].VideoURL = strings.TrimSpace(batch.Episodes[index].VideoURL)
+	}
+
+	return s.repo.CreateEpisodeBatch(ctx, contentID, batch)
+}

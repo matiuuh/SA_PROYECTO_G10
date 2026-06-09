@@ -189,8 +189,10 @@ services:
       DEFAULT_NOTIFICATION_USER_NAME: Usuario
       BASE_CURRENCY: USD
       GRPC_PORT: 5006
+      HTTP_PORT: 8006
     ports:
       - "5006:5006"
+      - "8006:8006"
     depends_on:
       postgres:
         condition: service_healthy

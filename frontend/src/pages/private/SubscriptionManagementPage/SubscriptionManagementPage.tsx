@@ -12,6 +12,7 @@ import {
 import { Button, Card } from '@/components/atoms'
 import { PlanCard } from '@/components/molecules'
 import { getActiveSession } from '@/lib/auth'
+import { processPayment } from '@/lib/cobros-api'
 import {
   cancelSubscription,
   changeSubscriptionPlan,
@@ -30,6 +31,8 @@ export function SubscriptionManagementPage() {
   const session = getActiveSession()
   const accountId = session?.account.id ?? ''
   const accountCountry = session?.account.pais ?? ''
+  const accountEmail = session?.account.correo ?? ''
+  const accountName = session?.account.nombre ?? ''
   const accessToken = session?.accessToken ?? ''
 
   const [plans, setPlans] = useState<UiSubscriptionPlan[]>([])
@@ -145,13 +148,36 @@ export function SubscriptionManagementPage() {
 
     try {
       const updatedSubscription = await changeSubscriptionPlan(subscriptionId, selectedPlan.id)
+      let paymentWarning = ''
+
+      try {
+        await processPayment({
+          cuenta_id: accountId,
+          suscripcion_id: updatedSubscription.id,
+          plan_id: selectedPlan.id,
+          tipo_operacion: 'modificacion_plan',
+          monto_base: selectedPlan.price,
+          moneda_local: quote?.localCurrency ?? selectedPlan.currency,
+          correo_destino: accountEmail,
+          nombre_usuario: accountName,
+          descripcion_plan: selectedPlan.name,
+        })
+      } catch (paymentError) {
+        paymentWarning =
+          ' El plan se actualizo, pero no se pudo confirmar el envio del recibo de pago al correo.'
+        console.warn(
+          '[subscription-management] no se pudo completar el procesamiento de cobro o recibo:',
+          paymentError instanceof Error ? paymentError.message : paymentError,
+        )
+      }
+
       if (accessToken) {
         await syncProfilesAvailability(accessToken, selectedPlan.profileLimit)
       }
       setCurrentPlanId(updatedSubscription.plan_id)
       setSelectedPlanId(updatedSubscription.plan_id)
       setSubscriptionStatus(updatedSubscription.estado === 'activa' ? 'activa' : 'cancelada')
-      setSuccessMessage(`Tu suscripcion ahora usa el plan ${selectedPlan.name}. Los perfiles excedentes fueron ajustados segun el nuevo limite.`)
+      setSuccessMessage(`Tu suscripcion ahora usa el plan ${selectedPlan.name}. Los perfiles excedentes fueron ajustados segun el nuevo limite.${paymentWarning}`)
       setConfirmAction(null)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el plan.')

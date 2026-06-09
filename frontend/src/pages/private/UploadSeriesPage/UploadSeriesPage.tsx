@@ -1,9 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Save, Tv2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clapperboard, Save, Tv2 } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createCatalogContent, getCatalogDetail, updateCatalogContent } from '@/lib/catalogo-api'
+import { createCatalogContent, getCatalogDetail, getCatalogSeasons, updateCatalogContent } from '@/lib/catalogo-api'
+import type { CatalogSeason } from '@/types/catalog'
 
 interface SeriesForm {
   titulo: string
@@ -82,6 +83,7 @@ export function UploadSeriesPage() {
   const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [loading, setLoading] = useState(false)
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(editingId))
+  const [existingSeasons, setExistingSeasons] = useState<CatalogSeason[]>([])
 
   const setField = (field: keyof SeriesForm) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
@@ -99,8 +101,12 @@ export function UploadSeriesPage() {
       if (!editingId) return
 
       try {
-        const detail = await getCatalogDetail(editingId)
+        const [detail, seasons] = await Promise.all([
+          getCatalogDetail(editingId),
+          getCatalogSeasons(editingId).catch(() => []),
+        ])
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
+        setExistingSeasons(seasons)
         setForm({
           titulo: detail.titulo,
           sinopsis: detail.sinopsis,
@@ -166,10 +172,17 @@ export function UploadSeriesPage() {
       if (editingId) {
         await updateCatalogContent(session.accessToken, editingId, payload)
       } else {
-        await createCatalogContent(session.accessToken, {
+        const created = await createCatalogContent(session.accessToken, {
           ...payload,
           tipo: 'serie',
         })
+
+        setFeedback({
+          type: 'success',
+          message: 'Ficha general registrada. Ahora agrega las temporadas y episodios de la serie.',
+        })
+        setTimeout(() => navigate(`/admin/series/${created.id}/episodes`), 1200)
+        return
       }
 
       setFeedback({
@@ -360,10 +373,27 @@ export function UploadSeriesPage() {
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
             <p className="text-sm font-semibold text-white">Alcance actual del registro</p>
             <p className="mt-2 text-sm text-[var(--color-denim-400)]">
-              Este formulario registra la ficha general de la serie en el catalogo. Los datos como reparto,
-              genero y temporadas se guardan dentro de la ficha tecnica hasta que exista una gestion
-              estructurada completa en backend.
+              Este formulario registra la ficha general de la serie. Despues podras cargar temporadas y
+              episodios reales desde el administrador de capitulos.
             </p>
+            {editingId ? (
+              <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#0d1220] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Capitulos registrados</p>
+                    <p className="text-xs text-[var(--color-denim-400)]">
+                      {existingSeasons.length > 0
+                        ? `${existingSeasons.length} temporada${existingSeasons.length === 1 ? '' : 's'} cargada${existingSeasons.length === 1 ? '' : 's'} en esta serie.`
+                        : 'Esta serie aun no tiene temporadas ni episodios cargados.'}
+                    </p>
+                  </div>
+                  <Button type="button" onClick={() => navigate(`/admin/series/${editingId}/episodes`)}>
+                    <Clapperboard size={15} />
+                    Administrar capitulos
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </section>
         </ScrollReveal>
 
