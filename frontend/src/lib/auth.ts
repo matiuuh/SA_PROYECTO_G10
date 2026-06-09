@@ -24,6 +24,10 @@ export function clearSession(): void {
   localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY)
 }
 
+export function clearActiveProfile(): void {
+  localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY)
+}
+
 export function isSessionActive(session: AuthSession | null): boolean {
   if (!session) return false
   return new Date(session.expiresAt).getTime() > Date.now()
@@ -52,4 +56,25 @@ export function getStoredActiveProfile(): UserProfile | null {
     localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY)
     return null
   }
+}
+
+export function syncStoredActiveProfile(profiles: UserProfile[]): UserProfile | null {
+  const storedProfile = getStoredActiveProfile()
+  const activeProfiles = profiles.filter((profile) => profile.activo)
+  if (!storedProfile) return null
+
+  const validProfile = activeProfiles.find((profile) => profile.id === storedProfile.id) ?? null
+  if (!validProfile) {
+    const fallbackProfile =
+      activeProfiles.find((profile) => profile.es_principal) ?? activeProfiles[0] ?? null
+    if (!fallbackProfile) {
+      clearActiveProfile()
+      return null
+    }
+    storeActiveProfile(fallbackProfile)
+    return fallbackProfile
+  }
+
+  storeActiveProfile(validProfile)
+  return validProfile
 }

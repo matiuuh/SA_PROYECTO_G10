@@ -10,6 +10,10 @@ export function PrivateLayout() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
+  if (session.account.rol === 'administrador') {
+    return <Navigate to="/admin" replace />
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#080c14]">
       <AppNavbar />

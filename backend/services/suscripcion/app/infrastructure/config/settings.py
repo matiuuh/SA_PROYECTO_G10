@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_port: int = 8002
     grpc_port: int = 50052
+    divisas_grpc_target: str = "localhost:5005"
+    conversion_timeout_seconds: float = 3.0
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "quetzal_suscripcion"

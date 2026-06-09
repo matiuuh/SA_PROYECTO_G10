@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Play,
   Plus,
@@ -20,54 +20,199 @@ import {
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
-import { getActiveSession } from '@/lib/auth'
+import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
+import { getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { listProfiles } from '@/lib/usuario-api'
+import type { CatalogContent, CatalogDetail } from '@/types/catalog'
 
-const MOVIE = {
-  title: 'El Ultimo Horizonte',
-  description:
-    'En un futuro donde los limites entre la realidad y la simulacion se han difuminado, una exploradora descubre una senal que podria cambiar para siempre el destino de la humanidad. Un viaje epico hacia los confines del universo conocido, donde cada decision tiene consecuencias irreversibles.',
-  genre: 'Ciencia ficcion',
-  year: 2024,
-  rating: 8.7,
-  duration: '2h 18min',
-  director: 'Alejandra Voss',
-  cast: ['Marco Rivera', 'Irina Solano', 'Leo Tan', 'Vera Munoz'],
-  tags: ['Accion', 'Aventura', 'Sci-Fi'],
-  ageRating: '13+',
+function getReleaseYear(date?: string): number {
+  if (!date) return new Date().getFullYear()
+  const parsedYear = Number(date.slice(0, 4))
+  return Number.isNaN(parsedYear) ? new Date().getFullYear() : parsedYear
 }
 
-const RELATED: ContentItem[] = [
-  { title: 'Mundos Paralelos', genre: 'Ciencia ficcion', year: 2024, rating: 8.1, isNew: true },
-  { title: 'Frontera Oscura', genre: 'Accion', year: 2024, rating: 7.8, isNew: true },
-  { title: 'El Detective', genre: 'Misterio', year: 2023, rating: 8.5 },
-  { title: 'Cazadores de Sombras', genre: 'Fantasia', year: 2023, rating: 8.3 },
-  { title: 'Tormenta Digital', genre: 'Thriller', year: 2024, rating: 7.4, isNew: true },
-  { title: 'Codigo Rojo', genre: 'Accion', year: 2024, rating: 7.9, isNew: true },
-]
+function mapCatalogToContentItem(content: CatalogContent): ContentItem {
+  return {
+    id: content.id,
+    title: content.titulo,
+    genre: content.tipo === 'serie' ? 'Serie' : 'Pelicula',
+    year: getReleaseYear(content.fecha_lanzamiento),
+    rating: Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)),
+    posterUrl: content.url_portada,
+    isNew: getReleaseYear(content.fecha_lanzamiento) >= new Date().getFullYear() - 1,
+  }
+}
+
+type TrailerSource =
+  | { type: 'youtube'; src: string }
+  | { type: 'video'; src: string }
+  | null
+
+function extractYouTubeVideoId(url: string): string | null {
+  const normalized = url.trim()
+  if (!normalized) return null
+
+  try {
+    const parsed = new URL(normalized)
+    const host = parsed.hostname.replace(/^www\./, '')
+
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0]
+      return id || null
+    }
+
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (parsed.pathname === '/watch') {
+        return parsed.searchParams.get('v')
+      }
+
+      if (parsed.pathname.startsWith('/embed/')) {
+        const id = parsed.pathname.split('/')[2]
+        return id || null
+      }
+
+      if (parsed.pathname.startsWith('/shorts/')) {
+        const id = parsed.pathname.split('/')[2]
+        return id || null
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function resolveTrailerSource(url: string | undefined, muted: boolean): TrailerSource {
+  const normalized = url?.trim() ?? ''
+  if (!normalized) return null
+
+  const youtubeId = extractYouTubeVideoId(normalized)
+  if (youtubeId) {
+    return {
+      type: 'youtube',
+      src: `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=${muted ? '1' : '0'}&rel=0&modestbranding=1&playsinline=1`,
+    }
+  }
+
+  if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(normalized)) {
+    return { type: 'video', src: normalized }
+  }
+
+  return null
+}
 
 export function MovieDetailPage() {
   const navigate = useNavigate()
+  const { id = '' } = useParams()
   const session = getActiveSession()
+  const activeProfile = getStoredActiveProfile()
+  const accountId = session?.account.id ?? ''
+  const accessToken = session?.accessToken ?? ''
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
   const [inList, setInList] = useState(false)
   const [liked, setLiked] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
+  const [detail, setDetail] = useState<CatalogDetail | null>(null)
+  const [related, setRelated] = useState<ContentItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
-      if (!session) return
-      const status = await getSubscriptionStatusByAccount(session.account.id)
+      if (!accountId || !accessToken) return
+      const [status, profiles] = await Promise.all([
+        getSubscriptionStatusByAccount(accountId),
+        listProfiles(accessToken),
+      ])
       setHasSubscription(status.tiene_suscripcion)
+
+      if (status.tiene_suscripcion) {
+        const syncedProfile = syncStoredActiveProfile(profiles)
+        if (!syncedProfile) {
+          navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+        }
+      }
     }
 
     void loadSubscriptionStatus()
-  }, [session])
+  }, [accessToken, accountId, activeProfile, navigate])
+
+  useEffect(() => {
+    async function loadDetail() {
+      if (!id) {
+        setErrorMessage('No se indico el contenido a consultar.')
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const [detailData, catalog] = await Promise.all([
+          getCatalogDetail(id),
+          listCatalogContent(),
+        ])
+        setDetail(detailData)
+        setRelated(
+          catalog
+            .filter((content) => content.id !== id)
+            .slice(0, 6)
+            .map(mapCatalogToContentItem),
+        )
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'No se pudo cargar el detalle del contenido.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    void loadDetail()
+  }, [id])
+
+  const rating = useMemo(() => {
+    if (!detail) return 0
+    return Math.max(0, Math.min(10, detail.porcentaje_recomendacion / 10))
+  }, [detail])
+
+  const duration = useMemo(() => {
+    if (!detail?.duracion_minutos) return 'Sin duracion registrada'
+    const hours = Math.floor(detail.duracion_minutos / 60)
+    const minutes = detail.duracion_minutos % 60
+    if (hours <= 0) return `${minutes}min`
+    return `${hours}h ${minutes}min`
+  }, [detail])
+
+  const genres = detail?.generos ?? []
+  const cast = detail?.reparto ?? []
+  const trailerSource = useMemo(
+    () => resolveTrailerSource(detail?.url_trailer, muted),
+    [detail?.url_trailer, muted],
+  )
 
   const handlePlay = () => {
     if (!hasSubscription) return
     setPlaying(true)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#080c14] text-white">
+        Cargando detalle del contenido...
+      </div>
+    )
+  }
+
+  if (!detail) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#080c14] px-4 text-center">
+        <p className="text-2xl font-semibold text-white">No fue posible mostrar el contenido.</p>
+        <p className="max-w-xl text-sm text-[var(--color-denim-400)]">
+          {errorMessage || 'El contenido solicitado no esta disponible en este momento.'}
+        </p>
+        <Button onClick={() => navigate('/panel')}>Volver al catalogo</Button>
+      </div>
+    )
   }
 
   return (
@@ -75,21 +220,44 @@ export function MovieDetailPage() {
       {playing && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-black">
           <div className="relative flex h-full w-full items-center justify-center">
-            <div
-              className="flex h-full w-full flex-col items-center justify-center gap-4"
-              style={{
-                background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(22,95,180,0.15) 0%, #000 100%)',
-              }}
-            >
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/20">
-                <Film size={40} strokeWidth={1} className="text-[var(--color-denim-400)]" />
+            {trailerSource?.type === 'youtube' ? (
+              <iframe
+                key={trailerSource.src}
+                src={trailerSource.src}
+                title={`Trailer de ${detail.titulo}`}
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            ) : trailerSource?.type === 'video' ? (
+              <video
+                key={trailerSource.src}
+                src={trailerSource.src}
+                className="h-full w-full bg-black"
+                controls
+                autoPlay
+                muted={muted}
+              />
+            ) : (
+              <div
+                className="flex h-full w-full flex-col items-center justify-center gap-4"
+                style={{
+                  background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(22,95,180,0.15) 0%, #000 100%)',
+                }}
+              >
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/20">
+                  <Film size={40} strokeWidth={1} className="text-[var(--color-denim-400)]" />
+                </div>
+                <p className="text-sm text-[var(--color-denim-400)]">
+                  Reproduccion en curso ({detail.url_trailer ? 'vista previa del trailer' : 'demo'})
+                </p>
               </div>
-              <p className="text-sm text-[var(--color-denim-400)]">Reproduccion en curso (demo)</p>
-            </div>
+            )}
 
             <div className="absolute right-4 top-4 flex items-center gap-2">
               <button
-                onClick={() => setMuted((v) => !v)}
+                onClick={() => setMuted((value) => !value)}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white transition-colors duration-200 hover:bg-black/70"
               >
                 {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
@@ -117,9 +285,11 @@ export function MovieDetailPage() {
                   >
                     <Pause size={18} fill="#080c14" strokeWidth={0} />
                   </button>
-                  <span className="text-sm font-medium text-white">{MOVIE.title}</span>
+                  <span className="text-sm font-medium text-white">{detail.titulo}</span>
                 </div>
-                <span className="text-xs text-[var(--color-denim-400)]">{MOVIE.duration}</span>
+                <span className="text-xs text-[var(--color-denim-400)]">
+                  {trailerSource ? 'Trailer' : duration}
+                </span>
               </div>
             </div>
           </div>
@@ -127,6 +297,13 @@ export function MovieDetailPage() {
       )}
 
       <div className="relative max-h-[70vh] w-full aspect-video overflow-hidden">
+        {detail.url_portada ? (
+          <img
+            src={detail.url_portada}
+            alt={detail.titulo}
+            className="absolute inset-0 h-full w-full object-cover opacity-35"
+          />
+        ) : null}
         <div
           className="absolute inset-0"
           style={{
@@ -134,11 +311,6 @@ export function MovieDetailPage() {
               'radial-gradient(ellipse 100% 80% at 50% 30%, rgba(22,95,180,0.25) 0%, rgba(8,12,20,0.6) 60%, #080c14 100%)',
           }}
         />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-white/10">
-            <Film size={48} strokeWidth={0.75} className="text-[var(--color-denim-700)]" />
-          </div>
-        </div>
 
         <div className="absolute inset-0 bg-gradient-to-t from-[#080c14] via-[#080c14]/30 to-transparent" />
 
@@ -159,7 +331,7 @@ export function MovieDetailPage() {
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            {MOVIE.tags.map((tag) => (
+            {(genres.length > 0 ? genres.map((genre) => genre.nombre) : [detail.tipo === 'serie' ? 'Serie' : 'Pelicula']).map((tag) => (
               <span
                 key={tag}
                 className="inline-flex items-center rounded-md border border-[var(--color-denim-700)]/60 bg-[var(--color-denim-900)]/50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-[var(--color-denim-300)]"
@@ -168,28 +340,28 @@ export function MovieDetailPage() {
               </span>
             ))}
             <span className="inline-flex items-center rounded-md border border-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white/60">
-              {MOVIE.ageRating}
+              {detail.clasificacion_edad || 'Sin clasificacion'}
             </span>
           </div>
 
           <h1 className="max-w-2xl text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
-            {MOVIE.title}
+            {detail.titulo}
           </h1>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-denim-400)]">
             <span className="flex items-center gap-1.5 font-semibold text-[var(--color-warning)]">
               <Star size={13} fill="currentColor" strokeWidth={0} />
-              {MOVIE.rating.toFixed(1)}
+              {rating.toFixed(1)}
             </span>
             <span className="flex items-center gap-1.5">
               <Calendar size={13} strokeWidth={1.75} />
-              {MOVIE.year}
+              {getReleaseYear(detail.fecha_lanzamiento)}
             </span>
             <span className="flex items-center gap-1.5">
               <Clock size={13} strokeWidth={1.75} />
-              {MOVIE.duration}
+              {duration}
             </span>
-            <span>{MOVIE.genre}</span>
+            <span>{detail.tipo === 'serie' ? 'Serie' : 'Pelicula'}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -211,7 +383,7 @@ export function MovieDetailPage() {
             )}
 
             <button
-              onClick={() => setInList((v) => !v)}
+              onClick={() => setInList((value) => !value)}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
                 inList
                   ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-white'
@@ -223,7 +395,7 @@ export function MovieDetailPage() {
             </button>
 
             <button
-              onClick={() => setLiked((v) => !v)}
+              onClick={() => setLiked((value) => !value)}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
                 liked
                   ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-[var(--color-denim-300)]'
@@ -248,23 +420,25 @@ export function MovieDetailPage() {
         <div className="flex flex-1 flex-col gap-6">
           <ScrollReveal variant="fade-up">
             <p className="max-w-2xl text-base leading-relaxed text-[var(--color-denim-300)]">
-              {MOVIE.description}
+              {detail.sinopsis || 'Sin sinopsis disponible.'}
             </p>
           </ScrollReveal>
 
           <ScrollReveal variant="fade-up" delay={60}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Director</span>
-                <span className="text-sm text-white">{MOVIE.director}</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Ficha tecnica</span>
+                <span className="text-sm text-white">{detail.ficha_tecnica || 'Sin registro'}</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Genero</span>
-                <span className="text-sm text-white">{MOVIE.genre}</span>
+                <span className="text-sm text-white">
+                  {genres.length > 0 ? genres.map((genre) => genre.nombre).join(', ') : 'Sin genero'}
+                </span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Ano</span>
-                <span className="text-sm text-white">{MOVIE.year}</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Idioma</span>
+                <span className="text-sm text-white">{detail.idioma || 'Sin idioma'}</span>
               </div>
             </div>
           </ScrollReveal>
@@ -273,14 +447,16 @@ export function MovieDetailPage() {
             <div className="flex flex-col gap-2">
               <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Reparto principal</span>
               <div className="flex flex-wrap gap-2">
-                {MOVIE.cast.map((actor) => (
+                {cast.length > 0 ? cast.map((actor) => (
                   <span
-                    key={actor}
+                    key={`${actor.id}-${actor.nombre_artistico}`}
                     className="rounded-lg border border-white/[0.07] bg-white/[0.05] px-3 py-1 text-sm text-[var(--color-denim-300)]"
                   >
-                    {actor}
+                    {actor.nombre_artistico}
                   </span>
-                ))}
+                )) : (
+                  <span className="text-sm text-[var(--color-denim-400)]">Sin reparto registrado.</span>
+                )}
               </div>
             </div>
           </ScrollReveal>
@@ -293,19 +469,21 @@ export function MovieDetailPage() {
             </h3>
             <div className="rounded-xl border border-white/[0.06] bg-[#0d1220] p-4">
               <div className="flex items-end gap-3">
-                <span className="text-5xl font-bold leading-none text-white">{MOVIE.rating.toFixed(1)}</span>
+                <span className="text-5xl font-bold leading-none text-white">{rating.toFixed(1)}</span>
                 <div className="flex flex-col gap-0.5 pb-1">
                   <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
+                    {Array.from({ length: 5 }).map((_, index) => (
                       <Star
-                        key={i}
+                        key={index}
                         size={12}
                         strokeWidth={0}
-                        fill={i < Math.round(MOVIE.rating / 2) ? 'var(--color-warning)' : 'rgba(255,255,255,0.12)'}
+                        fill={index < Math.round(rating / 2) ? 'var(--color-warning)' : 'rgba(255,255,255,0.12)'}
                       />
                     ))}
                   </div>
-                  <span className="text-xs text-[var(--color-denim-500)]">de 10 · miles de votos</span>
+                  <span className="text-xs text-[var(--color-denim-500)]">
+                    {detail.total_likes} likes y {detail.total_dislikes} dislikes
+                  </span>
                 </div>
               </div>
             </div>
@@ -313,18 +491,20 @@ export function MovieDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-8 lg:px-16">
-        <ScrollReveal variant="fade-up">
-          <h2 className="mb-5 text-lg font-semibold text-white">Tambien te puede gustar</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {RELATED.map((item, i) => (
-              <ScrollReveal key={item.title} variant="fade-up" delay={i * 40}>
-                <MediaCard {...item} />
-              </ScrollReveal>
-            ))}
-          </div>
-        </ScrollReveal>
-      </div>
+      {related.length > 0 && (
+        <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-8 lg:px-16">
+          <ScrollReveal variant="fade-up">
+            <h2 className="mb-5 text-lg font-semibold text-white">Tambien te puede gustar</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {related.map((item, index) => (
+                <ScrollReveal key={item.id} variant="fade-up" delay={index * 40}>
+                  <MediaCard {...item} onClick={() => navigate(`/movie/${item.id}`)} />
+                </ScrollReveal>
+              ))}
+            </div>
+          </ScrollReveal>
+        </div>
+      )}
     </div>
   )
 }

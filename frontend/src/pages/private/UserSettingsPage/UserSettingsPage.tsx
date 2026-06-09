@@ -18,6 +18,7 @@ interface PendingActionState {
 export function UserSettingsPage() {
   const navigate = useNavigate()
   const session = getActiveSession()
+  const accountId = session?.account.id ?? ''
   const [activeTab, setActiveTab] = useState<SettingsTab>('account')
   const [activePlan, setActivePlan] = useState<UiSubscriptionPlan | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
@@ -25,10 +26,10 @@ export function UserSettingsPage() {
 
   useEffect(() => {
     async function loadSubscriptionData() {
-      if (!session) return
+      if (!accountId) return
 
       const [status, plans] = await Promise.all([
-        getSubscriptionStatusByAccount(session.account.id),
+        getSubscriptionStatusByAccount(accountId),
         listActivePlans(),
       ])
 
@@ -42,7 +43,7 @@ export function UserSettingsPage() {
     }
 
     void loadSubscriptionData()
-  }, [session])
+  }, [accountId])
 
   const memberSince = useMemo(() => {
     if (!session?.account.creado_en) return 'Reciente'
@@ -75,7 +76,7 @@ export function UserSettingsPage() {
   }
 
   const handleManagePayment = () => {
-    navigate('/subscription/plans')
+    navigate(hasSubscription ? '/subscription/manage' : '/subscription/plans?setup=1')
   }
 
   const handlePrivacySettings = () => {
@@ -147,7 +148,7 @@ export function UserSettingsPage() {
               onClick={handleManagePayment}
               className="mt-4 w-full"
             >
-              {activePlan ? 'Ver planes' : 'Activar suscripcion'}
+              {activePlan ? 'Administrar suscripcion' : 'Activar suscripcion'}
             </Button>
           </Card>
         </div>

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 
 	"quetzaltv/services/catalogo/internal/domain"
 )
@@ -42,6 +43,22 @@ func (s *CatalogoService) GetDetail(ctx context.Context, id string) (*domain.Con
 // ─── Escritura ────────────────────────────────────────────────────────────────
 
 func (s *CatalogoService) Create(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error) {
+	c.Title = strings.TrimSpace(c.Title)
+	c.Synopsis = strings.TrimSpace(c.Synopsis)
+	c.TechnicalSheet = strings.TrimSpace(c.TechnicalSheet)
+	c.AgeRating = strings.TrimSpace(c.AgeRating)
+	c.Language = strings.TrimSpace(c.Language)
+	c.PosterURL = strings.TrimSpace(c.PosterURL)
+	c.TrailerURL = strings.TrimSpace(c.TrailerURL)
+
+	exists, err := s.repo.ExistsByTitleAndType(ctx, c.Title, c.Type)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return "", domain.ErrDuplicateContent
+	}
+
 	return s.repo.Create(ctx, c, genreIDs)
 }
 

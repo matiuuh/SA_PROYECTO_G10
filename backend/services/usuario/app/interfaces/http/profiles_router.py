@@ -4,6 +4,7 @@ from app.application.schemas import (
     CreateProfileRequest,
     MessageResponse,
     ProfileResponse,
+    SyncProfilesAvailabilityRequest,
     UpdateProfileRequest,
 )
 from app.domain.errors import AuthenticationError, ConflictError, NotFoundError
@@ -61,6 +62,20 @@ def build_profiles_router(container: Container) -> APIRouter:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
         return ProfileResponse(**profile.__dict__)
+
+    @router.post("/sync-availability", response_model=list[ProfileResponse])
+    def sync_profiles_availability(
+        request: SyncProfilesAvailabilityRequest,
+        token: str = Depends(get_bearer_token),
+    ) -> list[ProfileResponse]:
+        try:
+            profiles = container.auth_service.sync_profiles_availability(token, request)
+        except AuthenticationError as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        except NotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+        return [ProfileResponse(**profile.__dict__) for profile in profiles]
 
     @router.delete("/{profile_id}", response_model=MessageResponse)
     def delete_profile(profile_id: str, token: str = Depends(get_bearer_token)) -> MessageResponse:

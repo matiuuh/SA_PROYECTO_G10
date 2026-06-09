@@ -1,4 +1,10 @@
-import type { SubscriptionPlan, SubscriptionRecord, SubscriptionStatus } from '@/types/subscription'
+import type {
+  PlanQuote,
+  SubscriptionMessage,
+  SubscriptionPlan,
+  SubscriptionRecord,
+  SubscriptionStatus,
+} from '@/types/subscription'
 
 const API_BASE_URL = import.meta.env.VITE_SUSCRIPCION_API_URL ?? 'http://localhost:8002'
 
@@ -24,6 +30,18 @@ export async function listActivePlans(): Promise<SubscriptionPlan[]> {
   }
 
   return (await response.json()) as SubscriptionPlan[]
+}
+
+export async function getPlanQuote(planId: string, pais: string): Promise<PlanQuote> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/plans/${planId}/quote?pais=${encodeURIComponent(pais)}`,
+  )
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as PlanQuote
 }
 
 export async function getSubscriptionByAccount(cuentaId: string): Promise<SubscriptionRecord | null> {
@@ -70,4 +88,37 @@ export async function createSubscription(
   }
 
   return (await response.json()) as SubscriptionRecord
+}
+
+export async function changeSubscriptionPlan(
+  suscripcionId: string,
+  planId: string,
+): Promise<SubscriptionRecord> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/${suscripcionId}/plan`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      plan_id: planId,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as SubscriptionRecord
+}
+
+export async function cancelSubscription(suscripcionId: string): Promise<SubscriptionMessage> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/${suscripcionId}/cancel`, {
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as SubscriptionMessage
 }

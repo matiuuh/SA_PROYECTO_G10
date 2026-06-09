@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.infrastructure.container import build_container
 from app.interfaces.grpc.server import build_grpc_server
 from app.interfaces.http.auth_router import build_auth_router
+from app.interfaces.http.internal_router import build_internal_router
 from app.interfaces.http.profiles_router import build_profiles_router
 
 
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(build_auth_router(container), prefix="/api/v1")
+app.include_router(build_internal_router(container), prefix="/api/v1")
 app.include_router(build_profiles_router(container), prefix="/api/v1")
 
 

@@ -44,6 +44,7 @@ usuario/
 - `GET /api/v1/profiles`
 - `POST /api/v1/profiles`
 - `PATCH /api/v1/profiles/{profile_id}`
+- `POST /api/v1/profiles/sync-availability`
 - `DELETE /api/v1/profiles/{profile_id}`
 - `GET /health`
 
@@ -88,5 +89,6 @@ DB_PASSWORD=postgres
 
 - al registrar una cuenta se crea automaticamente un perfil principal
 - cada cuenta puede tener hasta `5` perfiles
+- un perfil puede quedar inactivo si la suscripcion actual ya no permite mantenerlo habilitado
 - no se puede dejar una cuenta sin perfiles
 - si se elimina el perfil principal, el sistema promueve otro automaticamente

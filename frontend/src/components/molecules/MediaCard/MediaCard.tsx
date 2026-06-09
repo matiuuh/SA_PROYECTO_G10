@@ -7,11 +7,15 @@ export interface MediaCardProps {
   rating: number
   posterUrl?: string
   isNew?: boolean
+  onClick?: () => void
 }
 
-export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false }: MediaCardProps) {
+export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false, onClick }: MediaCardProps) {
   return (
-    <article className="group relative rounded-xl overflow-hidden bg-[#0d1220] border border-white/[0.06] hover:border-[var(--color-denim-700)]/70 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/70 cursor-pointer">
+    <article
+      onClick={onClick}
+      className="group relative rounded-xl overflow-hidden bg-[#0d1220] border border-white/[0.06] hover:border-[var(--color-denim-700)]/70 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/70 cursor-pointer"
+    >
       <div className="aspect-video w-full bg-[#0a0f1e] overflow-hidden">
         {posterUrl ? (
           <img
@@ -48,6 +52,8 @@ export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false
         )}
 
         <button
+          type="button"
+          onClick={(event) => event.stopPropagation()}
           aria-label="Agregar a mi lista"
           className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--color-denim-700)] hover:border-[var(--color-denim-600)] transition-all duration-200"
         >

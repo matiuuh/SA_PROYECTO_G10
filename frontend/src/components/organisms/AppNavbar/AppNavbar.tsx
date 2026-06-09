@@ -18,6 +18,7 @@ export function AppNavbar() {
   const session = getActiveSession()
   const activeProfile = getStoredActiveProfile()
   const [profileOpen, setProfileOpen] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [hidden, setHidden] = useState(false)
@@ -41,6 +42,16 @@ export function AppNavbar() {
   const accountEmail = session?.account.correo ?? 'usuario@quetzal.tv'
   const accountInitial = accountName.charAt(0).toUpperCase() || 'U'
 
+  const shouldForceLogout = (message: string) => {
+    const normalized = message.toLowerCase()
+    return (
+      normalized.includes('sesion') ||
+      normalized.includes('session') ||
+      normalized.includes('token invalido') ||
+      normalized.includes('authorization')
+    )
+  }
+
   const handleSearchToggle = () => {
     setSearchOpen((value) => {
       if (!value) {
@@ -53,21 +64,47 @@ export function AppNavbar() {
   }
 
   const handleLogout = async () => {
+    setLogoutError('')
+
     try {
       if (session?.accessToken) {
         await logoutUser(session.accessToken)
       }
-    } catch {
-      // Ignore logout errors and clear the local session anyway.
-    } finally {
       clearSession()
       setProfileOpen(false)
       navigate('/login', { replace: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar el cierre de sesion.'
+      if (shouldForceLogout(message)) {
+        clearSession()
+        setProfileOpen(false)
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setLogoutError('No fue posible cerrar sesion. Intenta nuevamente.')
+      setProfileOpen(false)
     }
   }
 
   return (
     <>
+      {logoutError && (
+        <div className="fixed top-20 right-4 z-[60] max-w-sm rounded-xl border border-[var(--color-error)]/30 bg-[#2a1013] px-4 py-3 shadow-2xl shadow-black/50">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-white">{logoutError}</p>
+            <button
+              type="button"
+              onClick={() => setLogoutError('')}
+              className="text-[var(--color-denim-400)] hover:text-white transition-colors"
+              aria-label="Cerrar mensaje"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="fixed top-0 inset-x-0 z-50 h-3"
         onMouseEnter={() => setHovered(true)}

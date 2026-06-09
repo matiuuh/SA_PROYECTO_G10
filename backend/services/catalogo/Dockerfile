@@ -21,13 +21,13 @@ COPY proto /proto
 # Genera código Go desde el .proto.
 # --go_opt=module=<modulo> stripea el prefijo del módulo del go_package,
 # depositando los archivos en pkg/pb/catalogo/v1/ tal como espera el código.
-RUN protoc \
-    --proto_path=/proto \
-    --go_out=. \
-    --go_opt=module=quetzaltv/services/catalogo \
-    --go-grpc_out=. \
-    --go-grpc_opt=module=quetzaltv/services/catalogo \
-    /proto/catalogo/v1/catalogo.proto
+RUN mkdir -p pkg/pb && \
+    protoc \
+      --proto_path=/proto \
+      --go_out=paths=source_relative:pkg/pb \
+      --go-grpc_out=paths=source_relative:pkg/pb \
+      /proto/catalogo/v1/catalogo.proto \
+      /proto/notificaciones/v1/notificaciones.proto
 
 RUN go mod tidy && go build -o /catalogo-service ./cmd/server
 

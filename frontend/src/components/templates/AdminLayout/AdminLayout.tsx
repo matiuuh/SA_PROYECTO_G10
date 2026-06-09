@@ -1,15 +1,14 @@
 import { useState } from 'react'
-import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard,
+  ChevronRight,
   Film,
-  Tv2,
+  LayoutDashboard,
   List,
-  Users,
   LogOut,
   Menu,
+  Tv2,
   X,
-  ChevronRight,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
 import { clearSession, getActiveSession } from '@/lib/auth'
@@ -22,15 +21,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',    to: '/admin',               icon: <LayoutDashboard size={18} strokeWidth={1.75} /> },
-  { label: 'Subir película', to: '/admin/upload/movie', icon: <Film size={18} strokeWidth={1.75} /> },
-  { label: 'Subir serie',  to: '/admin/upload/series',  icon: <Tv2 size={18} strokeWidth={1.75} /> },
-  { label: 'Catálogo',     to: '/admin/catalog',        icon: <List size={18} strokeWidth={1.75} /> },
-  { label: 'Usuarios',     to: '/admin/users',          icon: <Users size={18} strokeWidth={1.75} /> },
+  { label: 'Dashboard', to: '/admin', icon: <LayoutDashboard size={18} strokeWidth={1.75} /> },
+  { label: 'Subir pelicula', to: '/admin/upload/movie', icon: <Film size={18} strokeWidth={1.75} /> },
+  { label: 'Subir serie', to: '/admin/upload/series', icon: <Tv2 size={18} strokeWidth={1.75} /> },
+  { label: 'Catalogo', to: '/admin/catalog', icon: <List size={18} strokeWidth={1.75} /> },
 ]
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const navigate = useNavigate()
   const session = getActiveSession()
 
@@ -38,19 +37,56 @@ export function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
+  if (session.account.rol !== 'administrador') {
+    return <Navigate to="/panel" replace />
+  }
+
+  const shouldForceLogout = (message: string) => {
+    const normalized = message.toLowerCase()
+    return (
+      normalized.includes('sesion') ||
+      normalized.includes('session') ||
+      normalized.includes('token invalido') ||
+      normalized.includes('authorization')
+    )
+  }
+
   const handleLogout = async () => {
+    setLogoutError('')
+
     try {
       await logoutUser(session.accessToken)
-    } catch {
-      // Ignore backend logout errors and clear local state anyway.
-    } finally {
       clearSession()
       navigate('/login', { replace: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar el cierre de sesion.'
+      if (shouldForceLogout(message)) {
+        clearSession()
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setLogoutError('No fue posible cerrar sesion. Intenta nuevamente.')
     }
   }
 
   return (
     <div className="min-h-screen bg-[#080c14] flex">
+      {logoutError && (
+        <div className="fixed top-5 right-4 z-[70] max-w-sm rounded-xl border border-[var(--color-error)]/30 bg-[#2a1013] px-4 py-3 shadow-2xl shadow-black/50">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-white">{logoutError}</p>
+            <button
+              type="button"
+              onClick={() => setLogoutError('')}
+              className="text-[var(--color-denim-400)] hover:text-white transition-colors"
+              aria-label="Cerrar mensaje"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {sidebarOpen && (
         <div
@@ -87,7 +123,13 @@ export function AdminLayout() {
             >
               {({ isActive }) => (
                 <>
-                  <span className={isActive ? 'text-[var(--color-denim-300)]' : 'text-[var(--color-denim-600)] group-hover:text-[var(--color-denim-400)]'}>
+                  <span
+                    className={
+                      isActive
+                        ? 'text-[var(--color-denim-300)]'
+                        : 'text-[var(--color-denim-600)] group-hover:text-[var(--color-denim-400)]'
+                    }
+                  >
                     {icon}
                   </span>
                   <span className="flex-1">{label}</span>
@@ -101,11 +143,11 @@ export function AdminLayout() {
         <div className="shrink-0 px-3 py-4 border-t border-white/[0.06]">
           <div className="px-3 py-2.5 rounded-lg bg-white/[0.03] flex items-center gap-3 mb-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-denim-600)] to-[var(--color-denim-900)] flex items-center justify-center shrink-0 text-white text-xs font-bold">
-              A
+              {session.account.nombre.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-white truncate">Administrador</p>
-              <p className="text-[11px] text-[var(--color-denim-500)] truncate">admin@quetzal.tv</p>
+              <p className="text-xs font-medium text-white truncate">{session.account.nombre}</p>
+              <p className="text-[11px] text-[var(--color-denim-500)] truncate">{session.account.correo}</p>
             </div>
           </div>
           <button
@@ -113,7 +155,7 @@ export function AdminLayout() {
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[var(--color-error)] hover:bg-white/[0.04] transition-colors duration-150"
           >
             <LogOut size={15} strokeWidth={1.75} />
-            Cerrar sesión
+            Cerrar sesion
           </button>
         </div>
       </aside>
@@ -133,7 +175,7 @@ export function AdminLayout() {
             <X size={20} />
           </button>
           <h1 className="text-sm font-semibold text-[var(--color-denim-200)] tracking-wide">
-            Panel de Administración
+            Panel de Administracion
           </h1>
         </header>
 

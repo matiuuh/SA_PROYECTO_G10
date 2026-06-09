@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { X, Trash2, Crown } from 'lucide-react'
 import { Button, Input, colorVariants } from '@/components/atoms'
 import { ProfileSelector, type Profile } from '@/components/organisms'
-import { getActiveSession, getStoredActiveProfile, storeActiveProfile } from '@/lib/auth'
+import {
+  clearActiveProfile,
+  getActiveSession,
+  getStoredActiveProfile,
+  storeActiveProfile,
+  syncStoredActiveProfile,
+} from '@/lib/auth'
 import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
-import { createProfile, deleteProfile, listProfiles, updateProfile } from '@/lib/usuario-api'
+import { createProfile, deleteProfile, syncProfilesAvailability, updateProfile } from '@/lib/usuario-api'
 import type { UserProfile } from '@/types/auth'
 import type { UiSubscriptionPlan } from '@/types/subscription'
 
@@ -29,6 +35,7 @@ function mapToUiProfile(profile: UserProfile): Profile {
     name: profile.nombre,
     color: mapProfileColor(profile.color),
     isPrimary: profile.es_principal,
+    isEnabled: profile.activo,
   }
 }
 
@@ -41,13 +48,17 @@ const availableProfileColors = [
 ]
 
 export function ProfileSelectionPage() {
+  const location = useLocation()
   const navigate = useNavigate()
   const session = getActiveSession()
   const activeStoredProfile = getStoredActiveProfile()
+  const accountId = session?.account.id ?? ''
+  const accessToken = session?.accessToken ?? ''
   const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [activePlan, setActivePlan] = useState<UiSubscriptionPlan | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [dialogMode, setDialogMode] = useState<ProfileDialogMode>(null)
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [profileName, setProfileName] = useState('')
@@ -61,31 +72,50 @@ export function ProfileSelectionPage() {
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   )
+  const activeProfileId = activeStoredProfile?.id ?? null
+  const activeStoredProfileId = activeStoredProfile?.id ?? ''
+  const maxAllowedProfiles = Math.min(activePlan?.profileLimit ?? 1, 5)
 
   useEffect(() => {
     async function loadData() {
-      if (!session) {
+      if (!accountId || !accessToken) {
         setIsLoading(false)
         return
       }
 
       try {
-        const [subscriptionStatus, plans, accountProfiles] = await Promise.all([
-          getSubscriptionStatusByAccount(session.account.id),
+        const [subscriptionStatus, plans] = await Promise.all([
+          getSubscriptionStatusByAccount(accountId),
           listActivePlans(),
-          listProfiles(session.accessToken),
         ])
-
-        if (!subscriptionStatus.tiene_suscripcion || !subscriptionStatus.suscripcion) {
-          navigate('/subscription/plans?setup=1', { replace: true })
-          return
-        }
+        const maxActiveProfiles = subscriptionStatus.suscripcion
+          ? plans.find((plan) => plan.id === subscriptionStatus.suscripcion?.plan_id)?.perfiles_maximos ?? 1
+          : 1
+        const syncedProfiles = await syncProfilesAvailability(accessToken, maxActiveProfiles)
 
         const matchedPlan = plans
           .map(toUiPlan)
           .find((plan) => plan.id === subscriptionStatus.suscripcion?.plan_id) ?? null
+
+        if (syncedProfiles.length === 0) {
+          clearActiveProfile()
+          setErrorMessage('No hay perfiles disponibles para esta cuenta. Crea uno nuevo para continuar.')
+          setActivePlan(matchedPlan)
+          setProfiles([])
+          return
+        }
+
+        const syncedProfile = syncStoredActiveProfile(syncedProfiles)
+        if (activeStoredProfile && !syncedProfile) {
+          setErrorMessage('El perfil activo ya no esta disponible. Selecciona otro perfil valido.')
+        }
+
         setActivePlan(matchedPlan)
-        setProfiles(accountProfiles)
+        setProfiles(syncedProfiles)
+
+        if (!subscriptionStatus.tiene_suscripcion) {
+          setSuccessMessage('Tu cuenta no tiene suscripcion activa. Solo el perfil principal permanece habilitado.')
+        }
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'No se pudieron cargar los perfiles.')
       } finally {
@@ -94,13 +124,35 @@ export function ProfileSelectionPage() {
     }
 
     void loadData()
-  }, [navigate, session])
+  }, [accessToken, accountId, activeStoredProfileId, navigate])
+
+  useEffect(() => {
+    const reason = (location.state as { reason?: string } | null)?.reason
+    if (!reason) return
+
+    if (reason === 'select-profile') {
+      setErrorMessage('Selecciona un perfil para continuar con tu historial y preferencias.')
+    }
+
+    if (reason === 'invalid-profile') {
+      setErrorMessage('El perfil activo ya no pertenece a tu cuenta o ya no esta disponible.')
+    }
+  }, [location.state])
 
   const handleSelectProfile = (profileId: string) => {
     const selected = profiles.find((profile) => profile.id === profileId)
-    if (!selected) return
+    if (!selected || selected.cuenta_id !== session?.account.id) {
+      setErrorMessage('El perfil seleccionado no esta disponible para la cuenta activa.')
+      return
+    }
+
+    if (!selected.activo) {
+      setErrorMessage('Ese perfil esta inactivo por el limite actual de tu suscripcion.')
+      return
+    }
 
     storeActiveProfile(selected)
+    setErrorMessage(`Perfil activo: ${selected.nombre}.`)
     navigate('/panel')
   }
 
@@ -115,8 +167,14 @@ export function ProfileSelectionPage() {
   }
 
   function openCreateDialog() {
-    if (activePlan && profiles.length >= activePlan.profileLimit) {
-      setErrorMessage(`Tu plan ${activePlan.name} permite hasta ${activePlan.profileLimit} perfiles.`)
+    setSuccessMessage('')
+
+    if (profiles.length >= maxAllowedProfiles) {
+      if (activePlan) {
+        setErrorMessage(`Tu plan ${activePlan.name} permite hasta ${maxAllowedProfiles} perfiles.`)
+      } else {
+        setErrorMessage(`La cuenta ya alcanzo el maximo permitido de ${maxAllowedProfiles} perfiles.`)
+      }
       return
     }
 
@@ -129,6 +187,7 @@ export function ProfileSelectionPage() {
   }
 
   function openEditDialog(profileId: string) {
+    setSuccessMessage('')
     const profile = profiles.find((item) => item.id === profileId)
     if (!profile) return
 
@@ -165,6 +224,7 @@ export function ProfileSelectionPage() {
           )
           return [...next, createdProfile]
         })
+        setSuccessMessage(`Perfil "${createdProfile.nombre}" creado correctamente.`)
       }
 
       if (dialogMode === 'edit' && selectedProfile) {
@@ -187,6 +247,8 @@ export function ProfileSelectionPage() {
         if (activeStoredProfile?.id === updatedProfile.id) {
           storeActiveProfile(updatedProfile)
         }
+
+        setSuccessMessage(`Perfil "${updatedProfile.nombre}" actualizado correctamente.`)
       }
 
       setErrorMessage('')
@@ -199,6 +261,10 @@ export function ProfileSelectionPage() {
 
   async function handleDeleteProfile() {
     if (!session || !selectedProfile) return
+    if (selectedProfile.es_principal) {
+      setFormError('El perfil principal no puede eliminarse.')
+      return
+    }
 
     const confirmed = window.confirm(`Seguro que deseas eliminar el perfil "${selectedProfile.nombre}"?`)
     if (!confirmed) return
@@ -210,12 +276,15 @@ export function ProfileSelectionPage() {
       await deleteProfile(session.accessToken, selectedProfile.id)
       setProfiles((current) => current.filter((profile) => profile.id !== selectedProfile.id))
       if (activeStoredProfile?.id === selectedProfile.id && profiles.length > 1) {
-        const fallbackProfile = profiles.find((profile) => profile.id !== selectedProfile.id)
+        const fallbackProfile = profiles.find(
+          (profile) => profile.id !== selectedProfile.id && profile.activo,
+        )
         if (fallbackProfile) {
           storeActiveProfile(fallbackProfile)
         }
       }
       setErrorMessage('')
+      setSuccessMessage(`Perfil "${selectedProfile.nombre}" eliminado correctamente.`)
       closeDialog()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'No se pudo eliminar el perfil.')
@@ -247,9 +316,16 @@ export function ProfileSelectionPage() {
           </div>
         )}
 
+        {successMessage && (
+          <div className="mb-6 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+            {successMessage}
+          </div>
+        )}
+
         <ProfileSelector
           profiles={uiProfiles}
-          maxProfiles={activePlan?.profileLimit ?? 1}
+          activeProfileId={activeProfileId}
+          maxProfiles={maxAllowedProfiles}
           onSelectProfile={handleSelectProfile}
           onAddProfile={openCreateDialog}
           onEditProfile={openEditDialog}
@@ -334,14 +410,20 @@ export function ProfileSelectionPage() {
                 </div>
               )}
 
+              {dialogMode === 'edit' && selectedProfile?.es_principal && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  El perfil principal creado para la cuenta no puede eliminarse.
+                </div>
+              )}
+
               <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-between">
                 <div>
                   {dialogMode === 'edit' && selectedProfile && (
                     <button
                       type="button"
                       onClick={handleDeleteProfile}
-                      disabled={isSubmitting}
-                      className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/15 disabled:opacity-50"
+                      disabled={isSubmitting || selectedProfile.es_principal}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Trash2 size={15} />
                       Eliminar perfil

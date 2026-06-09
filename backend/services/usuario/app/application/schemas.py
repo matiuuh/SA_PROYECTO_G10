@@ -37,6 +37,7 @@ class ProfileResponse(BaseModel):
     nombre: str
     color: str
     es_principal: bool
+    activo: bool
     creado_en: datetime
     actualizado_en: datetime
 
@@ -51,6 +52,10 @@ class UpdateProfileRequest(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=80)
     color: str | None = Field(default=None, min_length=7, max_length=7)
     es_principal: bool | None = None
+
+
+class SyncProfilesAvailabilityRequest(BaseModel):
+    max_perfiles_activos: int = Field(ge=1, le=5)
 
 
 class MessageResponse(BaseModel):

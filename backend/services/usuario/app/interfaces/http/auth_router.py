@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 
 from app.application.schemas import (
     AccountResponse,
@@ -24,11 +24,18 @@ def build_auth_router(container: Container) -> APIRouter:
         return token
 
     @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-    def register(request: RegisterRequest) -> AuthResponse:
+    def register(request: RegisterRequest, background_tasks: BackgroundTasks) -> AuthResponse:
         try:
             result = container.auth_service.register(request)
         except ConflictError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+        if container.notification_client is not None:
+            background_tasks.add_task(
+                container.notification_client.send_registration_confirmation,
+                result.account.correo,
+                result.account.nombre,
+            )
 
         return AuthResponse(
             access_token=result.access_token,

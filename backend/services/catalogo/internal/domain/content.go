@@ -28,6 +28,7 @@ var (
 	ErrContentNotFound = errors.New("contenido no encontrado")
 	ErrContentDeleted  = errors.New("contenido ya eliminado")
 	ErrInvalidGenre    = errors.New("genero no valido")
+	ErrDuplicateContent = errors.New("contenido duplicado")
 )
 
 // ─── Entidades ────────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ type ContentRepository interface {
 	Search(ctx context.Context, query string) ([]Content, error)
 	FilterByGenres(ctx context.Context, genreIDs []int64) ([]Content, error)
 	GetDetail(ctx context.Context, id string) (*ContentDetail, error)
+	ExistsByTitleAndType(ctx context.Context, title string, contentType ContentType) (bool, error)
 	Create(ctx context.Context, c *Content, genreIDs []int64) (string, error)
 	Update(ctx context.Context, id string, c *Content) error
 	Delete(ctx context.Context, id string) error

@@ -27,6 +27,7 @@ export interface UserProfile {
   nombre: string
   color: string
   es_principal: boolean
+  activo: boolean
   creado_en: string
   actualizado_en: string
 }

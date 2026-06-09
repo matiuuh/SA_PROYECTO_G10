@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from app.application.auth_service import AuthService
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database import Database
+from app.infrastructure.notifications import GrpcNotificationClient
 from app.infrastructure.repositories.in_memory_account_repository import (
     InMemoryAccountRepository,
 )
@@ -30,6 +31,7 @@ class Container:
     settings: Settings
     database: Database | None
     auth_service: AuthService
+    notification_client: GrpcNotificationClient | None
 
 
 def build_container() -> Container:
@@ -57,4 +59,16 @@ def build_container() -> Container:
         jwt_expire_minutes=settings.jwt_expire_minutes,
     )
 
-    return Container(settings=settings, database=database, auth_service=auth_service)
+    notification_client = None
+    if settings.notifications_enabled:
+        notification_client = GrpcNotificationClient(
+            target=settings.notifications_grpc_target,
+            timeout_seconds=settings.notifications_timeout_seconds,
+        )
+
+    return Container(
+        settings=settings,
+        database=database,
+        auth_service=auth_service,
+        notification_client=notification_client,
+    )

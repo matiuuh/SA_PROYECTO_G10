@@ -3,19 +3,23 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { CheckoutForm, OrderSummary } from '@/components/organisms'
 import { getActiveSession } from '@/lib/auth'
-import { listActivePlans, createSubscription } from '@/lib/suscripcion-api'
+import { createSubscription, getPlanQuote, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
-import type { CheckoutFormData, UiSubscriptionPlan } from '@/types/subscription'
+import type { CheckoutFormData, UiPlanQuote, UiSubscriptionPlan } from '@/types/subscription'
 
 export function SubscriptionCheckoutPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const session = getActiveSession()
   const planId = searchParams.get('plan') ?? ''
+  const accountId = session?.account.id ?? ''
+  const accountCountry = session?.account.pais ?? ''
 
   const [plans, setPlans] = useState<UiSubscriptionPlan[]>([])
+  const [quote, setQuote] = useState<UiPlanQuote | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingPlan, setIsLoadingPlan] = useState(true)
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
@@ -38,14 +42,51 @@ export function SubscriptionCheckoutPage() {
     [plans, planId],
   )
 
+  useEffect(() => {
+    async function loadQuote() {
+      if (!accountCountry || !selectedPlan) {
+        setQuote(null)
+        return
+      }
+
+      setIsLoadingQuote(true)
+      try {
+        const data = await getPlanQuote(selectedPlan.id, accountCountry)
+        setQuote({
+          basePrice: Number(data.precio_base),
+          baseCurrency: data.moneda_base,
+          localCurrency: data.moneda_local,
+          localAmount: data.monto_local ? Number(data.monto_local) : null,
+          exchangeRate: data.tasa_cambio ? Number(data.tasa_cambio) : null,
+          conversionAvailable: data.conversion_disponible,
+          message: data.mensaje,
+        })
+      } catch (error) {
+        setQuote({
+          basePrice: selectedPlan.price,
+          baseCurrency: selectedPlan.currency,
+          localCurrency: null,
+          localAmount: null,
+          exchangeRate: null,
+          conversionAvailable: false,
+          message: error instanceof Error ? error.message : 'No se pudo consultar el tipo de cambio.',
+        })
+      } finally {
+        setIsLoadingQuote(false)
+      }
+    }
+
+    void loadQuote()
+  }, [accountCountry, selectedPlan])
+
   const handleSubmit = async (_data: CheckoutFormData) => {
-    if (!session || !selectedPlan) return
+    if (!accountId || !selectedPlan) return
 
     setIsLoading(true)
     setErrorMessage('')
 
     try {
-      const subscription = await createSubscription(session.account.id, selectedPlan.id)
+      const subscription = await createSubscription(accountId, selectedPlan.id)
       navigate(`/subscription/confirmation?subscription=${subscription.id}&plan=${selectedPlan.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo activar la suscripcion.')
@@ -70,6 +111,11 @@ export function SubscriptionCheckoutPage() {
           <p className="text-[var(--color-denim-400)]">
             Completa tu informacion para activar el plan y habilitar tus perfiles.
           </p>
+          {session && (
+            <p className="mt-2 text-sm text-[var(--color-denim-300)]">
+              Ubicacion detectada: <span className="font-semibold text-white">{session.account.pais}</span>
+            </p>
+          )}
         </div>
 
         {errorMessage && (
@@ -89,7 +135,10 @@ export function SubscriptionCheckoutPage() {
             </div>
 
             <div className="lg:col-span-1">
-              <OrderSummary plan={selectedPlan} />
+              {isLoadingQuote && (
+                <div className="mb-4 text-sm text-[var(--color-denim-400)]">Consultando tipo de cambio...</div>
+              )}
+              <OrderSummary plan={selectedPlan} quote={quote} />
             </div>
           </div>
         )}

@@ -2,6 +2,7 @@
 
 **Lenguaje:** Go 1.22  
 **Puerto gRPC:** 5003  
+**Puerto HTTP:** 8003  
 **Base de datos:** PostgreSQL (base `catalogo`)
 
 ## Responsabilidades
@@ -36,7 +37,8 @@ catalogo/
 | Variable      | Descripcion                         | Ejemplo                                          |
 |---------------|-------------------------------------|--------------------------------------------------|
 | `DATABASE_URL` | Connection string de PostgreSQL    | `postgres://user:pass@catalogo-db:5432/catalogo` |
-| `GRPC_PORT`   | Puerto donde escucha el servidor    | `5003` (por defecto)                             |
+| `GRPC_PORT`   | Puerto donde escucha el servidor gRPC | `5003` (por defecto)                          |
+| `HTTP_PORT`   | Puerto donde escucha el servidor HTTP | `8003` (por defecto)                          |
 
 ## Primeros pasos (desarrollo local)
 

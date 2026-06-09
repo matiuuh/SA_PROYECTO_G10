@@ -1,101 +1,160 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Search, X, Lock } from 'lucide-react'
 import { ContentRow, SearchBar, MediaCard } from '@/components/molecules'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { DashboardHero } from '@/components/organisms'
-import { getActiveSession, getStoredActiveProfile } from '@/lib/auth'
+import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
+import { listCatalogContent } from '@/lib/catalogo-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { listProfiles } from '@/lib/usuario-api'
+import type { CatalogContent } from '@/types/catalog'
 import type { ContentItem } from '@/components/molecules'
 
-const FEATURED = {
-  title: 'El Ultimo Horizonte',
-  description:
-    'En un futuro donde los limites entre la realidad y la simulacion se han difuminado, una exploradora descubre una senal que podria cambiar para siempre el destino de la humanidad.',
-  genre: 'Ciencia ficcion',
-  year: 2024,
-  rating: 8.7,
+function getReleaseYear(date?: string): number {
+  if (!date) return new Date().getFullYear()
+  const parsedYear = Number(date.slice(0, 4))
+  return Number.isNaN(parsedYear) ? new Date().getFullYear() : parsedYear
 }
 
-const CONTINUE_WATCHING: ContentItem[] = [
-  { title: 'El Ultimo Horizonte', genre: 'Ciencia ficcion', year: 2024, rating: 8.7, isNew: true },
-  { title: 'Sombras del Olvido', genre: 'Thriller', year: 2024, rating: 7.9, isNew: true },
-  { title: 'La Gran Aventura', genre: 'Aventura', year: 2023, rating: 8.2 },
-  { title: 'Corazon de Acero', genre: 'Drama', year: 2023, rating: 7.5 },
-]
+function getTypeLabel(type: string): string {
+  return type === 'serie' ? 'Serie' : 'Pelicula'
+}
 
-const TRENDING: ContentItem[] = [
-  { title: 'Amor en Paris', genre: 'Romance', year: 2024, rating: 7.3 },
-  { title: 'El Detective', genre: 'Misterio', year: 2023, rating: 8.5 },
-  { title: 'Frontera Oscura', genre: 'Accion', year: 2024, rating: 7.8, isNew: true },
-  { title: 'Mundos Paralelos', genre: 'Ciencia ficcion', year: 2024, rating: 8.1, isNew: true },
-  { title: 'La Ultima Sinfonia', genre: 'Drama', year: 2023, rating: 7.6 },
-  { title: 'Cazadores de Sombras', genre: 'Fantasia', year: 2023, rating: 8.3 },
-]
-
-const NEW_RELEASES: ContentItem[] = [
-  { title: 'Tormenta Digital', genre: 'Thriller', year: 2024, rating: 7.4, isNew: true },
-  { title: 'Viento del Norte', genre: 'Drama', year: 2024, rating: 8.0, isNew: true },
-  { title: 'Ciudad Fantasma', genre: 'Terror', year: 2024, rating: 7.2, isNew: true },
-  { title: 'Codigo Rojo', genre: 'Accion', year: 2024, rating: 7.9, isNew: true },
-  { title: 'El Retorno', genre: 'Misterio', year: 2024, rating: 8.2, isNew: true },
-]
-
-const MY_LIST: ContentItem[] = [
-  { title: 'Sombras del Olvido', genre: 'Thriller', year: 2024, rating: 7.9 },
-  { title: 'El Detective', genre: 'Misterio', year: 2023, rating: 8.5 },
-  { title: 'Cazadores', genre: 'Fantasia', year: 2023, rating: 8.3 },
-  { title: 'Noche Sin Fin', genre: 'Terror', year: 2024, rating: 7.1 },
-]
-
-const ALL_CONTENT = [
-  ...new Map([...CONTINUE_WATCHING, ...TRENDING, ...NEW_RELEASES, ...MY_LIST].map((item) => [item.title, item])).values(),
-]
-
-const ROWS = [
-  { id: 'continue', title: 'Continuar viendo', items: CONTINUE_WATCHING },
-  { id: 'trending', title: 'Tendencias ahora', items: TRENDING },
-  { id: 'new', title: 'Nuevos lanzamientos', items: NEW_RELEASES },
-  { id: 'mylist', title: 'Mi lista', items: MY_LIST },
-]
+function mapCatalogToContentItem(content: CatalogContent): ContentItem {
+  return {
+    id: content.id,
+    title: content.titulo,
+    genre: getTypeLabel(content.tipo),
+    year: getReleaseYear(content.fecha_lanzamiento),
+    rating: Math.max(0, Math.min(10, content.porcentaje_recomendacion / 10)),
+    posterUrl: content.url_portada,
+    isNew: getReleaseYear(content.fecha_lanzamiento) >= new Date().getFullYear() - 1,
+  }
+}
 
 export function PanelPage() {
+  const navigate = useNavigate()
   const session = getActiveSession()
   const activeProfile = getStoredActiveProfile()
+  const accountId = session?.account.id ?? ''
+  const accessToken = session?.accessToken ?? ''
   const [query, setQuery] = useState('')
   const [hasSubscription, setHasSubscription] = useState(false)
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true)
+  const [catalog, setCatalog] = useState<CatalogContent[]>([])
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true)
+  const [catalogError, setCatalogError] = useState('')
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
-      if (!session) {
+      if (!accountId || !accessToken) {
         setIsLoadingSubscription(false)
         return
       }
 
       try {
-        const status = await getSubscriptionStatusByAccount(session.account.id)
+        const [status, profiles] = await Promise.all([
+          getSubscriptionStatusByAccount(accountId),
+          listProfiles(accessToken),
+        ])
         setHasSubscription(status.tiene_suscripcion)
+
+        if (status.tiene_suscripcion) {
+          const syncedProfile = syncStoredActiveProfile(profiles)
+          if (!syncedProfile) {
+            navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+            return
+          }
+        }
       } finally {
         setIsLoadingSubscription(false)
       }
     }
 
     void loadSubscriptionStatus()
-  }, [session])
+  }, [accessToken, accountId, activeProfile, navigate])
+
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        const contents = await listCatalogContent()
+        setCatalog(contents)
+      } catch (error) {
+        setCatalogError(error instanceof Error ? error.message : 'No se pudo mostrar el catalogo.')
+      } finally {
+        setIsLoadingCatalog(false)
+      }
+    }
+
+    void loadCatalog()
+  }, [])
+
+  const allContent = useMemo(
+    () => catalog.map(mapCatalogToContentItem),
+    [catalog],
+  )
+
+  const featured = useMemo(() => {
+    const topContent = [...catalog].sort(
+      (left, right) => right.porcentaje_recomendacion - left.porcentaje_recomendacion,
+    )[0]
+
+    return topContent
+      ? {
+          title: topContent.titulo,
+          description: topContent.sinopsis || 'Disponible en Quetzal TV.',
+          genre: getTypeLabel(topContent.tipo),
+          year: getReleaseYear(topContent.fecha_lanzamiento),
+          rating: Math.max(0, Math.min(10, topContent.porcentaje_recomendacion / 10)),
+        }
+      : {
+          title: 'Catalogo Quetzal TV',
+          description: 'Explora las peliculas y series disponibles en la plataforma.',
+          genre: 'Streaming',
+          year: new Date().getFullYear(),
+          rating: 0,
+        }
+  }, [catalog])
+
+  const rows = useMemo(() => {
+    const recommended = allContent
+      .filter((item) => item.rating >= 7)
+      .slice(0, 8)
+    const movies = allContent
+      .filter((item) => item.genre === 'Pelicula')
+      .slice(0, 8)
+    const series = allContent
+      .filter((item) => item.genre === 'Serie')
+      .slice(0, 8)
+    const recent = [...allContent]
+      .sort((left, right) => right.year - left.year)
+      .slice(0, 8)
+
+    return [
+      { id: 'recommended', title: 'Recomendacion global', items: recommended },
+      { id: 'movies', title: 'Peliculas disponibles', items: movies },
+      { id: 'series', title: 'Series disponibles', items: series },
+      { id: 'recent', title: 'Estrenos y recientes', items: recent },
+    ].filter((row) => row.items.length > 0)
+  }, [allContent])
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return []
     const q = query.toLowerCase()
-    return ALL_CONTENT.filter((c) => c.title.toLowerCase().includes(q) || c.genre.toLowerCase().includes(q))
-  }, [query])
+    return allContent.filter(
+      (content) =>
+        content.title.toLowerCase().includes(q) ||
+        content.genre.toLowerCase().includes(q),
+    )
+  }, [allContent, query])
 
   const isSearching = query.trim().length > 0
   const greeting = activeProfile ? `Perfil activo: ${activeProfile.nombre}` : 'Explora la cartelera'
 
   return (
     <div className="min-h-screen bg-[#080c14]">
-      <DashboardHero {...FEATURED} />
+      <DashboardHero {...featured} />
 
       <div className="relative z-10 -mt-2">
         <div className="mb-8 flex items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -148,7 +207,19 @@ export function PanelPage() {
           </div>
         )}
 
-        {isSearching ? (
+        {catalogError && (
+          <div className="mb-8 px-4 sm:px-6 lg:px-8">
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+              {catalogError}
+            </div>
+          </div>
+        )}
+
+        {isLoadingCatalog ? (
+          <div className="flex min-h-[320px] items-center justify-center px-4 text-white">
+            Cargando catalogo...
+          </div>
+        ) : isSearching ? (
           <ScrollReveal variant="fade-up" key={query}>
             <div className="mb-10 px-4 sm:px-6 lg:px-8">
               {searchResults.length > 0 ? (
@@ -156,7 +227,7 @@ export function PanelPage() {
                   {searchResults.map((item, i) => (
                     <ScrollReveal key={item.title} variant="fade-up" delay={i * 40}>
                       <div className="relative">
-                        <MediaCard {...item} />
+                        <MediaCard {...item} onClick={() => navigate(`/movie/${item.id}`)} />
                         {!hasSubscription && (
                           <div className="absolute inset-0 rounded-2xl bg-black/35 pointer-events-none" />
                         )}
@@ -183,6 +254,13 @@ export function PanelPage() {
               )}
             </div>
           </ScrollReveal>
+        ) : allContent.length === 0 ? (
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 px-4 text-center">
+            <p className="text-xl font-semibold text-white">El catalogo esta vacio.</p>
+            <p className="max-w-xl text-sm text-[var(--color-denim-400)]">
+              Todavia no hay peliculas o series disponibles para mostrar en la plataforma.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-10 pb-16">
             {!hasSubscription && !isLoadingSubscription && (
@@ -194,9 +272,13 @@ export function PanelPage() {
               </div>
             )}
 
-            {ROWS.map(({ id, title, items }, rowIdx) => (
+            {rows.map(({ id, title, items }, rowIdx) => (
               <ScrollReveal key={id} variant="fade-up" delay={rowIdx * 80}>
-                <ContentRow title={title} items={items} />
+                <ContentRow
+                  title={title}
+                  items={items}
+                  onSelectItem={(item) => navigate(`/movie/${item.id}`)}
+                />
               </ScrollReveal>
             ))}
           </div>

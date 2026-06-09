@@ -155,6 +155,25 @@ func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.C
 	return &d, nil
 }
 
+func (r *ContentRepository) ExistsByTitleAndType(ctx context.Context, title string, contentType domain.ContentType) (bool, error) {
+	var exists bool
+
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM contenidos
+			WHERE eliminado_en IS NULL
+			  AND LOWER(TRIM(titulo)) = LOWER(TRIM($1))
+			  AND tipo = $2::tipo_contenido
+		)
+	`, title, string(contentType)).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error) {

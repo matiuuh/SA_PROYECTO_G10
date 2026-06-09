@@ -9,10 +9,12 @@ export interface Profile {
   color: string
   isKids?: boolean
   isPrimary?: boolean
+  isEnabled?: boolean
 }
 
 interface ProfileSelectorProps {
   profiles: Profile[]
+  activeProfileId?: string | null
   maxProfiles?: number
   onSelectProfile: (profileId: string) => void
   onAddProfile?: () => void
@@ -21,6 +23,7 @@ interface ProfileSelectorProps {
 
 export function ProfileSelector({
   profiles,
+  activeProfileId = null,
   maxProfiles = 5,
   onSelectProfile,
   onAddProfile,
@@ -46,8 +49,10 @@ export function ProfileSelector({
             name={profile.isPrimary ? `${profile.name} (Principal)` : profile.name}
             avatarUrl={profile.avatarUrl}
             color={profile.color}
+            isEnabled={profile.isEnabled ?? true}
+            isActive={profile.id === activeProfileId}
             isEditing={isEditing}
-            onClick={() => !isEditing && onSelectProfile(profile.id)}
+            onClick={() => !isEditing && (profile.isEnabled ?? true) && onSelectProfile(profile.id)}
             onEdit={() => onEditProfile?.(profile.id)}
           />
         ))}

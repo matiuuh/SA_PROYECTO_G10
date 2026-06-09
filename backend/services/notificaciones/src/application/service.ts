@@ -2,6 +2,11 @@ import { pool } from '../infrastructure/postgres';
 import { sendMail } from '../infrastructure/mailer';
 import type { ResultadoEnvioNotificacion, TipoNotificacion } from '../domain/notification';
 
+const FRONTEND_BASE_URL = (process.env['FRONTEND_BASE_URL'] ?? 'http://localhost:5173').replace(/\/$/, '');
+const FRONTEND_LOGIN_URL = `${FRONTEND_BASE_URL}/login`;
+const FRONTEND_SUBSCRIPTION_URL = `${FRONTEND_BASE_URL}/subscription/plans`;
+const FRONTEND_CATALOG_URL = `${FRONTEND_BASE_URL}/panel`;
+
 // ── Paleta y SVG icons ───────────────────────────────────────────────────────
 
 const C = {
@@ -170,7 +175,7 @@ function tmplConfirmacionRegistro(nombre: string): { asunto: string; html: strin
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
+          <a href="${FRONTEND_LOGIN_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
             Explorar catálogo &rarr;
           </a>
         </td>
@@ -255,7 +260,7 @@ function tmplRecibo(opts: {
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;">
+          <a href="${FRONTEND_SUBSCRIPTION_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;">
             Ver mi suscripción &rarr;
           </a>
         </td>
@@ -331,7 +336,7 @@ function tmplAlertaPublicacion(opts: {
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
+          <a href="${FRONTEND_CATALOG_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
             ${tipoIconBtn}Ver ahora
           </a>
         </td>

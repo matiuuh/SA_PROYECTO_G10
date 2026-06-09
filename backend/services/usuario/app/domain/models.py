@@ -20,6 +20,7 @@ class Profile:
     nombre: str
     color: str
     es_principal: bool
+    activo: bool
     creado_en: datetime
     actualizado_en: datetime
 

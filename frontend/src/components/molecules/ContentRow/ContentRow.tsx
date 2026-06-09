@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { MediaCard } from '../MediaCard'
 
 export interface ContentItem {
+  id: string
   title: string
   genre: string
   year: number
@@ -14,9 +15,10 @@ export interface ContentItem {
 interface ContentRowProps {
   title: string
   items: ContentItem[]
+  onSelectItem?: (item: ContentItem) => void
 }
 
-export function ContentRow({ title, items }: ContentRowProps) {
+export function ContentRow({ title, items, onSelectItem }: ContentRowProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft,  setCanScrollLeft]  = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(true)
@@ -67,7 +69,7 @@ export function ContentRow({ title, items }: ContentRowProps) {
               key={`${item.title}-${i}`}
               className="shrink-0 w-[220px] sm:w-[260px] md:w-[300px]"
             >
-              <MediaCard {...item} />
+              <MediaCard {...item} onClick={() => onSelectItem?.(item)} />
             </div>
           ))}
         </div>

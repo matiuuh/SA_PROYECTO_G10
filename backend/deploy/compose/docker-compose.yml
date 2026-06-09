@@ -53,6 +53,9 @@ services:
       APP_ENV: development
       APP_PORT: 8001
       GRPC_PORT: 5001
+      NOTIFICATIONS_ENABLED: "true"
+      NOTIFICATIONS_GRPC_TARGET: notificaciones-service:5007
+      NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
       STORAGE_BACKEND: postgres
       JWT_SECRET: change-me-local
       JWT_ALGORITHM: HS256
@@ -84,6 +87,8 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 5002
+      DIVISAS_GRPC_TARGET: divisas-service:5005
+      CONVERSION_TIMEOUT_SECONDS: 3.0
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: quetzal_suscripcion
@@ -105,8 +110,14 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_catalogo
       GRPC_PORT: 5003
+      HTTP_PORT: 8003
+      JWT_SECRET: change-me-local
+      SUBSCRIPCION_API_URL: http://suscripcion-service:8002
+      USUARIO_API_URL: http://usuario-service:8001
+      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
     ports:
       - "5003:5003"
+      - "8003:8003"
     depends_on:
       postgres:
         condition: service_healthy

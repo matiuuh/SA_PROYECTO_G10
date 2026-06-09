@@ -31,10 +31,11 @@ class PostgresProfileRepository:
                         nombre,
                         color,
                         es_principal,
+                        activo,
                         creado_en,
                         actualizado_en
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         profile.id,
@@ -42,6 +43,7 @@ class PostgresProfileRepository:
                         profile.nombre,
                         profile.color,
                         profile.es_principal,
+                        profile.activo,
                         profile.creado_en,
                         profile.actualizado_en,
                     ),
@@ -53,11 +55,11 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE cuenta_id = %s
                       AND eliminado_en IS NULL
-                    ORDER BY es_principal DESC, creado_en ASC
+                    ORDER BY es_principal DESC, activo DESC, creado_en ASC
                     """,
                     (account_id,),
                 )
@@ -70,7 +72,7 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE id = %s
                       AND eliminado_en IS NULL
@@ -86,7 +88,7 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE cuenta_id = %s
                       AND lower(nombre) = lower(%s)
@@ -136,6 +138,7 @@ class PostgresProfileRepository:
                     SET nombre = %s,
                         color = %s,
                         es_principal = %s,
+                        activo = %s,
                         actualizado_en = %s
                     WHERE id = %s
                       AND eliminado_en IS NULL
@@ -144,6 +147,7 @@ class PostgresProfileRepository:
                         profile.nombre,
                         profile.color,
                         profile.es_principal,
+                        profile.activo,
                         profile.actualizado_en,
                         profile.id,
                     ),
@@ -210,6 +214,7 @@ class PostgresProfileRepository:
             nombre=str(row["nombre"]),
             color=str(row["color"]),
             es_principal=bool(row["es_principal"]),
+            activo=bool(row["activo"]),
             creado_en=row["creado_en"],
             actualizado_en=row["actualizado_en"],
         )

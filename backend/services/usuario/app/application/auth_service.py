@@ -10,6 +10,7 @@ from app.application.schemas import (
     CreateProfileRequest,
     LoginRequest,
     RegisterRequest,
+    SyncProfilesAvailabilityRequest,
     UpdateProfileRequest,
 )
 from app.domain.errors import AuthenticationError, ConflictError, NotFoundError
@@ -144,6 +145,7 @@ class AuthService:
             nombre=request.nombre.strip(),
             color=request.color,
             es_principal=request.es_principal or profile_count == 0,
+            activo=True,
             creado_en=now,
             actualizado_en=now,
         )
@@ -184,10 +186,46 @@ class AuthService:
         if profile is None:
             raise NotFoundError("Perfil no encontrado.")
 
+        if profile.es_principal:
+            raise ConflictError("El perfil principal no puede eliminarse.")
+
         if len(profiles) == 1:
             raise ConflictError("La cuenta debe conservar al menos un perfil.")
 
         self._profile_repository.delete(profile_id)
+
+    def sync_profiles_availability(
+        self, token: str, request: SyncProfilesAvailabilityRequest
+    ) -> list[Profile]:
+        account = self.get_current_account(token)
+        profiles = self._profile_repository.list_by_account_id(account.id)
+        if not profiles:
+            raise NotFoundError("No hay perfiles registrados para esta cuenta.")
+
+        allowed_active_profiles = max(1, request.max_perfiles_activos)
+        ordered_profiles = sorted(
+            profiles,
+            key=lambda item: (
+                0 if item.es_principal else 1,
+                item.creado_en,
+            ),
+        )
+
+        active_ids: set[str] = set()
+        for profile in ordered_profiles:
+            if len(active_ids) >= allowed_active_profiles:
+                break
+            active_ids.add(profile.id)
+
+        for profile in ordered_profiles:
+            should_be_active = profile.id in active_ids
+            if profile.activo == should_be_active:
+                continue
+            profile.activo = should_be_active
+            profile.actualizado_en = datetime.now(timezone.utc)
+            self._profile_repository.update(profile)
+
+        return self._profile_repository.list_by_account_id(account.id)
 
     def _issue_session(self, account: Account) -> AuthTokens:
         now = datetime.now(timezone.utc)
@@ -229,6 +267,7 @@ class AuthService:
             nombre=default_name[:80],
             color="#6D28D9",
             es_principal=True,
+            activo=True,
             creado_en=now,
             actualizado_en=now,
         )

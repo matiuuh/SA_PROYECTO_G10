@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { Button, Logo, Select } from '@/components/atoms'
@@ -53,6 +53,10 @@ function toSession(auth: AuthResponse) {
   }
 }
 
+function getHomeRouteByRole(role: string): string {
+  return role === 'administrador' ? '/admin' : '/panel'
+}
+
 export function AuthPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -73,8 +77,6 @@ export function AuthPage() {
     password: '',
     confirmPassword: '',
   })
-
-  const redirectTo = useMemo(() => locationState.from ?? '/panel', [locationState.from])
 
   useEffect(() => {
     const target: Mode = location.pathname === '/register' ? 'register' : 'login'
@@ -108,8 +110,10 @@ export function AuthPage() {
         contrasena: loginForm.password,
       })
 
-      storeSession(toSession(auth))
-      navigate(redirectTo, { replace: true })
+      const session = toSession(auth)
+      storeSession(session)
+      const target = locationState.from ?? getHomeRouteByRole(session.account.rol)
+      navigate(target, { replace: true })
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'No se pudo iniciar sesion.')
     } finally {
@@ -141,8 +145,9 @@ export function AuthPage() {
         pais: registerForm.country.trim(),
       })
 
-      storeSession(toSession(auth))
-      navigate('/panel', { replace: true })
+      const session = toSession(auth)
+      storeSession(session)
+      navigate(getHomeRouteByRole(session.account.rol), { replace: true })
     } catch (error) {
       setRegisterError(error instanceof Error ? error.message : 'No se pudo crear la cuenta.')
     } finally {

@@ -10,6 +10,18 @@ export interface SubscriptionPlan {
   actualizado_en: string
 }
 
+export interface PlanQuote {
+  plan_id: string
+  nombre_plan: string
+  precio_base: string
+  moneda_base: string
+  moneda_local: string | null
+  monto_local: string | null
+  tasa_cambio: string | null
+  conversion_disponible: boolean
+  mensaje: string
+}
+
 export interface UiSubscriptionPlan {
   id: string
   name: string
@@ -20,6 +32,16 @@ export interface UiSubscriptionPlan {
   profileLimit: number
   features: string[]
   popular?: boolean
+}
+
+export interface UiPlanQuote {
+  basePrice: number
+  baseCurrency: string
+  localCurrency: string | null
+  localAmount: number | null
+  exchangeRate: number | null
+  conversionAvailable: boolean
+  message: string
 }
 
 export interface SubscriptionRecord {
@@ -36,6 +58,10 @@ export interface SubscriptionRecord {
 export interface SubscriptionStatus {
   tiene_suscripcion: boolean
   suscripcion: SubscriptionRecord | null
+}
+
+export interface SubscriptionMessage {
+  message: string
 }
 
 export interface PaymentMethod {

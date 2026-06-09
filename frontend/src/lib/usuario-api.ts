@@ -123,6 +123,28 @@ export async function updateProfile(
   return (await response.json()) as UserProfile
 }
 
+export async function syncProfilesAvailability(
+  accessToken: string,
+  maxActiveProfiles: number,
+): Promise<UserProfile[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/sync-availability`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      max_perfiles_activos: maxActiveProfiles,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as UserProfile[]
+}
+
 export async function deleteProfile(accessToken: string, profileId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}`, {
     method: 'DELETE',
