@@ -5,8 +5,15 @@ import type {
   SubscriptionRecord,
   SubscriptionStatus,
 } from '@/types/subscription'
+import { getActiveSession } from '@/lib/auth'
 
 const API_BASE_URL = import.meta.env.VITE_SUSCRIPCION_API_URL ?? 'http://localhost:8002'
+
+function authHeaders(): Record<string, string> {
+  const session = getActiveSession()
+  if (!session) return {}
+  return { Authorization: `Bearer ${session.accessToken}` }
+}
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -35,6 +42,7 @@ export async function listActivePlans(): Promise<SubscriptionPlan[]> {
 export async function getPlanQuote(planId: string, pais: string): Promise<PlanQuote> {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/plans/${planId}/quote?pais=${encodeURIComponent(pais)}`,
+    { headers: { ...authHeaders() } },
   )
 
   if (!response.ok) {
@@ -45,7 +53,11 @@ export async function getPlanQuote(planId: string, pais: string): Promise<PlanQu
 }
 
 export async function getSubscriptionByAccount(cuentaId: string): Promise<SubscriptionRecord | null> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}`)
+  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}`, {
+    headers: {
+      ...authHeaders(),
+    },
+  })
 
   if (response.status === 404) {
     return null
@@ -59,7 +71,11 @@ export async function getSubscriptionByAccount(cuentaId: string): Promise<Subscr
 }
 
 export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<SubscriptionStatus> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`)
+  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`, {
+    headers: {
+      ...authHeaders(),
+    },
+  })
 
   if (!response.ok) {
     throw new Error(await parseError(response))
@@ -76,6 +92,7 @@ export async function createSubscription(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify({
       cuenta_id: cuentaId,
@@ -98,6 +115,7 @@ export async function changeSubscriptionPlan(
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify({
       plan_id: planId,
@@ -114,6 +132,9 @@ export async function changeSubscriptionPlan(
 export async function cancelSubscription(suscripcionId: string): Promise<SubscriptionMessage> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/${suscripcionId}/cancel`, {
     method: 'POST',
+    headers: {
+      ...authHeaders(),
+    },
   })
 
   if (!response.ok) {

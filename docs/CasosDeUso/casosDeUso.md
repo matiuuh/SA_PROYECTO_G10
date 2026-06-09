@@ -5,7 +5,6 @@
 |----|-------------|-------------|
 |![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles, gestionar su suscripción, explorar el catálogo, reproducir contenido y calificarlo. |
 |![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar y eliminar películas o series. |
-
 |![Proveedor de Divisas](./img/actor.png)  | **Proveedor de Divisas** | Servicio externo que suministra los tipos de cambio utilizados por la plataforma para mostrar precios en la moneda local del usuario. |
 |![Proveedor de Correo SMTP](./img/actor.png)  | **Proveedor de Correo SMTP** | Servicio externo encargado de entregar los correos de confirmación de registro, recibos de compra y alertas de nuevo contenido. |
 
@@ -56,7 +55,7 @@
 | Descripción | Permite a un usuario crear una cuenta en la plataforma ingresando sus datos básicos y su ubicación para habilitar el acceso al sistema y la creación automática de su primer perfil. |
 | Precondiciones | El usuario no debe tener una cuenta registrada con el mismo correo electrónico. |
 | Postcondiciones | Cuenta registrada correctamente y perfil principal creado con el nombre de la cuenta; o registro rechazado por datos inválidos o duplicados. |
-| Flujo principal | 1. El usuario ingresa nombre, correo, contraseña y ubicación.<br>2. El usuario confirma el registro.<br>3. El sistema valida la información.<br>4. El sistema crea la cuenta.<br>5. El sistema crea automáticamente el perfil principal usando el nombre de la cuenta.<br>6. El sistema confirma el registro exitoso. |
+| Flujo principal | 1. El usuario ingresa nombre, correo, contraseña, confirmando su contraseña y ubicación.<br>2. El usuario confirma el registro.<br>3. El sistema valida la información.<br>4. El sistema crea la cuenta.<br>5. El sistema crea automáticamente el perfil principal usando el nombre de la cuenta.<br>6. El sistema confirma el registro exitoso. |
 | Flujos alternos | FA1. El correo ya existe.<br>FA1.1 El sistema informa que la cuenta ya está registrada.<br>FA2. Faltan datos obligatorios.<br>FA2.1 El sistema solicita completar la información requerida. |
 | Reglas de negocio | El correo debe ser único en la plataforma.<br>La ubicación debe registrarse como parte de la cuenta.<br>La cuenta debe crear un perfil principal automáticamente.<br>El nombre del primer perfil debe corresponder al nombre de la cuenta registrada. |
 | Reglas de calidad | El formulario debe validar campos obligatorios antes del envío.<br>La confirmación del registro debe mostrarse en un tiempo razonable. |
@@ -132,7 +131,7 @@
 | Precondiciones | El usuario debe haber iniciado sesión y contar con al menos un perfil asociado a su cuenta. |
 | Postcondiciones | Perfil activo seleccionado correctamente; o selección no completada por perfil inexistente o no disponible. |
 | Flujo principal | 1. El sistema muestra los perfiles asociados a la cuenta.<br>2. El usuario selecciona un perfil disponible.<br>3. El sistema activa el perfil elegido.<br>4. El sistema habilita la navegación con el contexto del perfil activo. |
-| Flujos alternos | <br>FA1. El perfil seleccionado ya no se encuentra disponible.<br>FA2.1 El sistema solicita seleccionar otro perfil válido. |
+| Flujos alternos | <br>FA1. El perfil seleccionado ya no se encuentra disponible.<br>FA2.1 El sistema identifica que ya no existe y en la siguiente interacción selecciona automaticamente otro perfil. |
 | Reglas de negocio | Toda cuenta debe contar con al menos un perfil creado automáticamente al momento del registro.<br>Un usuario solo puede seleccionar perfiles de su propia cuenta.<br>Cada perfil debe mantener su información aislada. |
 | Reglas de calidad | La selección debe mostrar claramente cuál perfil quedo activo.<br>El cambio de perfil no debe mezclar historiales ni preferencias. |
 
@@ -219,7 +218,7 @@
 | Precondiciones | El usuario debe haber seleccionado un plan e iniciado el flujo de compra o modificación, y el proveedor de divisas debe estar disponible. |
 | Postcondiciones | Tipo de cambio consultado y precio convertido; o precio mostrado con información no actualizada o no disponible. |
 | Flujo principal | 1. El usuario selecciona un plan e inicia el proceso de compra o modificación de plan.<br>2. El sistema obtiene la ubicación registrada del usuario.<br>3. El sistema identifica la moneda local correspondiente a esa ubicación.<br>4. El sistema solicita el tipo de cambio al proveedor de divisas.<br>5. El proveedor responde con la tasa vigente.<br>6. El sistema calcula el valor convertido.<br>7. El sistema muestra el monto en moneda local dentro del flujo de pago. |
-| Flujos alternos | FA1. El proveedor de divisas no responde.<br>FA1.1 El sistema usa información en caché si está disponible.|
+| Flujos alternos | FA1. El proveedor de divisas no responde.<br>FA1.1 El sistema usa información en caché si está disponible.<br> FA2.2 El sistema no encuentra la divisa del usuario y cobra en dólares|
 | Reglas de negocio | La conversion depende de la moneda local asociada a la ubicación registrada del usuario.<br>La tasa obtenida puede reutilizarse desde caché según la política vigente. |
 | Reglas de calidad | La consulta de tipo de cambio no debe degradar el flujo de compra.<br>La conversion mostrada debe ser consistente dentro de la misma operación. |
 
@@ -293,7 +292,7 @@
 | Descripción | Permite al sistema enviar al usuario el comprobante de la operación de compra una vez confirmado el pago de su suscripción o modificación de plan. |
 | Precondiciones | Debe existir una compra confirmada y un correo electrónico asociado a la cuenta del usuario. |
 | Postcondiciones | Recibo enviado correctamente; o fallo de envío registrado por el sistema. |
-| Flujo principal | 1. El sistema detecta que la compra fue confirmada.<br>2. El sistema prepara el recibo con el detalle de la operación.<br>3. El sistema solicita el envío al proveedor SMTP.<br>4. El proveedor confirma el procesamiento del mensaje.<br>5. El sistema muestra el resultado del envío y permite descargar la constancia. |
+| Flujo principal | 1. El sistema detecta que la compra fue confirmada.<br>2. El sistema prepara el recibo con el detalle de la operación.<br>3. El sistema solicita el envío al proveedor SMTP.<br>4. El servicio confirma el procesamiento del mensaje.<br>5. El sistema muestra el resultado del envío y permite descargar la constancia. |
 | Flujos alternos | FA1. El proveedor SMTP no responde o rechaza la solicitud.<br>FA1.1 El sistema registra el fallo de envío.<br>FA2. No existe correo asociado a la cuenta.<br>FA2.1 El sistema registra la imposibilidad de envío. |
 | Reglas de negocio | El recibo solo se envía cuando la compra ha sido confirmada.<br>El detalle del recibo debe corresponder a la operación realizada. |
 | Reglas de calidad | El envío del recibo no debe bloquear la confirmación de la compra al usuario.<br>Los errores de envío deben quedar registrados para trazabilidad. |
