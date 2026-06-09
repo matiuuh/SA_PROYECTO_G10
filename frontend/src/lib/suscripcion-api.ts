@@ -5,8 +5,15 @@ import type {
   SubscriptionRecord,
   SubscriptionStatus,
 } from '@/types/subscription'
+import { getActiveSession } from '@/lib/auth'
 
 const API_BASE_URL = import.meta.env.VITE_SUSCRIPCION_API_URL ?? 'http://localhost:8002'
+
+function authHeaders(): Record<string, string> {
+  const session = getActiveSession()
+  if (!session) return {}
+  return { Authorization: `Bearer ${session.accessToken}` }
+}
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -35,6 +42,7 @@ export async function listActivePlans(): Promise<SubscriptionPlan[]> {
 export async function getPlanQuote(planId: string, pais: string): Promise<PlanQuote> {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/plans/${planId}/quote?pais=${encodeURIComponent(pais)}`,
+    { headers: { ...authHeaders() } },
   )
 
   if (!response.ok) {
@@ -44,12 +52,9 @@ export async function getPlanQuote(planId: string, pais: string): Promise<PlanQu
   return (await response.json()) as PlanQuote
 }
 
-export async function getSubscriptionByAccount(
-  accessToken: string,
-  cuentaId: string,
-): Promise<SubscriptionRecord | null> {
+export async function getSubscriptionByAccount(cuentaId: string): Promise<SubscriptionRecord | null> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...authHeaders() },
   })
 
   if (response.status === 404) {
@@ -63,12 +68,9 @@ export async function getSubscriptionByAccount(
   return (await response.json()) as SubscriptionRecord
 }
 
-export async function getSubscriptionStatusByAccount(
-  accessToken: string,
-  cuentaId: string,
-): Promise<SubscriptionStatus> {
+export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<SubscriptionStatus> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...authHeaders() },
   })
 
   if (!response.ok) {
@@ -79,7 +81,6 @@ export async function getSubscriptionStatusByAccount(
 }
 
 export async function createSubscription(
-  accessToken: string,
   cuentaId: string,
   planId: string,
 ): Promise<SubscriptionRecord> {
@@ -87,7 +88,7 @@ export async function createSubscription(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...authHeaders(),
     },
     body: JSON.stringify({
       cuenta_id: cuentaId,
@@ -103,7 +104,6 @@ export async function createSubscription(
 }
 
 export async function changeSubscriptionPlan(
-  accessToken: string,
   suscripcionId: string,
   planId: string,
 ): Promise<SubscriptionRecord> {
@@ -111,7 +111,7 @@ export async function changeSubscriptionPlan(
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...authHeaders(),
     },
     body: JSON.stringify({
       plan_id: planId,
@@ -125,13 +125,10 @@ export async function changeSubscriptionPlan(
   return (await response.json()) as SubscriptionRecord
 }
 
-export async function cancelSubscription(
-  accessToken: string,
-  suscripcionId: string,
-): Promise<SubscriptionMessage> {
+export async function cancelSubscription(suscripcionId: string): Promise<SubscriptionMessage> {
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/${suscripcionId}/cancel`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...authHeaders() },
   })
 
   if (!response.ok) {

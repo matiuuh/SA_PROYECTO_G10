@@ -13,7 +13,6 @@ export function toUiPlan(plan: SubscriptionPlan): UiSubscriptionPlan {
     features: [
       'Acceso al catalogo completo',
       `${plan.perfiles_maximos} perfil${plan.perfiles_maximos === 1 ? '' : 'es'} disponible${plan.perfiles_maximos === 1 ? '' : 's'}`,
-      'Sin anuncios',
       plan.perfiles_maximos >= 4 ? 'Ideal para familia' : 'Configuracion sencilla',
     ],
   }

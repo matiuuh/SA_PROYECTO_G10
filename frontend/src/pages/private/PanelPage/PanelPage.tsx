@@ -5,7 +5,7 @@ import { ContentRow, SearchBar, MediaCard } from '@/components/molecules'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { DashboardHero } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
-import { getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
+import { getCatalogDetail, listCatalogContent, searchCatalogContent } from '@/lib/catalogo-api'
 import { getMyList } from '@/lib/my-list'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
@@ -87,6 +87,8 @@ export function PanelPage() {
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all')
   const [genreFilter, setGenreFilter] = useState<GenreFilter>('all')
   const [genreMap, setGenreMap] = useState<Record<string, string[]>>({})
+  const [searchResults, setSearchResults] = useState<ContentItem[]>([])
+  const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
@@ -265,18 +267,35 @@ export function PanelPage() {
     ].filter((row) => row.items.length > 0)
   }, [activeProfile?.id, catalogFilter, filteredContent])
 
-  const searchResults = useMemo(() => {
-    if (!query.trim()) return []
-    const q = query.toLowerCase()
-    return filteredEntries
-      .filter(
-        ({ content, item, genreNames }) =>
-          content.titulo.toLowerCase().includes(q) ||
-          item.genre.toLowerCase().includes(q) ||
-          genreNames.some((genre) => genre.toLowerCase().includes(q)),
-      )
-      .map(({ item }) => item)
-  }, [filteredEntries, query])
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const timer = setTimeout(() => {
+      void searchCatalogContent(trimmed).then((contents) => {
+        const filtered = contents.filter((c) => {
+          const matchesCategory = catalogFilter === 'all' ? true : c.tipo === catalogFilter
+          const genres = genreMap[c.id] ?? []
+          const matchesGenre =
+            genreFilter === 'all'
+              ? true
+              : genres.some((g) => g.toLowerCase() === genreFilter.toLowerCase())
+          return matchesCategory && matchesGenre
+        })
+        setSearchResults(filtered.map(mapCatalogToContentItem))
+        setIsSearching(false)
+      }).catch(() => {
+        setIsSearching(false)
+      })
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [query, catalogFilter, genreFilter, genreMap])
 
   useEffect(() => {
     if (genreFilter === 'all') return
@@ -307,7 +326,7 @@ export function PanelPage() {
     return activeFilterSummary
   }, [activeFilterSummary])
 
-  const isSearching = query.trim().length > 0
+  const isQueryActive = query.trim().length > 0
   const greeting = activeProfile ? `Perfil activo: ${activeProfile.nombre}` : 'Explora la cartelera'
 
   return (
@@ -318,9 +337,9 @@ export function PanelPage() {
         <div className="mb-8 flex items-center justify-between px-4 sm:px-6 lg:px-8">
           <div>
             <p className="text-sm text-[var(--color-denim-400)]">
-              {isSearching ? `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} para "${query}"` : greeting}
+              {isQueryActive ? `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} para "${query}"` : greeting}
             </p>
-            {!isSearching ? (
+            {!isQueryActive ? (
               <p className="mt-1 text-xs text-[var(--color-denim-600)]">{filterSummary}</p>
             ) : null}
           </div>
@@ -427,10 +446,14 @@ export function PanelPage() {
           <div className="flex min-h-[320px] items-center justify-center px-4 text-white">
             Cargando catalogo...
           </div>
-        ) : isSearching ? (
+        ) : isQueryActive ? (
           <ScrollReveal variant="fade-up" key={query}>
             <div className="mb-10 px-4 sm:px-6 lg:px-8">
-              {searchResults.length > 0 ? (
+              {isSearching ? (
+                <div className="flex min-h-[220px] items-center justify-center text-white">
+                  Buscando...
+                </div>
+              ) : searchResults.length > 0 ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {searchResults.map((item, i) => (
                     <ScrollReveal key={item.title} variant="fade-up" delay={i * 40}>
@@ -448,7 +471,7 @@ export function PanelPage() {
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.07] bg-[#0d1220]">
                     <Search size={28} strokeWidth={1.25} className="text-[var(--color-denim-700)]" />
                   </div>
-              <p className="text-sm text-[var(--color-denim-400)]">
+                  <p className="text-sm text-[var(--color-denim-400)]">
                     No se encontraron coincidencias para <span className="font-medium text-white">"{query}"</span>
                   </p>
                   <button
