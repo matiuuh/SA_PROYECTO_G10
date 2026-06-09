@@ -85,7 +85,7 @@ export function ProfileSelectionPage() {
 
       try {
         const [subscriptionStatus, plans] = await Promise.all([
-          getSubscriptionStatusByAccount(accountId),
+          getSubscriptionStatusByAccount(accessToken, accountId),
           listActivePlans(),
         ])
         const maxActiveProfiles = subscriptionStatus.suscripcion

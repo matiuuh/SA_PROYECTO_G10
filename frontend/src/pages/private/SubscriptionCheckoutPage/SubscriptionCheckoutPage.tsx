@@ -89,7 +89,7 @@ export function SubscriptionCheckoutPage() {
     setErrorMessage('')
 
     try {
-      const subscription = await createSubscription(accountId, selectedPlan.id)
+      const subscription = await createSubscription(session?.accessToken ?? '', accountId, selectedPlan.id)
       let transactionId = ''
       let receiptStatus = 'not_requested'
 

@@ -31,7 +31,7 @@ export function UserSettingsPage() {
       if (!accountId) return
 
       const [status, plans] = await Promise.all([
-        getSubscriptionStatusByAccount(accountId),
+        getSubscriptionStatusByAccount(session?.accessToken ?? '', accountId),
         listActivePlans(),
       ])
 

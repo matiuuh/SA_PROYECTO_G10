@@ -97,7 +97,7 @@ export function PanelPage() {
 
       try {
         const [status, profiles] = await Promise.all([
-          getSubscriptionStatusByAccount(accountId),
+          getSubscriptionStatusByAccount(accessToken, accountId),
           listProfiles(accessToken),
         ])
         setHasSubscription(status.tiene_suscripcion)

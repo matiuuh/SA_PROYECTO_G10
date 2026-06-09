@@ -5,11 +5,15 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# shamefully-hoist=true: pone todos los paquetes en node_modules/ directamente,
+# igual que npm. Sin esto, pnpm usa un store virtual y tsc no se encuentra en
+# la ruta que espera el wrapper de .bin/tsc cuando corre en Docker.
+RUN echo "shamefully-hoist=true" >> .npmrc
 
-# URLs de API inyectadas en build time como ARGs (baked into el bundle de Vite).
-# El api-gateway de VM4 las intercepta — son rutas relativas al mismo origen.
+COPY package.json pnpm-lock.yaml ./
+RUN NODE_ENV=development pnpm install --frozen-lockfile
+
+# URLs de API inyectadas en build time (baked into el bundle de Vite).
 ARG VITE_USUARIO_API_URL=/api/usuario
 ARG VITE_SUSCRIPCION_API_URL=/api/suscripcion
 ARG VITE_CATALOGO_API_URL=/api/catalogo

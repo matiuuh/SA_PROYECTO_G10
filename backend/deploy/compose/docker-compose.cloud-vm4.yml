@@ -65,7 +65,7 @@ services:
     environment:
       PORT: 80
       JWT_SECRET: ${JWT_SECRET}
-      FRONTEND_URL: http://frontend:3000
+      FRONTEND_URL: http://frontend:80
       USUARIO_SERVICE_URL:        http://${VM1_HOST}:8001
       SUSCRIPCION_SERVICE_URL:    http://${VM1_HOST}:8002
       CATALOGO_SERVICE_URL:       http://${VM1_HOST}:8003

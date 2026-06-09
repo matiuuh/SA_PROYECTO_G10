@@ -41,7 +41,12 @@ export function proxyTo(
       headers: forwardHeaders(req.headers, target),
     },
     (proxyRes) => {
-      res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+      const headers = Object.assign({}, proxyRes.headers, {
+        'access-control-allow-origin':  '*',
+        'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+        'access-control-allow-headers': 'Content-Type, Authorization',
+      });
+      res.writeHead(proxyRes.statusCode ?? 502, headers);
       proxyRes.pipe(res, { end: true });
     },
   );
@@ -49,7 +54,10 @@ export function proxyTo(
   proxyReq.on('error', (err: Error) => {
     console.error(`[gateway] proxy error → ${target.hostname}:${target.port} — ${err.message}`);
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        'access-control-allow-origin': '*',
+      });
       res.end(JSON.stringify({ error: 'Servicio no disponible', detail: err.message }));
     }
   });

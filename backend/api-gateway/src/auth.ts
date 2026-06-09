@@ -3,11 +3,17 @@ import jwt from 'jsonwebtoken';
 import { config } from './config';
 
 // Rutas que no requieren JWT.
-// - /api/usuario/api/v1/auth/login|register → acceso público del browser
-// - /api/divisas/* y /api/notificaciones/*  → llamadas internas entre servicios
 const PUBLIC_ROUTES: Array<{ method: string; prefix: string }> = [
+  // Auth pública
   { method: 'POST',    prefix: '/api/usuario/api/v1/auth/login' },
   { method: 'POST',    prefix: '/api/usuario/api/v1/auth/register' },
+  // Catálogo — lecturas (el frontend no pasa token para browsing)
+  { method: 'GET',     prefix: '/api/catalogo/' },
+  // Suscripción — el frontend no pasa token en ninguna de sus llamadas
+  { method: 'GET',     prefix: '/api/suscripcion/' },
+  { method: 'POST',    prefix: '/api/suscripcion/' },
+  { method: 'PUT',     prefix: '/api/suscripcion/' },
+  // Divisas y notificaciones — inter-servicio
   { method: 'GET',     prefix: '/api/divisas/' },
   { method: 'POST',    prefix: '/api/divisas/' },
   { method: 'POST',    prefix: '/api/notificaciones/' },
@@ -42,6 +48,9 @@ export function verifyToken(
 }
 
 function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'access-control-allow-origin': '*',
+  });
   res.end(JSON.stringify(body));
 }
