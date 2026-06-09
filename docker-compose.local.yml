@@ -112,6 +112,7 @@ services:
       DB_NAME: suscripcion_db
       DB_USER: quetzal
       DB_PASSWORD: quetzal
+      JWT_SECRET: quetzal-dev-secret-change-in-prod
       GRPC_PORT: "50052"
     ports:
       - "8002:8002"
