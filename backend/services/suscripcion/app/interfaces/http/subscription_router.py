@@ -4,6 +4,7 @@ from app.application.schemas import (
     CreateSubscriptionRequest,
     MessageResponse,
     SubscriptionResponse,
+    SubscriptionStatusResponse,
 )
 from app.domain.errors import ConflictError, NotFoundError
 from app.infrastructure.container import Container
@@ -31,6 +32,15 @@ def build_subscription_router(container: Container) -> APIRouter:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
         return SubscriptionResponse(**subscription.__dict__)
+
+    @router.get("/account/{cuenta_id}/status", response_model=SubscriptionStatusResponse)
+    def get_subscription_status_by_account(cuenta_id: str) -> SubscriptionStatusResponse:
+        subscription = container.subscription_service.get_subscription_status_by_account(cuenta_id)
+
+        return SubscriptionStatusResponse(
+            tiene_suscripcion=subscription is not None,
+            suscripcion=SubscriptionResponse(**subscription.__dict__) if subscription is not None else None,
+        )
 
     @router.post("/{suscripcion_id}/cancel", response_model=MessageResponse)
     def cancel_subscription(suscripcion_id: str) -> MessageResponse:

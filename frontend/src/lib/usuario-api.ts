@@ -122,3 +122,16 @@ export async function updateProfile(
 
   return (await response.json()) as UserProfile
 }
+
+export async function deleteProfile(accessToken: string, profileId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+}

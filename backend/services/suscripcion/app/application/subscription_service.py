@@ -62,6 +62,9 @@ class SubscriptionService:
             raise NotFoundError("No hay una suscripcion activa para esa cuenta.")
         return subscription
 
+    def get_subscription_status_by_account(self, account_id: str) -> Subscription | None:
+        return self._subscription_repository.get_active_by_account_id(account_id)
+
     def cancel_subscription(self, subscription_id: str) -> Subscription:
         subscription = self._subscription_repository.get_by_id(subscription_id)
         if subscription is None:

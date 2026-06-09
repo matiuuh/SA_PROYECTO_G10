@@ -40,5 +40,10 @@ class SubscriptionResponse(BaseModel):
     actualizado_en: datetime
 
 
+class SubscriptionStatusResponse(BaseModel):
+    tiene_suscripcion: bool
+    suscripcion: SubscriptionResponse | None
+
+
 class MessageResponse(BaseModel):
     message: str

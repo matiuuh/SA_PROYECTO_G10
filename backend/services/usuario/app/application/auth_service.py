@@ -222,7 +222,7 @@ class AuthService:
 
     def _create_default_profile(self, account: Account) -> None:
         now = datetime.now(timezone.utc)
-        default_name = account.nombre.strip().split(" ")[0] or "Perfil"
+        default_name = account.nombre.strip() or "Perfil"
         profile = Profile(
             id=str(uuid4()),
             cuenta_id=account.id,

@@ -10,12 +10,13 @@ import {
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
-import { clearSession, getActiveSession } from '@/lib/auth'
+import { clearSession, getActiveSession, getStoredActiveProfile } from '@/lib/auth'
 import { logoutUser } from '@/lib/usuario-api'
 
 export function AppNavbar() {
   const navigate = useNavigate()
   const session = getActiveSession()
+  const activeProfile = getStoredActiveProfile()
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -126,6 +127,30 @@ export function AppNavbar() {
                 <Search size={17} strokeWidth={1.75} />
               </button>
             )}
+
+            <div className="w-px h-5 bg-white/[0.08]" />
+
+            <Link
+              to="/subscription/plans"
+              aria-label="Planes"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+            >
+              <span className="hidden sm:inline">Planes</span>
+              <span className="sm:hidden">Plan</span>
+            </Link>
+
+            <div className="w-px h-5 bg-white/[0.08]" />
+
+            <Link
+              to="/profiles"
+              aria-label="Perfiles"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+            >
+              <span className="hidden md:inline">
+                {activeProfile ? `Perfil: ${activeProfile.nombre}` : 'Perfiles'}
+              </span>
+              <span className="md:hidden">Perfil</span>
+            </Link>
 
             <div className="w-px h-5 bg-white/[0.08]" />
 

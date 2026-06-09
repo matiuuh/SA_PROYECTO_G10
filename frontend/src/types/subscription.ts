@@ -33,6 +33,11 @@ export interface SubscriptionRecord {
   actualizado_en: string
 }
 
+export interface SubscriptionStatus {
+  tiene_suscripcion: boolean
+  suscripcion: SubscriptionRecord | null
+}
+
 export interface PaymentMethod {
   id: string
   type: 'card' | 'paypal'

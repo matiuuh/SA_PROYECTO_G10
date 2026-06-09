@@ -3,7 +3,7 @@ import { getActiveSession } from '@/lib/auth'
 
 export function AuthLayout() {
   if (getActiveSession()) {
-    return <Navigate to="/profiles" replace />
+    return <Navigate to="/panel" replace />
   }
 
   return (

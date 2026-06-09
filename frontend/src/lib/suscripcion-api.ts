@@ -1,4 +1,4 @@
-import type { SubscriptionPlan, SubscriptionRecord } from '@/types/subscription'
+import type { SubscriptionPlan, SubscriptionRecord, SubscriptionStatus } from '@/types/subscription'
 
 const API_BASE_URL = import.meta.env.VITE_SUSCRIPCION_API_URL ?? 'http://localhost:8002'
 
@@ -38,6 +38,16 @@ export async function getSubscriptionByAccount(cuentaId: string): Promise<Subscr
   }
 
   return (await response.json()) as SubscriptionRecord
+}
+
+export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<SubscriptionStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`)
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as SubscriptionStatus
 }
 
 export async function createSubscription(

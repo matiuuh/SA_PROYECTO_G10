@@ -18,6 +18,7 @@ Esta primera version implementa:
 - `POST /api/v1/plans`
 - `POST /api/v1/subscriptions`
 - `GET /api/v1/subscriptions/account/{cuenta_id}`
+- `GET /api/v1/subscriptions/account/{cuenta_id}/status`
 - `POST /api/v1/subscriptions/{suscripcion_id}/cancel`
 - `GET /health`
 

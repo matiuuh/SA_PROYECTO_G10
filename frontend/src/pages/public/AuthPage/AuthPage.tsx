@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
-import { Button, Logo } from '@/components/atoms'
+import { Button, Logo, Select } from '@/components/atoms'
 import LoginIllustration from '@/assets/Auth/Login.svg'
 import RegisterIllustration from '@/assets/Auth/Register.svg'
 import { storeSession } from '@/lib/auth'
 import { loginUser, registerUser } from '@/lib/usuario-api'
 import type { AuthResponse } from '@/types/auth'
+import type { SelectOption } from '@/components/atoms'
 
 type Mode = 'login' | 'register'
 
@@ -16,6 +17,32 @@ type AuthLocationState = {
 
 const inputClass =
   'w-full px-4 py-2.5 rounded-lg bg-[#111827] border border-white/[0.08] text-white placeholder:text-[var(--color-denim-600)] focus:outline-none focus:border-[var(--color-denim-500)] transition-colors text-sm'
+
+const COUNTRY_OPTIONS: SelectOption[] = [
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Bolivia', label: 'Bolivia' },
+  { value: 'Brasil', label: 'Brasil' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Costa Rica', label: 'Costa Rica' },
+  { value: 'Cuba', label: 'Cuba' },
+  { value: 'Ecuador', label: 'Ecuador' },
+  { value: 'El Salvador', label: 'El Salvador' },
+  { value: 'Espana', label: 'Espana' },
+  { value: 'Estados Unidos', label: 'Estados Unidos' },
+  { value: 'Guatemala', label: 'Guatemala' },
+  { value: 'Honduras', label: 'Honduras' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Nicaragua', label: 'Nicaragua' },
+  { value: 'Panama', label: 'Panama' },
+  { value: 'Paraguay', label: 'Paraguay' },
+  { value: 'Peru', label: 'Peru' },
+  { value: 'Puerto Rico', label: 'Puerto Rico' },
+  { value: 'Republica Dominicana', label: 'Republica Dominicana' },
+  { value: 'Uruguay', label: 'Uruguay' },
+  { value: 'Venezuela', label: 'Venezuela' },
+]
 
 function toSession(auth: AuthResponse) {
   return {
@@ -47,7 +74,7 @@ export function AuthPage() {
     confirmPassword: '',
   })
 
-  const redirectTo = useMemo(() => locationState.from ?? '/profiles', [locationState.from])
+  const redirectTo = useMemo(() => locationState.from ?? '/panel', [locationState.from])
 
   useEffect(() => {
     const target: Mode = location.pathname === '/register' ? 'register' : 'login'
@@ -99,6 +126,11 @@ export function AuthPage() {
       return
     }
 
+    if (!registerForm.country) {
+      setRegisterError('Debes seleccionar un pais.')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -110,7 +142,7 @@ export function AuthPage() {
       })
 
       storeSession(toSession(auth))
-      navigate('/profiles', { replace: true })
+      navigate('/panel', { replace: true })
     } catch (error) {
       setRegisterError(error instanceof Error ? error.message : 'No se pudo crear la cuenta.')
     } finally {
@@ -286,15 +318,12 @@ export function AuthPage() {
                       <label htmlFor="reg-country" className="text-sm font-medium text-[var(--color-denim-200)]">
                         Pais
                       </label>
-                      <input
-                        id="reg-country"
-                        name="country"
-                        type="text"
-                        required
+                      <Select
                         value={registerForm.country}
-                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, country: e.target.value }))}
-                        placeholder="Guatemala"
-                        className={inputClass}
+                        onChange={(value) => setRegisterForm((prev) => ({ ...prev, country: value }))}
+                        options={COUNTRY_OPTIONS}
+                        placeholder="Selecciona tu pais"
+                        className="w-full"
                       />
                     </div>
 
