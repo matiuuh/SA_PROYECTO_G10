@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package cobros.v1;
+
+option go_package = "quetzaltv/proto/cobros/v1;cobrosv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum EstadoPago {
+  PENDIENTE  = 0;
+  APROBADO   = 1;
+  RECHAZADO  = 2;
+  CANCELADO  = 3;
+}
+
+enum TipoOperacion {
+  CONTRATACION     = 0;
+  MODIFICACION_PLAN = 1;
+}
+
+// ── Messages ───────────────────────────────────────────────────────────────
+
+message Transaccion {
+  string                    id                  = 1;
+  string                    cuenta_id           = 2;
+  string                    suscripcion_id      = 3;
+  string                    plan_id             = 4;
+  TipoOperacion             tipo_operacion      = 5;
+  double                    monto_base          = 6;
+  double                    monto_local         = 7;
+  string                    moneda_local        = 8;
+  EstadoPago                estado              = 9;
+  string                    referencia_pasarela = 10;
+  google.protobuf.Timestamp pagado_en           = 11;
+  google.protobuf.Timestamp creado_en           = 12;
+}
+
+message Recibo {
+  string                    id             = 1;
+  string                    transaccion_id = 2;
+  string                    numero_recibo  = 3;
+  string                    correo_destino = 4;
+  bool                      enviado        = 5;
+  google.protobuf.Timestamp enviado_en     = 6;
+  google.protobuf.Timestamp creado_en      = 7;
+}
+
+// ── Request / Response ─────────────────────────────────────────────────────
+
+message ProcesarPagoRequest {
+  string        cuenta_id      = 1;
+  string        suscripcion_id = 2;
+  string        plan_id        = 3;
+  TipoOperacion tipo_operacion = 4;
+  double        monto_base     = 5;
+  string        moneda_local   = 6;
+  string        correo_destino = 7;
+}
+
+message ProcesarPagoResponse {
+  Transaccion transaccion = 1;
+  Recibo      recibo      = 2; // presente sólo si estado = APROBADO
+}
+
+message ObtenerTransaccionRequest {
+  string id = 1;
+}
+
+message ListarTransaccionesRequest {
+  string cuenta_id = 1;
+}
+
+message ListarTransaccionesResponse {
+  repeated Transaccion transacciones = 1;
+}
+
+message ObtenerReciboRequest {
+  string transaccion_id = 1;
+}
+
+// ── Service ────────────────────────────────────────────────────────────────
+
+service CobrosService {
+  rpc ProcesarPago(ProcesarPagoRequest) returns (ProcesarPagoResponse);
+  rpc ObtenerTransaccion(ObtenerTransaccionRequest) returns (Transaccion);
+  rpc ListarTransacciones(ListarTransaccionesRequest) returns (ListarTransaccionesResponse);
+  rpc ObtenerRecibo(ObtenerReciboRequest) returns (Recibo);
+}

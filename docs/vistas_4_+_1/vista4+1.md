@@ -167,3 +167,5 @@ En conjunto, esta vista demuestra cómo la plataforma se ejecuta realmente en in
 Las imágenes actuales están alineadas con dos vistas distintas dentro del modelo **4+1**. `VISTAFISICA.png` corresponde correctamente a la **vista de despliegue**, porque muestra infraestructura, nodos, protocolos, puertos, bases de datos y servicios externos. Por su parte, `VISTA DE COMPONENTES.png` corresponde a la **vista de desarrollo**, porque organiza el sistema por capas y componentes internos.
 
 De esta manera, la documentación distingue correctamente entre cómo está construido el software y cómo se ejecuta en la infraestructura. Esta separación fortalece la claridad del documento técnico y lo alinea mejor con los requisitos del enunciado del proyecto.
+
+[Volver a documentación](/docs/Documentación.md)
