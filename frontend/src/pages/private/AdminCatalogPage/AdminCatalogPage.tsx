@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard, SearchBar } from '@/components/molecules'
-import { deleteCatalogContent, getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
+import { deleteCatalogContent, getCatalogDetail, listCatalogContent, searchCatalogContent } from '@/lib/catalogo-api'
 import { getActiveSession } from '@/lib/auth'
 import type { CatalogContent } from '@/types/catalog'
 
@@ -68,6 +68,8 @@ export function AdminCatalogPage() {
   const [genreFilter, setGenreFilter] = useState<AdminGenreFilter>('all')
   const [genreMap, setGenreMap] = useState<Record<string, string[]>>({})
   const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<CatalogContent[]>([])
+  const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
     async function loadCatalog() {
@@ -176,20 +178,41 @@ export function AdminCatalogPage() {
     }
   }, [catalog])
 
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const timer = setTimeout(() => {
+      void searchCatalogContent(trimmed).then((contents) => {
+        setSearchResults(contents)
+        setIsSearching(false)
+      }).catch(() => {
+        setIsSearching(false)
+      })
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const baseList = query.trim() ? searchResults : catalog
+
   const filteredCatalog = useMemo(() => {
-    return catalog.filter((item) => {
+    return baseList.filter((item) => {
       const matchesCategory = catalogFilter === 'all' ? true : item.tipo === catalogFilter
       const genres = genreMap[item.id] ?? []
       const matchesGenre =
         genreFilter === 'all'
           ? true
           : genres.some((genre) => genre.toLowerCase() === genreFilter.toLowerCase())
-      const matchesSearch =
-        query.trim() === '' ? true : item.titulo.toLowerCase().includes(query.toLowerCase())
 
-      return matchesCategory && matchesGenre && matchesSearch
+      return matchesCategory && matchesGenre
     })
-  }, [catalog, catalogFilter, genreFilter, genreMap, query])
+  }, [baseList, catalogFilter, genreFilter, genreMap])
 
   const availableGenres = useMemo(
     () =>
@@ -309,6 +332,10 @@ export function AdminCatalogPage() {
           {isLoading ? (
             <div className="flex min-h-[220px] items-center justify-center text-white">
               Cargando catalogo...
+            </div>
+          ) : isSearching ? (
+            <div className="flex min-h-[220px] items-center justify-center text-white">
+              Buscando...
             </div>
           ) : filteredCatalog.length === 0 ? (
             <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">

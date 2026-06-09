@@ -6,7 +6,6 @@ import {
   ChevronDown,
   User,
   History,
-  Search,
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
@@ -19,12 +18,9 @@ export function AppNavbar() {
   const activeProfile = getStoredActiveProfile()
   const [profileOpen, setProfileOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
   const [hidden, setHidden] = useState(false)
   const [hovered, setHovered] = useState(false)
   const lastScrollY = useRef(0)
-  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const onScroll = () => {
@@ -50,17 +46,6 @@ export function AppNavbar() {
       normalized.includes('token invalido') ||
       normalized.includes('authorization')
     )
-  }
-
-  const handleSearchToggle = () => {
-    setSearchOpen((value) => {
-      if (!value) {
-        setTimeout(() => searchInputRef.current?.focus(), 50)
-      } else {
-        setSearchQuery('')
-      }
-      return !value
-    })
   }
 
   const handleLogout = async () => {
@@ -124,49 +109,6 @@ export function AppNavbar() {
           </Link>
 
           <div className="flex items-center gap-2">
-            {searchOpen ? (
-              <div className="flex items-center gap-2">
-                <div className="relative flex items-center">
-                  <div className="absolute inset-0 rounded-xl border border-[var(--color-denim-600)]/70 bg-[#0d1220] shadow-lg shadow-[var(--color-denim-900)]/50 pointer-events-none" />
-                  <Search size={15} strokeWidth={2} className="absolute left-3.5 text-[var(--color-denim-400)] shrink-0" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar peliculas, series..."
-                    className="relative z-10 w-56 sm:w-80 h-9 pl-9 pr-8 bg-transparent text-sm text-white placeholder:text-[var(--color-denim-600)] focus:outline-none"
-                  />
-                  {searchQuery.length > 0 && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      aria-label="Limpiar busqueda"
-                      className="absolute right-2.5 z-10 w-5 h-5 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors duration-200"
-                    >
-                      <X size={11} className="text-white" />
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={handleSearchToggle}
-                  aria-label="Cerrar busqueda"
-                  className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-                >
-                  <X size={17} strokeWidth={1.75} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleSearchToggle}
-                aria-label="Buscar"
-                className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-              >
-                <Search size={17} strokeWidth={1.75} />
-              </button>
-            )}
-
-            <div className="w-px h-5 bg-white/[0.08]" />
-
             <Link
               to="/subscription/plans"
               aria-label="Planes"
