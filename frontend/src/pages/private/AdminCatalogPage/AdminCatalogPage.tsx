@@ -1,9 +1,10 @@
-import { Film, Info, List, Tv2, Upload } from 'lucide-react'
+import { Eye, Film, List, Pencil, Trash2, Tv2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard } from '@/components/molecules'
-import { listCatalogContent } from '@/lib/catalogo-api'
+import { deleteCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { getActiveSession } from '@/lib/auth'
 import type { CatalogContent } from '@/types/catalog'
 
 const CATALOG_SECTIONS = [
@@ -27,9 +28,11 @@ const CATALOG_SECTIONS = [
 
 export function AdminCatalogPage() {
   const navigate = useNavigate()
+  const session = getActiveSession()
   const [catalog, setCatalog] = useState<CatalogContent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [busyContentId, setBusyContentId] = useState('')
 
   useEffect(() => {
     async function loadCatalog() {
@@ -45,6 +48,36 @@ export function AdminCatalogPage() {
 
     void loadCatalog()
   }, [])
+
+  async function refreshCatalog() {
+    try {
+      const contents = await listCatalogContent()
+      setCatalog(contents)
+      setErrorMessage('')
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'No se pudo mostrar el catalogo.')
+    }
+  }
+
+  async function handleDelete(item: CatalogContent) {
+    if (!session?.accessToken) {
+      setErrorMessage('Tu sesion ya no esta activa. Inicia sesion nuevamente.')
+      return
+    }
+
+    const confirmed = window.confirm(`¿Deseas eliminar "${item.titulo}" del catalogo?`)
+    if (!confirmed) return
+
+    setBusyContentId(item.id)
+    try {
+      await deleteCatalogContent(session.accessToken, item.id)
+      await refreshCatalog()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'No se pudo eliminar el contenido.')
+    } finally {
+      setBusyContentId('')
+    }
+  }
 
   const stats = useMemo(() => {
     const movies = catalog.filter((item) => item.tipo === 'pelicula').length
@@ -68,21 +101,6 @@ export function AdminCatalogPage() {
             <p className="text-sm text-[var(--color-denim-400)] mt-0.5">
               Organiza el flujo de carga y validacion del contenido disponible en Quetzal TV.
             </p>
-          </div>
-        </div>
-      </ScrollReveal>
-
-      <ScrollReveal variant="fade-up" delay={40}>
-        <div className="rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 p-5 mb-8">
-          <div className="flex items-start gap-3">
-            <Info size={18} className="text-[var(--color-warning)] shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-white">Estado de integracion</p>
-              <p className="text-sm text-[var(--color-denim-300)] mt-1">
-                Esta vista ya consume el catalogo vigente de la plataforma. Desde aqui puedes revisar el contenido
-                publicado y continuar al flujo de carga administrativa.
-              </p>
-            </div>
           </div>
         </div>
       </ScrollReveal>
@@ -151,15 +169,51 @@ export function AdminCatalogPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {catalog.map((item) => (
-                <MediaCard
-                  key={item.id}
-                  title={item.titulo}
-                  genre={item.tipo === 'serie' ? 'Serie' : 'Pelicula'}
-                  year={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) : new Date().getFullYear()}
-                  rating={Math.max(0, Math.min(10, item.porcentaje_recomendacion / 10))}
-                  posterUrl={item.url_portada}
-                  isNew={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) >= new Date().getFullYear() - 1 : false}
-                />
+                <div key={item.id} className="space-y-3">
+                  <MediaCard
+                    title={item.titulo}
+                    genre={item.tipo === 'serie' ? 'Serie' : 'Pelicula'}
+                    year={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) : new Date().getFullYear()}
+                    rating={
+                      item.porcentaje_recomendacion > 0
+                        ? Math.max(0, Math.min(10, item.porcentaje_recomendacion / 10))
+                        : null
+                    }
+                    posterUrl={item.url_portada}
+                    isNew={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) >= new Date().getFullYear() - 1 : false}
+                    onClick={() => navigate(`/movie/${item.id}`)}
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button variant="ghost" onClick={() => navigate(`/movie/${item.id}`)}>
+                      <Eye size={14} />
+                      Ver
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        navigate(
+                          item.tipo === 'serie'
+                            ? `/admin/upload/series?edit=${item.id}`
+                            : `/admin/upload/movie?edit=${item.id}`,
+                        )
+                      }
+                    >
+                      <Pencil size={14} />
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        void handleDelete(item)
+                      }}
+                      disabled={busyContentId === item.id}
+                      className="text-red-300 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-200"
+                    >
+                      <Trash2 size={14} />
+                      {busyContentId === item.id ? '...' : 'Borrar'}
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           )}

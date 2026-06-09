@@ -13,7 +13,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init/00-create-multiple-dbs.sh:/docker-entrypoint-initdb.d/00-create-multiple-dbs.sh:ro
       - ../../services/usuario/database/sql/01_usuarios.sql:/init-scripts/10-usuarios.sql:ro
+      - ../../services/usuario/database/seed/01_admin_seed.sql:/init-scripts/11-usuarios-seed-admin.sql:ro
       - ../../services/suscripcion/database/sql/04_suscripciones.sql:/init-scripts/20-suscripciones.sql:ro
+      - ../../services/suscripcion/database/seed/01_planes_seed.sql:/init-scripts/21-suscripciones-seed-planes.sql:ro
       - ../../services/catalogo/database/sql/01_schema.sql:/init-scripts/30-catalogo-schema.sql:ro
       - ../../services/catalogo/database/sql/02_procedures.sql:/init-scripts/31-catalogo-procedures.sql:ro
       - ../../services/streaming/database/sql/01_schema.sql:/init-scripts/40-streaming-schema.sql:ro

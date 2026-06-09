@@ -6,6 +6,7 @@ import { Button, ScrollReveal } from '@/components/atoms'
 import { DashboardHero } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
 import { listCatalogContent } from '@/lib/catalogo-api'
+import { getMyList } from '@/lib/my-list'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent } from '@/types/catalog'
@@ -122,6 +123,11 @@ export function PanelPage() {
   }, [catalog])
 
   const rows = useMemo(() => {
+    const myListIds = activeProfile?.id ? getMyList(activeProfile.id) : []
+    const myListItems = myListIds
+      .map((contentId) => allContent.find((item) => item.id === contentId) ?? null)
+      .filter((item): item is ContentItem => item != null)
+
     const recommended = allContent
       .filter((item) => item.rating != null && item.rating >= 7)
       .slice(0, 8)
@@ -136,12 +142,13 @@ export function PanelPage() {
       .slice(0, 8)
 
     return [
+      { id: 'my-list', title: 'Mi lista', items: myListItems },
       { id: 'recommended', title: 'Recomendacion global', items: recommended },
       { id: 'movies', title: 'Peliculas disponibles', items: movies },
       { id: 'series', title: 'Series disponibles', items: series },
       { id: 'recent', title: 'Estrenos y recientes', items: recent },
     ].filter((row) => row.items.length > 0)
-  }, [allContent])
+  }, [activeProfile?.id, allContent])
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return []

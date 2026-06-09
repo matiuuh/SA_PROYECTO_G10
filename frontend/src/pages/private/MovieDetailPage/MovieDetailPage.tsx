@@ -22,6 +22,7 @@ import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
 import { getCatalogDetail, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getPlaybackProgress, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
@@ -123,6 +124,26 @@ function formatProgress(seconds: number): string {
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
+function parseTechnicalSheet(sheet?: string): Map<string, string> {
+  const metadata = new Map<string, string>()
+  const source = sheet?.trim() ?? ''
+  if (!source) return metadata
+
+  for (const rawPart of source.split(/\n|\|/)) {
+    const part = rawPart.trim()
+    if (!part) continue
+    const separatorIndex = part.indexOf(':')
+    if (separatorIndex <= 0) continue
+    const key = part.slice(0, separatorIndex).trim().toLowerCase()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (value) {
+      metadata.set(key, value)
+    }
+  }
+
+  return metadata
+}
+
 function buildLikeStorageKey(profileId: string, contentId: string): string {
   return `quetzal_content_like:${profileId}:${contentId}`
 }
@@ -203,10 +224,12 @@ export function MovieDetailPage() {
     const currentProfile = getStoredActiveProfile()
     if (!currentProfile?.id) {
       setLiked(false)
+      setInList(false)
       return
     }
 
     setLiked(localStorage.getItem(buildLikeStorageKey(currentProfile.id, id)) === '1')
+    setInList(isInMyList(currentProfile.id, id))
   }, [id])
 
   useEffect(() => {
@@ -255,6 +278,13 @@ export function MovieDetailPage() {
 
   const genres = detail?.generos ?? []
   const cast = detail?.reparto ?? []
+  const technicalSheetMetadata = useMemo(() => parseTechnicalSheet(detail?.ficha_tecnica), [detail?.ficha_tecnica])
+  const fallbackGenre = technicalSheetMetadata.get('genero') ?? ''
+  const fallbackCast = technicalSheetMetadata.get('reparto') ?? ''
+  const fallbackDirector = technicalSheetMetadata.get('director') ?? technicalSheetMetadata.get('creador') ?? ''
+  const fallbackSubtitles = technicalSheetMetadata.get('subtitulos') ?? ''
+  const fallbackSeasons = technicalSheetMetadata.get('temporadas') ?? ''
+  const fallbackNotes = technicalSheetMetadata.get('notas') ?? ''
   const trailerSource = useMemo(
     () => resolveTrailerSource(detail?.url_trailer, muted, resumeFromSeconds),
     [detail?.url_trailer, muted, resumeFromSeconds],
@@ -393,6 +423,19 @@ export function MovieDetailPage() {
     } finally {
       setIsSubmittingLike(false)
     }
+  }
+
+  const handleToggleMyList = () => {
+    if (!detail?.id) return
+
+    const currentProfile = getStoredActiveProfile()
+    if (!currentProfile?.id) {
+      setPlaybackError('Debes seleccionar un perfil activo para guardar contenido en tu lista.')
+      return
+    }
+
+    const result = toggleMyListItem(currentProfile.id, detail.id)
+    setInList(result.inList)
   }
 
   if (isLoading) {
@@ -605,7 +648,7 @@ export function MovieDetailPage() {
             )}
 
             <button
-              onClick={() => setInList((value) => !value)}
+              onClick={handleToggleMyList}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
                 inList
                   ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-white'
@@ -647,28 +690,50 @@ export function MovieDetailPage() {
 
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 sm:px-8 lg:flex-row lg:px-16">
         <div className="flex flex-1 flex-col gap-6">
-          <ScrollReveal variant="fade-up">
-            <p className="max-w-2xl text-base leading-relaxed text-[var(--color-denim-300)]">
-              {detail.sinopsis || 'Sin sinopsis disponible.'}
-            </p>
-          </ScrollReveal>
-
           <ScrollReveal variant="fade-up" delay={60}>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Ficha tecnica</span>
-                <span className="text-sm text-white">{detail.ficha_tecnica || 'Sin registro'}</span>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Sinopsis</span>
+                <span className="text-sm leading-relaxed text-white">
+                  {detail.sinopsis || fallbackNotes || 'Sin sinopsis disponible.'}
+                </span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Genero</span>
                 <span className="text-sm text-white">
-                  {genres.length > 0 ? genres.map((genre) => genre.nombre).join(', ') : 'Sin genero'}
+                  {genres.length > 0 ? genres.map((genre) => genre.nombre).join(', ') : fallbackGenre || 'Sin genero'}
                 </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">
+                  {detail.tipo === 'serie' ? 'Creador' : 'Director'}
+                </span>
+                <span className="text-sm text-white">{fallbackDirector || 'Sin registro'}</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Idioma</span>
                 <span className="text-sm text-white">{detail.idioma || 'Sin idioma'}</span>
               </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Subtitulos</span>
+                <span className="text-sm text-white">{fallbackSubtitles || 'Sin registro'}</span>
+              </div>
+              {detail.tipo === 'serie' ? (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Temporadas</span>
+                  <span className="text-sm text-white">{fallbackSeasons || 'Sin registro'}</span>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Clasificacion</span>
+                <span className="text-sm text-white">{detail.clasificacion_edad || 'Sin clasificacion'}</span>
+              </div>
+              {fallbackNotes ? (
+                <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Notas adicionales</span>
+                  <span className="text-sm text-white">{fallbackNotes}</span>
+                </div>
+              ) : null}
             </div>
           </ScrollReveal>
 
@@ -683,7 +748,16 @@ export function MovieDetailPage() {
                   >
                     {actor.nombre_artistico}
                   </span>
-                )) : (
+                )) : fallbackCast ? (
+                  fallbackCast.split(',').map((actorName) => (
+                    <span
+                      key={actorName.trim()}
+                      className="rounded-lg border border-white/[0.07] bg-white/[0.05] px-3 py-1 text-sm text-[var(--color-denim-300)]"
+                    >
+                      {actorName.trim()}
+                    </span>
+                  ))
+                ) : (
                   <span className="text-sm text-[var(--color-denim-400)]">Sin reparto registrado.</span>
                 )}
               </div>

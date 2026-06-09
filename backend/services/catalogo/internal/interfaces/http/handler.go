@@ -80,6 +80,18 @@ type createContentRequest struct {
 	UrlTrailer        string `json:"url_trailer"`
 }
 
+type updateContentRequest struct {
+	Titulo            string `json:"titulo"`
+	Sinopsis          string `json:"sinopsis"`
+	FichaTecnica      string `json:"ficha_tecnica"`
+	FechaLanzamiento  string `json:"fecha_lanzamiento"`
+	ClasificacionEdad string `json:"clasificacion_edad"`
+	DuracionMinutos   *int   `json:"duracion_minutos"`
+	Idioma            string `json:"idioma"`
+	UrlPortada        string `json:"url_portada"`
+	UrlTrailer        string `json:"url_trailer"`
+}
+
 type createContentResponse struct {
 	ID      string `json:"id"`
 	Message string `json:"message"`
@@ -112,6 +124,7 @@ func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher)
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
+	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
 	mux.HandleFunc("/api/v1/catalog/", h.handleDetail)
@@ -351,6 +364,87 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+
+	contentID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/admin/catalog/content/"))
+	contentID = strings.TrimSuffix(contentID, "/")
+	if contentID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el identificador del contenido.")
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		h.handleUpdateContent(w, r, contentID)
+	case http.MethodDelete:
+		h.handleDeleteContent(w, r, contentID)
+	default:
+		writeMethodNotAllowed(w)
+	}
+}
+
+func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	var req updateContentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	content, err := parseUpdateContentRequest(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.svc.Update(r.Context(), contentID, content); err != nil {
+		if errors.Is(err, domain.ErrContentNotFound) {
+			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "No se pudo actualizar el contenido.")
+		return
+	}
+
+	detail, err := h.svc.GetDetail(r.Context(), contentID)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo obtener el contenido actualizado.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "Contenido actualizado correctamente.",
+		"detalle": toDetailResponse(detail),
+	})
+}
+
+func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	if err := h.svc.Delete(r.Context(), contentID); err != nil {
+		if errors.Is(err, domain.ErrContentNotFound) {
+			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "No se pudo eliminar el contenido.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Contenido eliminado correctamente.",
+	})
+}
+
 func (h *Handler) requireAdmin(r *http.Request) (string, error) {
 	claims, err := h.requireAuthenticated(r)
 	if err != nil {
@@ -408,6 +502,54 @@ func parseCreateContentRequest(req createContentRequest, createdByAccountID stri
 		PosterURL:          posterURL,
 		TrailerURL:         strings.TrimSpace(req.UrlTrailer),
 		CreatedByAccountID: createdByAccountID,
+	}
+
+	if strings.TrimSpace(req.FechaLanzamiento) != "" {
+		releaseDate, err := time.Parse("2006-01-02", strings.TrimSpace(req.FechaLanzamiento))
+		if err != nil {
+			return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD.")
+		}
+		content.ReleaseDate = &releaseDate
+	}
+
+	if req.DuracionMinutos != nil {
+		duration := *req.DuracionMinutos
+		content.DurationMinutes = &duration
+	}
+
+	return content, nil
+}
+
+func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error) {
+	title := strings.TrimSpace(req.Titulo)
+	synopsis := strings.TrimSpace(req.Sinopsis)
+	language := strings.TrimSpace(req.Idioma)
+	posterURL := strings.TrimSpace(req.UrlPortada)
+
+	if title == "" {
+		return nil, errors.New("Debes indicar el titulo del contenido.")
+	}
+	if synopsis == "" {
+		return nil, errors.New("Debes indicar la sinopsis del contenido.")
+	}
+	if language == "" {
+		return nil, errors.New("Debes indicar el idioma principal del contenido.")
+	}
+	if posterURL == "" {
+		return nil, errors.New("Debes indicar la URL de la portada.")
+	}
+	if req.DuracionMinutos != nil && *req.DuracionMinutos <= 0 {
+		return nil, errors.New("La duracion debe ser mayor que cero.")
+	}
+
+	content := &domain.Content{
+		Title:          title,
+		Synopsis:       synopsis,
+		TechnicalSheet: strings.TrimSpace(req.FichaTecnica),
+		AgeRating:      strings.TrimSpace(req.ClasificacionEdad),
+		Language:       language,
+		PosterURL:      posterURL,
+		TrailerURL:     strings.TrimSpace(req.UrlTrailer),
 	}
 
 	if strings.TrimSpace(req.FechaLanzamiento) != "" {
@@ -540,6 +682,6 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 func setCommonHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Content-Type", "application/json")
 }

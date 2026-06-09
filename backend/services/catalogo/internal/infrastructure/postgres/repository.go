@@ -215,13 +215,15 @@ func (r *ContentRepository) Update(ctx context.Context, id string, c *domain.Con
 		SET titulo             = $2,
 		    sinopsis           = $3,
 		    ficha_tecnica      = $4,
-		    clasificacion_edad = $5,
-		    duracion_minutos   = $6,
-		    url_portada        = $7,
-		    url_trailer        = $8
+		    fecha_lanzamiento  = $5,
+		    clasificacion_edad = $6,
+		    duracion_minutos   = $7,
+		    idioma             = $8,
+		    url_portada        = $9,
+		    url_trailer        = $10
 		WHERE id = $1 AND eliminado_en IS NULL
 	`, id, c.Title, c.Synopsis, c.TechnicalSheet,
-		c.AgeRating, c.DurationMinutes, c.PosterURL, c.TrailerURL,
+		c.ReleaseDate, c.AgeRating, c.DurationMinutes, c.Language, c.PosterURL, c.TrailerURL,
 	)
 	if err != nil {
 		return err

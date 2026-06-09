@@ -47,6 +47,18 @@ export interface CatalogDetailResponse {
   detalle: CatalogDetail
 }
 
+export interface UpdateCatalogContentPayload {
+  titulo: string
+  sinopsis: string
+  ficha_tecnica: string
+  fecha_lanzamiento?: string
+  clasificacion_edad?: string
+  duracion_minutos?: number
+  idioma: string
+  url_portada: string
+  url_trailer?: string
+}
+
 export interface LikeCatalogContentResponse {
   message: string
   total_likes: number
@@ -69,5 +81,9 @@ export interface CreateCatalogContentPayload {
 
 export interface CreateCatalogContentResponse {
   id: string
+  message: string
+}
+
+export interface DeleteCatalogContentResponse {
   message: string
 }

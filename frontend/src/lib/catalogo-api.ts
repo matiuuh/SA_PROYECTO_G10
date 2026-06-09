@@ -5,7 +5,9 @@ import type {
   CatalogListResponse,
   CreateCatalogContentPayload,
   CreateCatalogContentResponse,
+  DeleteCatalogContentResponse,
   LikeCatalogContentResponse,
+  UpdateCatalogContentPayload,
 } from '@/types/catalog'
 
 const API_BASE_URL = import.meta.env.VITE_CATALOGO_API_URL ?? 'http://localhost:8003'
@@ -84,6 +86,58 @@ export async function createCatalogContent(
   }
 
   return (await response.json()) as CreateCatalogContentResponse
+}
+
+export async function updateCatalogContent(
+  accessToken: string,
+  contentId: string,
+  payload: UpdateCatalogContentPayload,
+): Promise<CatalogDetail> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/content/${contentId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogDetailResponse & { message: string }
+  return {
+    ...data.detalle,
+    ficha_tecnica: data.detalle.ficha_tecnica ?? '',
+    clasificacion_edad: data.detalle.clasificacion_edad ?? '',
+    idioma: data.detalle.idioma ?? '',
+    url_portada: data.detalle.url_portada ?? '',
+    url_trailer: data.detalle.url_trailer ?? '',
+    total_likes: data.detalle.total_likes ?? 0,
+    total_dislikes: data.detalle.total_dislikes ?? 0,
+    porcentaje_recomendacion: data.detalle.porcentaje_recomendacion ?? 0,
+    generos: data.detalle.generos ?? [],
+    reparto: data.detalle.reparto ?? [],
+  }
+}
+
+export async function deleteCatalogContent(
+  accessToken: string,
+  contentId: string,
+): Promise<DeleteCatalogContentResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/content/${contentId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as DeleteCatalogContentResponse
 }
 
 export async function likeCatalogContent(

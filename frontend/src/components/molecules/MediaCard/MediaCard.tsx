@@ -1,4 +1,5 @@
-import { Play, Star, Film, Plus, ThumbsUp } from 'lucide-react'
+import { Play, Star, Film, ThumbsUp } from 'lucide-react'
+import { useState } from 'react'
 
 export interface MediaCardProps {
   title: string
@@ -11,17 +12,22 @@ export interface MediaCardProps {
 }
 
 export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false, onClick }: MediaCardProps) {
+  const [imageFailed, setImageFailed] = useState(false)
+
   return (
     <article
       onClick={onClick}
-      className="group relative rounded-xl overflow-hidden bg-[#0d1220] border border-white/[0.06] hover:border-[var(--color-denim-700)]/70 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/70 cursor-pointer"
+      className={`group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1220] transition-all duration-300 hover:border-[var(--color-denim-700)]/70 hover:shadow-2xl hover:shadow-black/70 ${
+        onClick ? 'cursor-pointer hover:scale-[1.03]' : ''
+      }`}
     >
       <div className="aspect-video w-full bg-[#0a0f1e] overflow-hidden">
-        {posterUrl ? (
+        {posterUrl && !imageFailed ? (
           <img
             src={posterUrl}
             alt={title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={() => setImageFailed(true)}
           />
         ) : (
           <div
@@ -50,15 +56,6 @@ export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false
             </span>
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={(event) => event.stopPropagation()}
-          aria-label="Agregar a mi lista"
-          className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--color-denim-700)] hover:border-[var(--color-denim-600)] transition-all duration-200"
-        >
-          <Plus size={13} className="text-white" />
-        </button>
       </div>
 
       <div className="px-3 py-2.5">
