@@ -2,7 +2,7 @@ import { Eye, Film, List, Pencil, Trash2, Tv2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, ScrollReveal } from '@/components/atoms'
-import { MediaCard } from '@/components/molecules'
+import { MediaCard, SearchBar } from '@/components/molecules'
 import { deleteCatalogContent, getCatalogDetail, listCatalogContent } from '@/lib/catalogo-api'
 import { getActiveSession } from '@/lib/auth'
 import type { CatalogContent } from '@/types/catalog'
@@ -67,6 +67,7 @@ export function AdminCatalogPage() {
   const [catalogFilter, setCatalogFilter] = useState<AdminCatalogFilter>('all')
   const [genreFilter, setGenreFilter] = useState<AdminGenreFilter>('all')
   const [genreMap, setGenreMap] = useState<Record<string, string[]>>({})
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     async function loadCatalog() {
@@ -183,10 +184,12 @@ export function AdminCatalogPage() {
         genreFilter === 'all'
           ? true
           : genres.some((genre) => genre.toLowerCase() === genreFilter.toLowerCase())
+      const matchesSearch =
+        query.trim() === '' ? true : item.titulo.toLowerCase().includes(query.toLowerCase())
 
-      return matchesCategory && matchesGenre
+      return matchesCategory && matchesGenre && matchesSearch
     })
-  }, [catalog, catalogFilter, genreFilter, genreMap])
+  }, [catalog, catalogFilter, genreFilter, genreMap, query])
 
   const availableGenres = useMemo(
     () =>
@@ -260,6 +263,7 @@ export function AdminCatalogPage() {
           </div>
 
           <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <SearchBar value={query} onChange={setQuery} placeholder="Buscar por titulo..." />
             <div className="flex flex-wrap gap-3">
               {[
                 { id: 'all', label: 'Todo' },
