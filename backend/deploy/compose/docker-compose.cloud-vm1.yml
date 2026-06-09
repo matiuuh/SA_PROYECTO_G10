@@ -33,7 +33,7 @@ services:
       APP_PORT: 8001
       GRPC_PORT: 5001
       NOTIFICATIONS_ENABLED: "true"
-      NOTIFICATIONS_GRPC_TARGET: ${VM2_HOST}:5007
+      API_GATEWAY_URL: http://${VM4_HOST}:80
       NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
       STORAGE_BACKEND: postgres
       JWT_SECRET: ${JWT_SECRET}
@@ -63,7 +63,7 @@ services:
       APP_ENV: production
       APP_PORT: 8002
       GRPC_PORT: 5002
-      DIVISAS_GRPC_TARGET: ${VM2_HOST}:5005
+      API_GATEWAY_URL: http://${VM4_HOST}:80
       CONVERSION_TIMEOUT_SECONDS: 3.0
       JWT_SECRET: ${JWT_SECRET}
       DB_HOST: ${DB_VM3_HOST}
@@ -90,9 +90,9 @@ services:
       GRPC_PORT: 5003
       HTTP_PORT: 8003
       JWT_SECRET: ${JWT_SECRET}
-      SUBSCRIPCION_API_URL: http://suscripcion-service:8002
-      USUARIO_API_URL: http://usuario-service:8001
-      NOTIFICACIONES_GRPC_TARGET: ${VM2_HOST}:5007
+      SUBSCRIPCION_API_URL: http://${VM4_HOST}:80/api/suscripcion
+      USUARIO_API_URL: http://${VM4_HOST}:80/api/usuario
+      API_GATEWAY_URL: http://${VM4_HOST}:80
     ports:
       - "5003:5003"
       - "8003:8003"

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_port: int = 8001
     grpc_port: int = 5001
     notifications_enabled: bool = True
-    notifications_grpc_target: str = "localhost:5007"
+    api_gateway_url: str = "http://localhost:4000"
     notifications_timeout_seconds: float = 3.0
     storage_backend: str = "inmemory"
     jwt_secret: str = "change-me"

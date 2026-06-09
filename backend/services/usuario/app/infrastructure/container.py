@@ -62,7 +62,7 @@ def build_container() -> Container:
     notification_client = None
     if settings.notifications_enabled:
         notification_client = GrpcNotificationClient(
-            target=settings.notifications_grpc_target,
+            target=settings.api_gateway_url,
             timeout_seconds=settings.notifications_timeout_seconds,
         )
 

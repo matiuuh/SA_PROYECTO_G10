@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_port: int = 8002
     grpc_port: int = 50052
-    divisas_grpc_target: str = "localhost:5005"
+    api_gateway_url: str = "http://localhost:4000"
     conversion_timeout_seconds: float = 3.0
     db_host: str = "localhost"
     db_port: int = 5432

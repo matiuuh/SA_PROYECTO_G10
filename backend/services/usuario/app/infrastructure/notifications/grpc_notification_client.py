@@ -1,36 +1,41 @@
-import grpc
-
-from app.interfaces.grpc.generated.notificaciones.v1 import (
-    notificaciones_pb2,
-    notificaciones_pb2_grpc,
-)
+import json
+import urllib.error
+import urllib.request
 
 
 class GrpcNotificationClient:
+    # Nombre mantenido por compatibilidad; internamente usa HTTP vía API Gateway.
     def __init__(self, target: str, timeout_seconds: float) -> None:
-        self._target = target
+        # target es la URL base del API Gateway (ej. http://api-gateway:4000)
+        self._base_url = target.rstrip('/')
         self._timeout_seconds = timeout_seconds
 
     def send_registration_confirmation(self, correo: str, nombre: str) -> None:
+        url = f"{self._base_url}/api/notificaciones/api/v1/confirmacion-registro"
+        payload = json.dumps({
+            'correo_destino': correo,
+            'nombre_usuario': nombre,
+        }).encode('utf-8')
+
+        request = urllib.request.Request(
+            url,
+            data=payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+
         try:
-            with grpc.insecure_channel(self._target) as channel:
-                stub = notificaciones_pb2_grpc.NotificacionesServiceStub(channel)
-                response = stub.EnviarConfirmacionRegistro(
-                    notificaciones_pb2.ConfirmacionRegistroRequest(
-                        correo_destino=correo,
-                        nombre_usuario=nombre,
-                    ),
-                    timeout=self._timeout_seconds,
+            with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
+                data: dict = json.loads(response.read())
+            if not data.get('enviado'):
+                print(
+                    "[usuario-service] notificacion de registro no enviada:",
+                    data.get('mensaje', 'sin mensaje'),
                 )
-                if not response.enviado:
-                    print(
-                        "[usuario-service] notificacion de registro no enviada:",
-                        response.mensaje or "sin mensaje",
-                    )
-        except grpc.RpcError as exc:
+        except urllib.error.HTTPError as exc:
             print(
-                "[usuario-service] fallo al invocar notificaciones-service para confirmacion_registro:",
-                exc.details() or str(exc),
+                "[usuario-service] fallo al enviar confirmacion_registro vía API Gateway:",
+                exc.code, exc.read().decode(),
             )
         except Exception as exc:
             print(
