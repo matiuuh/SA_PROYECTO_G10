@@ -57,6 +57,7 @@
 | Postcondiciones | Cuenta registrada correctamente y perfil principal creado con el nombre de la cuenta; o registro rechazado por datos inválidos o duplicados. |
 | Flujo principal | 1. El usuario ingresa nombre, correo, contraseña, confirmando su contraseña y ubicación.<br>2. El usuario confirma el registro.<br>3. El sistema valida la información.<br>4. El sistema crea la cuenta.<br>5. El sistema crea automáticamente el perfil principal usando el nombre de la cuenta.<br>6. El sistema confirma el registro exitoso. |
 | Flujos alternos | FA1. El correo ya existe.<br>FA1.1 El sistema informa que la cuenta ya está registrada.<br>FA2. Faltan datos obligatorios.<br>FA2.1 El sistema solicita completar la información requerida. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible completar el registro. Intenta nuevamente.<br>FE2. El servicio de notificaciones no responde (timeout SMTP).<br>FE2.1 El sistema registra el fallo de envío de correo de bienvenida, pero confirma el registro exitoso. |
 | Reglas de negocio | El correo debe ser único en la plataforma.<br>La ubicación debe registrarse como parte de la cuenta.<br>La cuenta debe crear un perfil principal automáticamente.<br>El nombre del primer perfil debe corresponder al nombre de la cuenta registrada. |
 | Reglas de calidad | El formulario debe validar campos obligatorios antes del envío.<br>La confirmación del registro debe mostrarse en un tiempo razonable. |
 
@@ -72,6 +73,7 @@
 | Postcondiciones | Correo de bienvenida enviado; o fallo de envío registrado por el sistema. |
 | Flujo principal | 1. El sistema detecta que el registro fue exitoso.<br>2. El sistema construye el mensaje de bienvenida.<br>3. El sistema realiza el envío al usuario.<br> |
 | Flujos alternos | FA1. El proveedor SMTP no responde o rechaza la solicitud.<br>FA1.1 El servicio SMPT registra el fallo de envío.<br>FA2. El correo de destino es inválido. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema registra el fallo de envío sin reintentar.<br>FE2. Timeout del proveedor SMTP.<br>FE2.1 El sistema marca la notificación como fallida y continúa. |
 | Reglas de negocio | El correo de bienvenida solo se envía después de un registro exitoso.<br>El mensaje debe estar asociado a la cuenta recién creada. |
 | Reglas de calidad | El envío no debe bloquear la confirmación visual del registro. |
 
@@ -87,6 +89,7 @@
 | Postcondiciones | Sesión iniciada correctamente; o acceso denegado por credenciales inválidas. |
 | Flujo principal | 1. El usuario o administrador ingresa su correo y contraseña.<br>2. El usuario o administrador confirma el inicio de sesión.<br>3. El sistema valida las credenciales.<br>4. El sistema crea la sesión segura de la cuenta.<br>5. El sistema muestra acceso a la cuenta. |
 | Flujos alternos | FA1. Credenciales incorrectas.<br>FA1.1 El sistema informa que el acceso fue rechazado.|
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible validar las credenciales. Intenta nuevamente.<br>FE2. Token inválido o sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Solo cuentas registradas pueden iniciar sesión con correo y contraseña.<br>La sesión debe quedar asociada a una cuenta válida. |
 | Reglas de calidad | Las credenciales no deben mostrarse en texto plano.<br>El sistema debe informar errores sin exponer detalles sensibles. |
 
@@ -102,6 +105,7 @@
 | Postcondiciones | Sesión cerrada correctamente e invalidada en el cliente; o la solicitud no se procesa por ausencia de sesión válida. |
 | Flujo principal | 1. El usuario o administrador selecciona cerrar sesión.<br>2. El sistema verifica la sesión activa.<br>3. El sistema invalida el token de sesión.<br>4. El sistema redirige a la pantalla pública de acceso. |
 | Flujos alternos |<br>FA1.1 El sistema fuerza la salida y redirige a la pantalla de acceso. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema invalida el token localmente y redirige a la pantalla de acceso.<br>FE2. Token inválido o ya expirado.<br>FE2.1 El sistema redirige a la pantalla de acceso. |
 | Reglas de negocio | El cierre de sesión debe invalidar el token activo del usuario.<br>La salida debe aplicarse sobre la sesión actual. |
 | Reglas de calidad | El cierre de sesión debe ser inmediato y visible para el usuario.<br>El token no debe permanecer activo en el cliente. |
 
@@ -117,6 +121,7 @@
 | Postcondiciones | Contraseña actualizada correctamente; o actualización rechazada por datos inválidos. |
 | Flujo principal | 1. El usuario accede a la configuración de cuenta.<br>2. El usuario ingresa la nueva contraseña.<br>3. El sistema valida la información proporcionada.<br>4. El sistema actualiza la contraseña asociada a la cuenta.<br>5. El sistema confirma la actualización. |
 | Flujos alternos | FA1. La nueva contraseña no cumple la validacion de tener la misma.<br>FA1.1 El sistema rechaza la actualización de la contraseña.<br>|
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible actualizar la contraseña. Intenta nuevamente.<br>FE2. Sesión expirada durante el proceso.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | La contraseña debe cumplir la política de seguridad definida por la plataforma.<br>La nueva contraseña debe ser diferente de la contraseña actual. |
 | Reglas de calidad | La actualización debe requerir validaciones claras para el usuario.<br>La información sensible no debe exponerse en pantalla ni en registros. |
 
@@ -132,6 +137,7 @@
 | Postcondiciones | Perfil activo seleccionado correctamente; o selección no completada por perfil inexistente o no disponible. |
 | Flujo principal | 1. El sistema muestra los perfiles asociados a la cuenta.<br>2. El usuario selecciona un perfil disponible.<br>3. El sistema activa el perfil elegido.<br>4. El sistema habilita la navegación con el contexto del perfil activo. |
 | Flujos alternos | <br>FA1. El perfil seleccionado ya no se encuentra disponible.<br>FA2.1 El sistema identifica que ya no existe y en la siguiente interacción selecciona automaticamente otro perfil. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cargar los perfiles. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Toda cuenta debe contar con al menos un perfil creado automáticamente al momento del registro.<br>Un usuario solo puede seleccionar perfiles de su propia cuenta.<br>Cada perfil debe mantener su información aislada. |
 | Reglas de calidad | La selección debe mostrar claramente cuál perfil quedo activo.<br>El cambio de perfil no debe mezclar historiales ni preferencias. |
 
@@ -147,6 +153,7 @@
 | Postcondiciones | Perfil creado correctamente; o creación rechazada por datos inválidos o limite alcanzado. |
 | Flujo principal | 1. El usuario accede a la gestión de perfiles.<br>2. El usuario ingresa nombre y color del perfil.<br>3. El sistema valida la información ingresada.<br>4. El sistema crea el nuevo perfil.<br>5. El sistema confirma la creación. |
 | Flujos alternos | FA1. Inhabilita la posibilidad de agregar mas perfiles.<br>FA2. Falta el nombre del perfil.<br>FA2.1 El sistema solicita completar el dato obligatorio. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible crear el perfil. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Una cuenta puede tener como máximo cinco perfiles.<br>Cada perfil debe pertenecer a una única cuenta. |
 | Reglas de calidad | La creación debe completarse con validaciones simples y claras.<br>La respuesta del sistema debe indicar el resultado de la operación. |
 
@@ -162,6 +169,7 @@
 | Postcondiciones | Perfil actualizado correctamente; o modificación rechazada por datos inválidos o perfil no autorizado. |
 | Flujo principal | 1. El usuario selecciona un perfil a editar.<br>2. El usuario modifica nombre o color del perfil.<br>3. El sistema valida la información.<br>4. El sistema guarda los cambios.<br>5. El sistema confirma la actualización del perfil. |
 | Flujos alternos | FA1. El usuario puede cambiar de perfil principal a otro.  |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible modificar el perfil. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Solo pueden modificarse perfiles pertenecientes a la cuenta autenticada.<br>La modificación no debe afectar el historial ni las calificaciónes existentes. |
 | Reglas de calidad | La actualización debe reflejarse inmediatamente en la interfaz.<br>Los cambios deben conservar la integridad de la información del perfil. |
 
@@ -177,6 +185,7 @@
 | Postcondiciones | Perfil eliminado correctamente; o eliminación rechazada por restricciones de negocio o falta de autorización. |
 | Flujo principal | 1. El usuario selecciona el perfil que desea eliminar.<br>2. El sistema solicita confirmación de la acción.<br>3. El usuario confirma la eliminación.<br>4. El sistema elimina el perfil seleccionado.<br>5. El sistema informa el resultado de la operación. |
 | Flujos alternos | FA1. El usuario cancela la confirmación.<br>FA1.1 El sistema no realiza cambios.<br>FA2. El perfil seleccionado corresponde al perfil principal de la cuenta.<br>FA2.1 El sistema inhabilita la opcion de poder eliminar el perfil principal. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible eliminar el perfil. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Una cuenta debe conservar al menos un perfil activo.<br>Solo se pueden eliminar perfiles pertenecientes a la cuenta autenticada.<br>El perfil principal creado automáticamente con la cuenta no puede eliminarse. |
 | Reglas de calidad | La confirmación debe prevenir eliminaciónes accidentales.<br>El sistema debe notificar claramente si la eliminación fue exitosa o rechazada. |
 
@@ -204,6 +213,7 @@
 | Postcondiciones | Planes disponibles mostrados correctamente; o consulta no completada por falta de información disponible. |
 | Flujo principal | 1. El usuario accede a la sección de suscripciones.<br>2. El sistema consulta los planes disponibles.<br>3. El sistema muestra nombre, características y precio base de cada plan.<br>4. El usuario revisa las opciones presentadas. |
 | Flujos alternos | FA1. No existen planes configurados.<br>FA1.1 El sistema informa que no hay planes disponibles.<br>FA2. Ocurre un error al cargar la información.<br>FA2.1 El sistema informa que no pudo mostrar los planes. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cargar los planes. Intenta nuevamente.<br>FE2. Servicio no disponible (error 500).<br>FE2.1 El sistema informa que ocurrió un error interno. Intenta nuevamente más tarde. |
 | Reglas de negocio | Solo deben mostrarse planes vigentes y habilitados.<br>La visualización debe incluir las características principales del plan y su precio base. |
 | Reglas de calidad | La carga de planes debe ser clara y comprensible.<br>Los precios deben presentarse de forma legible para el usuario. |
 
@@ -219,6 +229,7 @@
 | Postcondiciones | Tipo de cambio consultado y precio convertido; o precio mostrado con información no actualizada o no disponible. |
 | Flujo principal | 1. El usuario selecciona un plan e inicia el proceso de compra o modificación de plan.<br>2. El sistema obtiene la ubicación registrada del usuario.<br>3. El sistema identifica la moneda local correspondiente a esa ubicación.<br>4. El sistema solicita el tipo de cambio al proveedor de divisas.<br>5. El proveedor responde con la tasa vigente.<br>6. El sistema calcula el valor convertido.<br>7. El sistema muestra el monto en moneda local dentro del flujo de pago. |
 | Flujos alternos | FA1. El proveedor de divisas no responde.<br>FA1.1 El sistema usa información en caché si está disponible.<br> FA2.2 El sistema no encuentra la divisa del usuario y cobra en dólares|
+| Flujos de excepción | FE1. Error de conexión con Redis o PostgreSQL (cache de divisas).<br>FE1.1 El sistema consulta directamente la API externa de divisas.<br>FE2. API externa de divisas no responde (timeout).<br>FE2.1 El sistema informa que no fue posible obtener el tipo de cambio y muestra el precio en USD.<br>FE3. Error de conexión con la base de datos.<br>FE3.1 El sistema informa que no fue posible consultar la ubicación del usuario. |
 | Reglas de negocio | La conversion depende de la moneda local asociada a la ubicación registrada del usuario.<br>La tasa obtenida puede reutilizarse desde caché según la política vigente. |
 | Reglas de calidad | La consulta de tipo de cambio no debe degradar el flujo de compra.<br>La conversion mostrada debe ser consistente dentro de la misma operación. |
 
@@ -234,6 +245,7 @@
 | Postcondiciones | Suscripción creada o pendiente de confirmación de pago; o contratación rechazada por error de validación o cobro. |
 | Flujo principal | 1. El usuario selecciona un plan disponible.<br>2. El sistema muestra el resumen de la contratación.<br>3. El usuario confirma su intención de contratar.<br>4. El sistema inicia el flujo de pago asociado.<br>5. El sistema registra la solicitud de suscripción.<br>6. El usuario recibe una confirmacion por correo. |
 | Flujos alternos |FA2. El usuario cancela la operación.<br>FA2.1 El sistema cierra el flujo sin cambios. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible registrar la suscripción. Intenta nuevamente.<br>FE2. Error en el procesamiento de pago.<br>FE2.1 El sistema informa que el pago fue rechazado y no activa la suscripción.<br>FE3. Servicio de divisas no responde.<br>FE3.1 El sistema informa que no fue posible calcular el precio en moneda local. |
 | Reglas de negocio | La suscripción solo puede activarse si el plan está vigente.<br>La contratación debe quedar vinculada a la cuenta autenticada. |
 | Reglas de calidad | El resumen de compra debe ser claro antes de confirmar.<br>La plataforma debe informar el estado de la contratación de forma visible. |
 
@@ -249,6 +261,7 @@
 | Postcondiciones | Plan actualizado correctamente o pendiente de pago; o solicitud rechazada por restricciones de negocio o error de cobro. |
 | Flujo principal | 1. El usuario consulta su suscripción activa.<br>2. El usuario selecciona un nuevo plan disponible.<br>3. El sistema muestra las condiciones del cambio.<br>4. El usuario confirma la modificación.<br>5. El sistema procesa la actualización correspondiente. |
 | Flujos alternos | FA2. El usuario cancela la confirmación.<br>FA2.1 El sistema no realiza cambios. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible modificar el plan. Intenta nuevamente.<br>FE2. Error en el procesamiento de pago.<br>FE2.1 El sistema informa que el pago fue rechazado y mantiene el plan actual. |
 | Reglas de negocio | Solo puede modificarse una suscripción activa.<br>El cambio debe aplicarse a un plan vigente y permitido. |
 | Reglas de calidad | La diferencia entre el plan actual y el nuevo plan debe mostrarse claramente.<br>El resultado del cambio debe reflejarse en la cuenta sin ambigüedad. |
 
@@ -264,6 +277,7 @@
 | Postcondiciones | Suscripción cancelada correctamente; o cancelación rechazada por estado inválido o error del sistema. |
 | Flujo principal | 1. El usuario accede a la administración de su suscripción.<br>2. El usuario selecciona la opción de cancelar.<br>3. El sistema muestra las implicaciones de la cancelación.<br>4. El usuario confirma la solicitud.<br>5. El sistema actualiza el estado de la suscripción. |
 | Flujos alternos | FA1. El usuario cancela la confirmación.<br>FA1.1 El sistema no realiza cambios.|
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cancelar la suscripción. Intenta nuevamente. |
 | Reglas de negocio | Solo puede cancelarse una suscripción vigente.<br>La cuenta debe conservar el estado real de la suscripción después del proceso. |
 | Reglas de calidad | La acción de cancelación debe requerir confirmación explícita.<br>El sistema debe mostrar el estado final de la suscripción de forma clara. |
 
@@ -279,6 +293,7 @@
 | Postcondiciones | Pago registrado correctamente; o pago rechazado, cancelado o pendiente de confirmación. |
 | Flujo principal | 1. El sistema presenta el resumen del pago al usuario.<br>2. El usuario confirma la operación de pago.<br>3. El sistema valida los datos de la operación.<br>4. El sistema registra la transacción con estado correspondiente.<br>5. El sistema confirma el resultado al usuario. |
 | Flujos alternos | FA1. El sistema rechaza la transacción por datos inválidos.<br>FA1.1 El sistema informa que el pago fue rechazado.<br>FA2. El usuario abandona el flujo de pago.<br>FA2.1 El sistema cancela la operación asociada. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible registrar el pago. Intenta nuevamente.<br>FE2. Servicio de divisas no responde.<br>FE2.1 El sistema informa que no fue posible calcular el monto en moneda local.<br>FE3. Servicio de notificaciones no responde.<br>FE3.1 El sistema registra el pago pero informa que no fue posible enviar el recibo por correo. |
 | Reglas de negocio | El pago debe asociarse a una operación válida de suscripción.<br>La activación o cambio del plan depende del resultado del registro de pago. |
 | Reglas de calidad | El resultado de la transacción debe notificarse claramente al usuario.<br>El registro de pago no debe bloquear la operación principal. |
 
@@ -294,6 +309,7 @@
 | Postcondiciones | Recibo enviado correctamente; o fallo de envío registrado por el sistema. |
 | Flujo principal | 1. El sistema detecta que la compra fue confirmada.<br>2. El sistema prepara el recibo con el detalle de la operación.<br>3. El sistema solicita el envío al proveedor SMTP.<br>4. El servicio confirma el procesamiento del mensaje.<br>5. El sistema muestra el resultado del envío y permite descargar la constancia. |
 | Flujos alternos | FA1. El proveedor SMTP no responde o rechaza la solicitud.<br>FA1.1 El sistema registra el fallo de envío.<br>FA2. No existe correo asociado a la cuenta.<br>FA2.1 El sistema registra la imposibilidad de envío. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema registra el fallo de envío sin reintentar.<br>FE2. Timeout del proveedor SMTP.<br>FE2.1 El sistema marca el recibo como no enviado y continúa. |
 | Reglas de negocio | El recibo solo se envía cuando la compra ha sido confirmada.<br>El detalle del recibo debe corresponder a la operación realizada. |
 | Reglas de calidad | El envío del recibo no debe bloquear la confirmación de la compra al usuario.<br>Los errores de envío deben quedar registrados para trazabilidad. |
 
@@ -318,6 +334,7 @@
 | Postcondiciones | Catálogo mostrado correctamente; o visualización incompleta por falta de datos o error de carga. |
 | Flujo principal | 1. El usuario accede a la sección principal del catálogo.<br>2. El sistema consulta el contenido disponible.<br>3. El sistema muestra la cartelera con títulos, portadas .<br>4. El usuario navega entre los elementos mostrados. <br>5. El usuario puede filtrar mediante peliculas, series y su genero.|
 | Flujos alternos | FA1. No existe contenido disponible.<br>FA1.1 El sistema informa que el catálogo está vacío.<br>FA2. Ocurre un error de carga.<br>FA2.1 El sistema informa que no pudo mostrar el catálogo. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cargar el catálogo. Intenta nuevamente.<br>FE2. Error interno del servidor (500).<br>FE2.1 El sistema informa que ocurrió un error inesperado. Intenta nuevamente más tarde. |
 | Reglas de negocio | Solo debe mostrarse contenido disponible para la plataforma.<br>La información básica del catálogo debe corresponder al contenido vigente. |
 | Reglas de calidad | El catálogo debe cargarse de manera clara y ordenada.<br>La navegación debe ser legible tanto en escritorio como en pantallas reducidas. |
 
@@ -333,6 +350,7 @@
 | Postcondiciones | Resultados de búsqueda mostrados correctamente; o lista vacía cuando no existen coincidencias. |
 | Flujo principal | 1. El usuario ingresa un criterio de búsqueda.<br>2. El sistema procesa el término ingresado.<br>3. El sistema consulta los contenidos que coinciden.<br>4. El sistema muestra los resultados encontrados. |
 | Flujos alternos | FA1. No existen coincidencias.<br>FA1.1 El sistema informa que no se encontraron resultados.<br>FA2. El criterio ingresado está vacío.<br>FA2.1 El sistema mantiene la visualización general del catálogo. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible realizar la búsqueda. Intenta nuevamente.<br>FE2. Timeout en la búsqueda.<br>FE2.1 El sistema informa que la búsqueda tardó demasiado. Intenta con un criterio más específico. |
 | Reglas de negocio | La búsqueda debe operar sobre el contenido disponible en la plataforma.<br>Los resultados deben corresponder a coincidencias con el criterio ingresado. |
 | Reglas de calidad | La respuesta de búsqueda debe ser rápida y comprensible.<br>Los resultados deben presentarse con un formato consistente con el catálogo. |
 
@@ -348,6 +366,7 @@
 | Postcondiciones | Catálogo filtrado mostrado correctamente; o sin resultados cuando el criterio aplicado no encuentra coincidencias. |
 | Flujo principal | 1. El usuario selecciona uno o más criterios de filtrado.<br>2. El sistema aplica los filtros elegidos.<br>3. El sistema consulta los contenidos que cumplen los criterios.<br>4. El sistema muestra el catálogo filtrado. |
 | Flujos alternos | FA1. Ningún contenido coincide con los filtros.<br>FA1.1 El sistema informa que no existen resultados.<br>FA2. El usuario decide mostrar el catalogo general|
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible aplicar los filtros. Intenta nuevamente. |
 | Reglas de negocio | Los filtros solo deben aplicarse sobre categorías y géneros configurados.<br>La combinación de filtros debe respetar el contenido disponible. |
 | Reglas de calidad | La aplicación de filtros debe ser clara e intuitiva.<br>El usuario debe poder identificar fácilmente los filtros activos. |
 
@@ -363,6 +382,7 @@
 | Postcondiciones | Detalle del contenido mostrado correctamente; o consulta rechazada por contenido inexistente o no disponible. |
 | Flujo principal | 1. El usuario selecciona un contenido del catálogo.<br>2. El sistema consulta la información detallada del contenido.<br>3. El sistema muestra la ficha técnica, sinopsis, géneros y reparto.<br>4. El usuario revisa la información presentada. |
 | Flujos alternos | FA1. El contenido ya no está disponible.<br>FA1.1 El sistema informa que el detalle no puede mostrarse.<br>FA2. Ocurre un error al consultar la ficha.<br>FA2.1 El sistema informa la imposibilidad de cargar el detalle. |
+| Flujos de excepción | FE1. Contenido no encontrado en la base de datos (404).<br>FE1.1 El sistema informa que el contenido no existe o fue retirado.<br>FE2. Error de conexión con la base de datos.<br>FE2.1 El sistema informa que no fue posible cargar el detalle. Intenta nuevamente. |
 | Reglas de negocio | La información detallada debe corresponder al contenido seleccionado.<br>Solo debe mostrarse información de contenido disponible en el catálogo. |
 | Reglas de calidad | La ficha técnica debe presentarse de forma organizada y legible.<br>La carga del detalle no debe romper la navegación del usuario. |
 
@@ -385,6 +405,7 @@
 | Postcondiciones | Calificación registrada o actualizada correctamente; o acción rechazada por contenido inválido o perfil no autorizado. |
 | Flujo principal | 1. El usuario accede al detalle de un contenido.<br>2. El usuario selecciona like o dislike.<br>3. El sistema valida la identidad del perfil activo.<br>4. El sistema registra o actualiza la calificación.<br>5. El sistema registra el criterio del usuario |
 | Flujos alternos | FA1. El contenido no admite calificación por error de disponibilidad.<br>FA1.1 El sistema rechaza la operación.<br>FA2. El usuario cambia una calificación previa.<br>FA2.1 El sistema reemplaza la reacción anterior por la nueva. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible registrar la calificación. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Cada perfil solo puede mantener una calificación vigente por contenido.<br>La calificación puede actualizarse posteriormente. |
 | Reglas de calidad | La reacción seleccionada debe reflejarse de forma inmediata en la interfaz.<br>El sistema debe evitar registros duplicados para el mismo perfil y contenido. |
 
@@ -400,6 +421,7 @@
 | Postcondiciones | Recomendación global mostrada correctamente; o indicador no disponible por falta de datos. |
 | Flujo principal | 1. El usuario visualiza un contenido en el catálogo o su detalle.<br>2. El sistema obtiene la recomendación global asociada.<br>3. El sistema presenta el indicador consolidado al usuario. |
 | Flujos alternos | FA1. El contenido aún no tiene calificaciónes.<br>FA1.1 El sistema informa que no existe recomendación disponible.<br>FA2. Ocurre un error al consultar el indicador.<br>FA2.1 El sistema omite temporalmente la recomendación. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible calcular la recomendación. Intenta nuevamente.<br>FE2. Contenido sin calificaciones.<br>FE2.1 El sistema informa que aún no hay recomendación disponible. |
 | Reglas de negocio | La recomendación global debe basarse en las calificaciónes de la comunidad.<br>El indicador debe corresponder al contenido consultado. |
 | Reglas de calidad | El indicador debe mostrarse de forma clara y consistente en la interfaz.<br>La consulta no debe afectar perceptiblemente la carga del catálogo. |
 
@@ -423,6 +445,7 @@
 | Postcondiciones | Reproducción iniciada correctamente; o acceso denegado por falta de permisos, suscripción o disponibilidad del contenido. |
 | Flujo principal | 1. El usuario selecciona un contenido disponible.<br>2. El sistema valida la suscripción y el acceso del perfil activo.<br>3. El sistema prepara la reproducción del contenido.<br>4. El sistema inicia la reproducción para el usuario. |
 | Flujos alternos | FA1. El usuario no tiene una suscripción válida.<br>FA1.1 El sistema rechaza la reproducción.<br>FA2. El contenido no está disponible.<br>FA2.1 El sistema informa que no puede reproducirse. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible validar la suscripción. Intenta nuevamente.<br>FE2. Error de conexión con el servicio de streaming.<br>FE2.1 El sistema informa que no fue posible iniciar la reproducción. Intenta nuevamente. |
 | Reglas de negocio | Solo puede reproducirse contenido disponible para una cuenta con acceso válido.<br>La reproducción debe quedar asociada al perfil activo. |
 | Reglas de calidad | El inicio de reproducción debe ocurrir con el menor retraso posible.<br>Los mensajes de restricción de acceso deben ser claros para el usuario. |
 
@@ -438,6 +461,7 @@
 | Postcondiciones | Reproducción reanudada desde el punto guardado; o reproducción iniciada desde el comienzo si no existe progreso utilizable. |
 | Flujo principal | 1. El usuario selecciona reanudar un contenido previamente visto.<br>2. El sistema consulta el ultimo progreso registrado del perfil activo.<br>3. El sistema posiciona el contenido en el punto recuperado.<br>4. El sistema inicia la reproducción desde ese punto. |
 | Flujos alternos | FA1. No existe progreso previo para el contenido.<br>FA1.1 El sistema ofrece iniciar desde el principio.<br>FA2. El progreso registrado es inválido o inconsistente.<br>FA2.1 El sistema reinicia desde el comienzo o informa la situacion. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible recuperar el progreso. Inicia desde el principio.<br>FE2. Progreso inválido o corrupto en la base de datos.<br>FE2.1 El sistema reinicia la reproducción desde el comienzo. |
 | Reglas de negocio | La reanudación debe basarse en el historial del perfil activo.<br>El punto de reanudación debe corresponder al contenido seleccionado. |
 | Reglas de calidad | El punto recuperado debe ser preciso y consistente.<br>La reanudación no debe requerir pasos innecesarios del usuario. |
 
@@ -453,6 +477,7 @@
 | Postcondiciones | Historial mostrado correctamente; o lista vacía si no existen reproducciones registradas. |
 | Flujo principal | 1. El usuario accede a la sección de historial.<br>2. El sistema consulta las reproducciones asociadas al perfil activo.<br>3. El sistema muestra la lista reciente con su estado de avance.<br>4. El usuario revisa los contenidos registrados. |
 | Flujos alternos | FA1. El perfil no tiene historial registrado.<br>FA1.1 El sistema informa que aún no existen reproducciones recientes.<br>FA2. Ocurre un error al recuperar la información.<br>FA2.1 El sistema informa que no pudo mostrar el historial. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cargar el historial. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | El historial debe pertenecer exclusivamente al perfil activo.<br>Las reproducciones de otros perfiles no deben mezclarse. |
 | Reglas de calidad | La información del historial debe ser clara y ordenada.<br>La consulta debe responder sin afectar la experiencia de navegación. |
 
@@ -477,6 +502,7 @@
 | Postcondiciones | Contenido registrado correctamente y disponible para el catálogo; o registro rechazado por datos inválidos o incompletos. |
 | Flujo principal | 1. El administrador accede al módulo de contenido.<br>2. El administrador ingresa la información del nuevo contenido.<br>3. El sistema valida los datos proporcionados.<br>4. El sistema registra el contenido en el catálogo.|
 | Flujos alternos | FA1. Faltan datos obligatorios del contenido.<br>FA1.1 El sistema solicita completar la información.<br>FA2. El contenido ya existe con información equivalente.<br>FA2.1 El sistema rechaza el registro duplicado. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible registrar el contenido. Intenta nuevamente.<br>FE2. Timeout en el envío de alertas de nuevo contenido (20s).<br>FE2.1 El sistema registra el contenido pero informa que no fue posible enviar las alertas. |
 | Reglas de negocio | Solo administradores autorizados pueden registrar contenido.<br>El contenido debe contar con la información mínima requerida para publicarse. |
 | Reglas de calidad | El formulario administrativo debe validar la información antes de guardar.<br>La confirmación del registro debe ser clara para el administrador. |
 
@@ -492,6 +518,7 @@
 | Postcondiciones | Alerta enviada correctamente; o fallo de envío registrado por el sistema. |
 | Flujo principal | 1. El sistema detecta el registro exitoso de un nuevo contenido.<br>2. El sistema prepara el mensaje de alerta.<br>3. El sistema solicita el envío al proveedor SMTP.<br>4. El proveedor procesa la entrega de los correos.<br>5. El sistema registra el resultado del envío. |
 | Flujos alternos | FA1. El proveedor SMTP no responde o rechaza la solicitud.<br>FA1.1 El sistema registra el fallo de envío.<br>FA2. No existen usuarios elegibles para recibir la alerta.<br>FA2.1 El sistema cierra el proceso sin destinatarios. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema registra el fallo de envío sin reintentar.<br>FE2. Timeout del proveedor SMTP.<br>FE2.1 El sistema marca las alertas como fallidas y continúa. |
 | Reglas de negocio | La alerta solo se envía cuando el contenido es nuevo y ha sido registrado correctamente.<br>Los destinatarios deben corresponder a usuarios habilitados para recibir notificaciones. |
 | Reglas de calidad | El resultado del envío debe quedar registrado para auditoría.<br>El envío de la alerta no debe bloquear el flujo principal de registro de contenido. |
 
@@ -507,6 +534,7 @@
 | Postcondiciones | Contenido actualizado correctamente; o modificación rechazada por datos inválidos o contenido inexistente. |
 | Flujo principal | 1. El administrador selecciona un contenido existente.<br>2. El administrador actualiza la información necesaria.<br>3. El sistema valida los cambios propuestos.<br>4. El sistema guarda la nueva información.<br>5. El sistema confirma la modificación del contenido. |
 | Flujos alternos | FA1. El contenido no existe o fue retirado.<br>FA1.1 El sistema rechaza la modificación.<br>FA2. Los cambios no cumplen las validaciones.<br>FA2.1 El sistema solicita corregir la información. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible modificar el contenido. Intenta nuevamente.<br>FE2. Contenido no encontrado (404).<br>FE2.1 El sistema informa que el contenido no existe o fue retirado. |
 | Reglas de negocio | Solo administradores autorizados pueden modificar contenido.<br>La modificación debe aplicarse sobre contenido previamente registrado. |
 | Reglas de calidad | Los cambios deben reflejarse con consistencia en el catálogo.<br>La interfaz debe mostrar claramente si la actualización fue exitosa o rechazada. |
 
@@ -522,6 +550,7 @@
 | Postcondiciones | Contenido eliminado correctamente; o eliminación rechazada por contenido inexistente. |
 | Flujo principal | 1. El administrador selecciona el contenido a eliminar.<br>2. El sistema solicita confirmación de la acción.<br>3. El administrador confirma la eliminación.<br>4. El sistema retira el contenido del catálogo.<br>5. El sistema informa el resultado de la operación. |
 | Flujos alternos | FA1. El administrador cancela la confirmación.<br>FA1.1 El sistema no realiza cambios.<br>FA2. El contenido seleccionado no existe o ya fue retirado.<br>FA2.1 El sistema informa que no es posible completar la eliminación. |
+| Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible eliminar el contenido. Intenta nuevamente.<br>FE2. Contenido no encontrado (404).<br>FE2.1 El sistema informa que el contenido no existe o ya fue retirado. |
 | Reglas de negocio | Solo administradores pueden eliminar contenido.<br>La eliminación debe aplicarse únicamente a contenidos existentes. |
 | Reglas de calidad | La acción debe requerir confirmación explícita para evitar errores.<br>El sistema debe mostrar un mensaje claro sobre el resultado final. |
 
