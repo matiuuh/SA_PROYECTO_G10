@@ -46,7 +46,7 @@ services:
 
   frontend:
     build:
-      context: ../../../../frontend
+      context: frontend
       dockerfile: Dockerfile
       args:
         # URLs relativas → el api-gateway las intercepta sin exponer IPs de VM1/VM2
@@ -65,7 +65,7 @@ services:
 
   api-gateway:
     build:
-      context: ../../../api-gateway
+      context: backend/api-gateway
       dockerfile: Dockerfile
     container_name: quetzal-api-gateway
     restart: unless-stopped

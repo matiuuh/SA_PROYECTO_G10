@@ -24,7 +24,7 @@ services:
 
   usuario-service:
     build:
-      context: ../../services/usuario
+      context: backend/services/usuario
       dockerfile: Dockerfile
     container_name: quetzal-usuario-service
     restart: unless-stopped
@@ -55,7 +55,7 @@ services:
 
   suscripcion-service:
     build:
-      context: ../../services/suscripcion
+      context: backend/services/suscripcion
       dockerfile: Dockerfile
     container_name: quetzal-suscripcion-service
     restart: unless-stopped
@@ -82,7 +82,7 @@ services:
 
   catalogo-service:
     build:
-      context: ../..
+      context: backend
       dockerfile: services/catalogo/Dockerfile
     container_name: quetzal-catalogo-service
     restart: unless-stopped

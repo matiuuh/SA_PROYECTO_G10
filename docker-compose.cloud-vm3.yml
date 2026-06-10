@@ -1,0 +1,207 @@
+name: quetzaltv-vm3
+
+# ─── VM3: Bases de datos ───────────────────────────────────────────────────────
+#
+#   Un contenedor PostgreSQL por microservicio (Database per Microservice).
+#   Cada contenedor ejecuta automáticamente sus scripts de esquema y seed
+#   al primer arranque (docker-entrypoint-initdb.d).
+#   Redis vive en VM2; esta VM solo gestiona persistencia.
+#
+#   Puertos expuestos (accesibles solo desde la VPC interna de GCP):
+#     postgres-catalogo      :5433   → quetzal_catalogo
+#     postgres-streaming     :5434   → quetzal_streaming
+#     postgres-divisas       :5435   → quetzal_divisas
+#     postgres-cobros        :5436   → quetzal_cobros
+#     postgres-usuario       :5437   → quetzal_usuario
+#     postgres-suscripcion   :5438   → quetzal_suscripcion
+#     postgres-notificaciones:5439   → quetzal_notificaciones
+#
+#   Variables de entorno requeridas en .env de esta VM:
+#     DB_PASSWORD  — contraseña compartida de postgres
+#
+#   IMPORTANTE: las reglas de firewall de GCP deben restringir estos puertos
+#   a la IP interna de VM1 y VM2 únicamente (no exponer a internet).
+#
+#   Levantar:      docker compose -f docker-compose.cloud-vm3.yml up -d
+#   Reset total:   docker compose -f docker-compose.cloud-vm3.yml down -v
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # USUARIO
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-usuario:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-usuario
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_usuario
+    volumes:
+      - pg_usuario_data:/var/lib/postgresql/data
+      - ./backend/services/usuario/database/sql/01_usuarios.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/services/usuario/database/seed/01_admin_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    ports:
+      - "5437:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_usuario"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SUSCRIPCIÓN
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-suscripcion:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-suscripcion
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_suscripcion
+    volumes:
+      - pg_suscripcion_data:/var/lib/postgresql/data
+      - ./backend/services/suscripcion/database/sql/04_suscripciones.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/services/suscripcion/database/seed/01_planes_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    ports:
+      - "5438:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_suscripcion"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # CATÁLOGO
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-catalogo:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-catalogo
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_catalogo
+    volumes:
+      - pg_catalogo_data:/var/lib/postgresql/data
+      - ./backend/services/catalogo/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/services/catalogo/database/sql/02_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_catalogo"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STREAMING
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-streaming:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-streaming
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_streaming
+    volumes:
+      - pg_streaming_data:/var/lib/postgresql/data
+      - ./backend/services/streaming/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/services/streaming/database/sql/02_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_streaming"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # DIVISAS
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-divisas:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-divisas
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_divisas
+    volumes:
+      - pg_divisas_data:/var/lib/postgresql/data
+      - ./backend/services/divisas/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/services/divisas/database/sql/02_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_divisas"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # COBROS
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-cobros:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-cobros
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_cobros
+    volumes:
+      - pg_cobros_data:/var/lib/postgresql/data
+      - ./backend/services/cobros/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_cobros"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NOTIFICACIONES
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-notificaciones:
+    image: postgres:16-alpine
+    container_name: quetzal-postgres-notificaciones
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: quetzal_notificaciones
+    volumes:
+      - pg_notificaciones_data:/var/lib/postgresql/data
+      - ./backend/services/notificaciones/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      - "5439:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_notificaciones"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+# ════════════════════════════════════════════════════════════════════════════
+# VOLÚMENES — persistencia de cada base de datos
+# ════════════════════════════════════════════════════════════════════════════
+
+volumes:
+  pg_usuario_data:
+  pg_suscripcion_data:
+  pg_catalogo_data:
+  pg_streaming_data:
+  pg_divisas_data:
+  pg_cobros_data:
+  pg_notificaciones_data:
