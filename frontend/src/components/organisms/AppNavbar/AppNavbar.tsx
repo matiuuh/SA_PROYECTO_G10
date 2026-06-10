@@ -11,6 +11,7 @@ import {
 import { Logo } from '@/components/atoms'
 import { clearSession, getActiveSession, getStoredActiveProfile } from '@/lib/auth'
 import { logoutUser } from '@/lib/usuario-api'
+import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 
 export function AppNavbar() {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export function AppNavbar() {
   const [logoutError, setLogoutError] = useState('')
   const [hidden, setHidden] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [hasSubscription, setHasSubscription] = useState(false)
   const lastScrollY = useRef(0)
 
   useEffect(() => {
@@ -32,6 +34,19 @@ export function AppNavbar() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  useEffect(() => {
+    async function checkSubscription() {
+      if (!session?.account.id || !session?.accessToken) return
+      try {
+        const status = await getSubscriptionStatusByAccount(session.account.id)
+        setHasSubscription(status.tiene_suscripcion)
+      } catch {
+        setHasSubscription(false)
+      }
+    }
+    void checkSubscription()
+  }, [session])
 
   const isVisible = !hidden || hovered
   const accountName = session?.account.nombre ?? 'Usuario'
@@ -118,31 +133,35 @@ export function AppNavbar() {
               <span className="sm:hidden">Plan</span>
             </Link>
 
-            <div className="w-px h-5 bg-white/[0.08]" />
+            {hasSubscription && (
+              <>
+                <div className="w-px h-5 bg-white/[0.08]" />
 
-            <Link
-              to="/profiles"
-              aria-label="Perfiles"
-              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-            >
-              <span className="hidden md:inline">
-                {activeProfile ? `Perfil: ${activeProfile.nombre}` : 'Perfiles'}
-              </span>
-              <span className="md:hidden">Perfil</span>
-            </Link>
+                <Link
+                  to="/profiles"
+                  aria-label="Perfiles"
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+                >
+                  <span className="hidden md:inline">
+                    {activeProfile ? `Perfil: ${activeProfile.nombre}` : 'Perfiles'}
+                  </span>
+                  <span className="md:hidden">Perfil</span>
+                </Link>
 
-            <div className="w-px h-5 bg-white/[0.08]" />
+                <div className="w-px h-5 bg-white/[0.08]" />
 
-            <Link
-              to="/history"
-              aria-label="Historial"
-              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-            >
-              <History size={16} strokeWidth={1.75} />
-              <span className="hidden sm:inline">Historial</span>
-            </Link>
+                <Link
+                  to="/history"
+                  aria-label="Historial"
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+                >
+                  <History size={16} strokeWidth={1.75} />
+                  <span className="hidden sm:inline">Historial</span>
+                </Link>
 
-            <div className="w-px h-5 bg-white/[0.08]" />
+                <div className="w-px h-5 bg-white/[0.08]" />
+              </>
+            )}
 
             <div className="relative">
               <button

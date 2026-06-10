@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock3, Film, History, Play, Tv2 } from 'lucide-react'
 import { Button, Card, ScrollReveal } from '@/components/atoms'
-import { getStoredActiveProfile } from '@/lib/auth'
+import { getActiveSession, getStoredActiveProfile } from '@/lib/auth'
 import { listCatalogContent, getCatalogSeasons } from '@/lib/catalogo-api'
 import { getPlaybackHistory } from '@/lib/streaming-api'
+import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import type { CatalogContent, CatalogEpisode, CatalogSeason } from '@/types/catalog'
 import type { PlaybackProgress } from '@/types/streaming'
 
@@ -75,6 +76,23 @@ export function HistoryPage() {
 
   useEffect(() => {
     async function loadHistory() {
+      const session = getActiveSession()
+      if (!session?.account.id || !session?.accessToken) {
+        navigate('/login', { replace: true })
+        return
+      }
+
+      try {
+        const status = await getSubscriptionStatusByAccount(session.account.id)
+        if (!status.tiene_suscripcion) {
+          navigate('/subscription/plans', { replace: true })
+          return
+        }
+      } catch {
+        navigate('/subscription/plans', { replace: true })
+        return
+      }
+
       if (!activeProfile?.id) {
         navigate('/profiles', { replace: true, state: { reason: 'select-profile' } })
         return
