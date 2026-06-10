@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmación de Compra - Tu Boleto</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter para texto, Space Grotesk para toques cinematográficos/futuristas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome para Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 15px rgba(139, 92, 246, 0.3)' },
+                            '100%': { boxShadow: '0 0 30px rgba(139, 92, 246, 0.6)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos personalizados para troquelados de ticket */
+        .ticket-perforation-left {
+            clip-path: circle(16px at 0% 50%);
+        }
+        .ticket-perforation-right {
+            clip-path: circle(16px at 100% 50%);
+        }
+        /* Estilos de impresión */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-card {
+                box-shadow: none !important;
+                border: 2px solid #ddd !important;
+                background: white !important;
+                color: black !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-[#0b0f19] text-gray-100 font-sans min-h-screen relative overflow-x-hidden selection:bg-purple-500 selection:text-white pb-12">
+
+    <!-- Fondo decorativo con luces difusas de cine/teatro -->
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] pointer-events-none opacity-30 blur-[120px] -z-10 overflow-hidden">
+        <div class="absolute top-[-10%] left-[20%] w-[350px] h-[350px] rounded-full bg-indigo-600"></div>
+        <div id="glow-theme-bg" class="absolute top-[10%] right-[20%] w-[400px] h-[400px] rounded-full bg-purple-600 transition-all duration-700"></div>
+    </div>
+
+    <!-- Canvas para efectos secundarios si se requiere -->
+    <canvas id="canvas-overlay" class="absolute inset-0 pointer-events-none z-50"></canvas>
+
+    <main class="max-w-4xl mx-auto px-4 pt-8 md:pt-12 relative z-10">
+
+        <!-- Barra superior: Éxito e Información del sistema -->
+        <header class="text-center mb-8 no-print animate-fade-in">
+            <div class="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-4 py-2 rounded-full mb-4 text-sm font-semibold tracking-wide shadow-lg shadow-emerald-950/20">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <i class="fa-solid fa-circle-check"></i> Pago Confirmado con Éxito
+            </div>
+            <h1 class="text-3xl md:text-5xl font-extrabold font-display tracking-tight text-white mb-2">
+                ¡Prepara tus Palomitas!
+            </h1>
+            <p class="text-gray-400 text-sm md:text-base max-w-md mx-auto">
+                Tu transacción fue exitosa. Presenta el boleto digital en la entrada de la sala o descárgalo en tu dispositivo.
+            </p>
+        </header>
+
+        <!-- Selector interactivo de temática de boleto (para deleite del usuario) -->
+        <div class="flex justify-center items-center gap-2 mb-8 no-print bg-slate-900/60 backdrop-blur-md p-1.5 rounded-full border border-slate-800/80 w-fit mx-auto">
+            <span class="text-xs text-slate-400 px-3 font-medium uppercase tracking-wider">Tema de boleto:</span>
+            <button onclick="changeTheme('purple')" class="w-8 h-8 rounded-full bg-purple-600 border-2 border-white/20 hover:scale-110 active:scale-95 transition-all duration-200" title="Neon Violet"></button>
+            <button onclick="changeTheme('gold')" class="w-8 h-8 rounded-full bg-amber-500 border-2 border-white/20 hover:scale-110 active:scale-95 transition-all duration-200" title="Classic Gold"></button>
+            <button onclick="changeTheme('cyan')" class="w-8 h-8 rounded-full bg-cyan-500 border-2 border-white/20 hover:scale-110 active:scale-95 transition-all duration-200" title="Cyberpunk Cyan"></button>
+            <button onclick="changeTheme('crimson')" class="w-8 h-8 rounded-full bg-rose-600 border-2 border-white/20 hover:scale-110 active:scale-95 transition-all duration-200" title="Velvet Crimson"></button>
+        </div>
+
+        <!-- BOLETO CINEMATOGRÁFICO INTERACTIVO -->
+        <div class="relative max-w-3xl mx-auto mb-10 group no-print">
+            <!-- Brillo de fondo interactivo para el ticket -->
+            <div id="ticket-glow" class="absolute -inset-1 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-3xl blur opacity-30 group-hover:opacity-40 transition-all duration-700"></div>
+
+            <!-- Estructura del Ticket (Flex-col en móvil, Flex-row en escritorio) -->
+            <div id="ticket-body" class="relative bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl transition-all duration-500 ease-out transform">
+                
+                <!-- SECCIÓN IZQUIERDA: Cuerpo Principal del Boleto (Detalles de la película) -->
+                <div class="flex-1 p-6 md:p-8 flex flex-col justify-between relative">
+                    <!-- Decoración interna del ticket -->
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-40"></div>
+                    
+                    <div>
+                        <!-- Encabezado del Cine -->
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-purple-600/20 text-purple-400 rounded-lg flex items-center justify-center border border-purple-500/20">
+                                    <i class="fa-solid fa-film"></i>
+                                </div>
+                                <span class="font-display font-bold tracking-widest text-xs uppercase text-gray-300">STARLIGHT CINEMAS</span>
+                            </div>
+                            <span class="bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-bold px-2 py-0.5 rounded tracking-wider uppercase">SALA IMAX 3D</span>
+                        </div>
+
+                        <!-- Detalles de Película / Contenedor Grid -->
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                            <!-- Poster / Mini Ilustración de la Película -->
+                            <div class="md:col-span-4 relative group/poster rounded-xl overflow-hidden aspect-[2/3] max-w-[140px] md:max-w-none mx-auto md:mx-0 shadow-lg shadow-black/40 border border-neutral-800">
+                                <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=600&auto=format&fit=crop" 
+                                     alt="Movie Poster" 
+                                     class="w-full h-full object-cover group-hover/poster:scale-115 transition-transform duration-500"
+                                     onerror="this.src='https://placehold.co/300x450/1c1917/ffffff?text=CINE+VIP'">
+                                <div class="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-80"></div>
+                                <span class="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-amber-400 border border-amber-500/20 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    <i class="fa-solid fa-star"></i> 9.4
+                                </span>
+                            </div>
+
+                            <!-- Información Escrita del Boleto -->
+                            <div class="md:col-span-8 space-y-4 text-center md:text-left">
+                                <div>
+                                    <h2 id="movie-title" class="text-2xl md:text-3xl font-extrabold font-display text-white tracking-tight leading-none group-hover:text-purple-300 transition-colors duration-300">
+                                        NEON HORIZONS 2088
+                                    </h2>
+                                    <p class="text-xs text-gray-400 mt-1">Ciencia Ficción / Aventuras • 2h 25min • Clasif: PG-13</p>
+                                </div>
+
+                                <!-- Grilla de Datos Clave (Fecha, Hora, Asiento, Sala) -->
+                                <div class="grid grid-cols-2 gap-y-3 gap-x-4 pt-2 border-t border-neutral-800/60">
+                                    <div>
+                                        <p class="text-[10px] text-gray-500 font-semibold tracking-wider uppercase">FECHA</p>
+                                        <p class="text-sm font-bold text-white"><i class="fa-regular fa-calendar-days text-purple-400 mr-1.5"></i>Sábado, 6 Jun 2026</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] text-gray-500 font-semibold tracking-wider uppercase">HORA</p>
+                                        <p class="text-sm font-bold text-white"><i class="fa-regular fa-clock text-purple-400 mr-1.5"></i>19:45 hrs</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] text-gray-500 font-semibold tracking-wider uppercase">ASIENTOS (SALA VIP)</p>
+                                        <p class="text-sm font-bold text-purple-400"><i class="fa-solid fa-chair text-purple-500 mr-1.5"></i>Fila H - H12, H13</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] text-gray-500 font-semibold tracking-wider uppercase">COD. RESERVA</p>
+                                        <p id="reservation-code" class="text-sm font-mono font-bold text-white tracking-wider flex items-center justify-center md:justify-start gap-1">
+                                            <span>SH-94038</span>
+                                            <button onclick="copyToClipboard('SH-94038', 'Código copiado')" class="text-xs text-gray-500 hover:text-white transition-colors p-1" title="Copiar código">
+                                                <i class="fa-regular fa-copy"></i>
+                                            </button>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pie de la sección izquierda: Información del Pago / Factura rápida -->
+                    <div class="mt-6 pt-4 border-t border-dashed border-neutral-800 flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-neutral-800 w-10 h-10 rounded-full flex items-center justify-center">
+                                <i class="fa-brands fa-cc-visa text-xl text-[#2563EB]"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] text-gray-500 font-semibold uppercase">MÉTODO DE PAGO</p>
+                                <p class="text-xs text-gray-300">Visa terminada en 4242</p>
+                            </div>
+                        </div>
+                        <div class="text-center sm:text-right">
+                            <p class="text-[10px] text-gray-500 font-semibold uppercase">IMPORTE TOTAL</p>
+                            <p class="text-lg font-extrabold font-display text-white">$24.00 USD</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEPARADOR PERFORADO (Línea punteada física del boleto de cine) -->
+                <div class="relative w-full md:w-auto flex md:flex-col justify-between items-center overflow-visible no-print">
+                    <!-- Corte Circular Superior -->
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0b0f19] border border-neutral-800 hidden md:block z-20"></div>
+                    <!-- Corte Circular Inferior -->
+                    <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-8 h-8 rounded-full bg-[#0b0f19] border border-neutral-800 hidden md:block z-20"></div>
+                    
+                    <!-- Para móvil: Cortes laterales izquierdo y derecho -->
+                    <div class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0b0f19] border border-neutral-800 md:hidden z-20"></div>
+                    <div class="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0b0f19] border border-neutral-800 md:hidden z-20"></div>
+
+                    <!-- Línea punteada de corte real -->
+                    <div class="w-full md:w-[1px] h-[1px] md:h-full border-t-2 md:border-l-2 border-dashed border-neutral-800/80 md:my-4"></div>
+                </div>
+
+                <!-- SECCIÓN DERECHA: El Talón de Control (Stub) con el QR de Acceso -->
+                <div class="w-full md:w-64 bg-neutral-950 p-6 md:p-8 flex flex-col items-center justify-between text-center relative">
+                    <!-- Decoración interna -->
+                    <div class="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500/25 to-transparent opacity-30"></div>
+
+                    <div class="w-full flex flex-col items-center">
+                        <span class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mb-4">ACCESO DE CONTROL</span>
+                        
+                        <!-- Caja del Código QR -->
+                        <div class="relative bg-white p-3 rounded-2xl shadow-xl shadow-black/60 group/qr hover:scale-105 transition-transform duration-300">
+                            <!-- Código QR Simulador de Alta Calidad -->
+                            <div class="w-32 h-32 flex items-center justify-center bg-white relative">
+                                <svg class="w-full h-full text-black" viewBox="0 0 100 100">
+                                    <!-- Dibujo de un código QR simulado detallado -->
+                                    <path fill="currentColor" d="M0,0 h30 v30 h-30 z M10,10 h10 v10 h-10 z M70,0 h30 v30 h-30 z M80,10 h10 v10 h-10 z M0,70 h30 v30 h-30 z M10,80 h10 v10 h-10 z M40,10 h10 v10 h-10 z M50,40 h10 v10 h-10 z M10,40 h20 v10 h-20 z M40,60 h10 v10 h-10 z M70,40 h10 v10 h-10 z M90,50 h10 v20 h-10 z M60,70 h20 v10 h-20 z M80,80 h20 v20 h-20 z M40,80 h10 v20 h-10 z M50,10 h10 v10 h-10 z M60,20 h10 v10 h-10 z M30,30 h10 v20 h-10 z M40,30 h10 v10 h-10 z M80,30 h10 v10 h-10 z M50,90 h20 v10 h-20 z M0,35 h10 v10 h-10 z M90,35 h10 v10 h-10 z M35,0 h10 v10 h-10 z" />
+                                </svg>
+                                <!-- Logo Starlight en el centro del QR para simular QR corporativo -->
+                                <div class="absolute w-8 h-8 bg-neutral-900 rounded-lg border-2 border-white flex items-center justify-center shadow-md">
+                                    <i class="fa-solid fa-star text-xs text-purple-400"></i>
+                                </div>
+                            </div>
+                            <div class="absolute inset-0 border border-purple-500/20 rounded-2xl group-hover/qr:border-purple-500/50 transition-colors pointer-events-none"></div>
+                        </div>
+                        
+                        <!-- Escanear etiqueta con animación de escaneo -->
+                        <div class="mt-3 text-xs font-semibold text-emerald-400 flex items-center gap-1.5 animate-pulse-slow">
+                            <i class="fa-solid fa-qrcode"></i> QR Listo para Escanear
+                        </div>
+                    </div>
+
+                    <!-- Código de Barras e Id de Transacción -->
+                    <div class="w-full mt-6 space-y-2">
+                        <!-- Dibujo de Código de Barras con SVG -->
+                        <div class="w-full h-8 flex items-center justify-center opacity-85">
+                            <svg class="w-full h-full text-white" viewBox="0 0 100 20" preserveAspectRatio="none">
+                                <rect x="0" width="2" height="20" fill="currentColor"></rect>
+                                <rect x="4" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="7" width="3" height="20" fill="currentColor"></rect>
+                                <rect x="12" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="15" width="4" height="20" fill="currentColor"></rect>
+                                <rect x="21" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="24" width="2" height="20" fill="currentColor"></rect>
+                                <rect x="28" width="3" height="20" fill="currentColor"></rect>
+                                <rect x="33" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="36" width="2" height="20" fill="currentColor"></rect>
+                                <rect x="40" width="4" height="20" fill="currentColor"></rect>
+                                <rect x="46" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="49" width="3" height="20" fill="currentColor"></rect>
+                                <rect x="54" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="57" width="2" height="20" fill="currentColor"></rect>
+                                <rect x="61" width="4" height="20" fill="currentColor"></rect>
+                                <rect x="67" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="70" width="3" height="20" fill="currentColor"></rect>
+                                <rect x="75" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="78" width="2" height="20" fill="currentColor"></rect>
+                                <rect x="82" width="4" height="20" fill="currentColor"></rect>
+                                <rect x="88" width="1" height="20" fill="currentColor"></rect>
+                                <rect x="91" width="3" height="20" fill="currentColor"></rect>
+                                <rect x="96" width="4" height="20" fill="currentColor"></rect>
+                            </svg>
+                        </div>
+                        <p class="text-[9px] font-mono text-gray-500 tracking-widest uppercase">ID TRANSACCIÓN: TXN_72940251</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOLETO PARA IMPRESIÓN / PDF (Escondido en web, visible solo al imprimir) -->
+        <div class="hidden print:block print-card bg-white text-black p-8 rounded-lg max-w-xl mx-auto my-0">
+            <div class="text-center border-b pb-4 mb-4">
+                <h1 class="text-2xl font-bold tracking-widest uppercase">STARLIGHT CINEMAS</h1>
+                <p class="text-xs text-gray-600">Comprobante Oficial de Entrada</p>
+            </div>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold">NEON HORIZONS 2088</h2>
+                    <span class="text-xs bg-gray-200 px-2 py-1 rounded font-bold">IMAX 3D</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-500">FECHA Y HORA</span>
+                        <span>Sábado, 6 Jun 2026 - 19:45 hrs</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold text-gray-500">ASIENTO / SALA</span>
+                        <span>Fila H - H12, H13 (SALA VIP)</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold text-gray-500">CÓDIGO DE RESERVA</span>
+                        <span class="font-mono font-bold">SH-94038</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold text-gray-500">VALOR TOTAL</span>
+                        <span class="font-bold">$24.00 USD</span>
+                    </div>
+                </div>
+                <div class="border-t pt-4 flex justify-between items-center">
+                    <div>
+                        <span class="block text-xs text-gray-500">MÉTODO DE PAGO</span>
+                        <span class="text-xs font-semibold">Visa terminada en 4242</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-xs text-gray-500">TRANSACCIÓN ID</span>
+                        <span class="text-xs font-mono font-bold">TXN_72940251</span>
+                    </div>
+                </div>
+                <div class="flex justify-center pt-4">
+                    <div class="w-32 h-32 bg-gray-100 p-2 flex items-center justify-center">
+                        <!-- QR para la impresión -->
+                        <svg class="w-full h-full text-black" viewBox="0 0 100 100">
+                            <path fill="currentColor" d="M0,0 h30 v30 h-30 z M10,10 h10 v10 h-10 z M70,0 h30 v30 h-30 z M80,10 h10 v10 h-10 z M0,70 h30 v30 h-30 z M10,80 h10 v10 h-10 z M40,10 h10 v10 h-10 z M50,40 h10 v10 h-10 z M10,40 h20 v10 h-20 z M40,60 h10 v10 h-10 z M70,40 h10 v10 h-10 z M90,50 h10 v20 h-10 z M60,70 h20 v10 h-20 z M80,80 h20 v20 h-20 z M40,80 h10 v20 h-10 z M50,10 h10 v10 h-10 z M60,20 h10 v10 h-10 z M30,30 h10 v20 h-10 z M40,30 h10 v10 h-10 z M80,30 h10 v10 h-10 z M50,90 h20 v10 h-20 z" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="text-center text-[10px] text-gray-500 mt-4 border-t pt-2">
+                    Presente este boleto impreso o digital en las puertas de acceso de la sala de cine.
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN DE ACCIONES (No se imprime) -->
+        <section class="space-y-6 no-print">
+            <!-- Botonera de descarga y guardado de boletos -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button onclick="window.print()" class="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 active:scale-98 text-white font-semibold px-5 py-3.5 rounded-2xl transition-all duration-200 shadow-lg shadow-purple-950/30">
+                    <i class="fa-solid fa-download"></i> Descargar PDF / Imprimir
+                </button>
+                <button onclick="simulateAddToWallet('Apple Wallet')" class="flex items-center justify-center gap-2 bg-neutral-900 border border-neutral-800 hover:bg-neutral-850 hover:border-neutral-700 active:scale-98 text-white font-semibold px-5 py-3.5 rounded-2xl transition-all duration-200">
+                    <i class="fa-brands fa-apple"></i> Add to Apple Wallet
+                </button>
+                <button onclick="simulateAddToWallet('Google Wallet')" class="flex items-center justify-center gap-2 bg-neutral-900 border border-neutral-800 hover:bg-neutral-850 hover:border-neutral-700 active:scale-98 text-white font-semibold px-5 py-3.5 rounded-2xl transition-all duration-200">
+                    <i class="fa-brands fa-google-pay text-2xl"></i> Guardar en Wallet
+                </button>
+            </div>
+
+            <!-- Panel de opciones secundarias: Compartir y Reenviar por correo -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900/40 backdrop-blur-md p-6 rounded-3xl border border-slate-800/80">
+                <!-- Reenviar boleto -->
+                <div>
+                    <h3 class="text-md font-bold text-white mb-2 flex items-center gap-2">
+                        <i class="fa-regular fa-envelope text-purple-400"></i> ¿Enviar a otro correo?
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-3">Enviaremos una copia adicional en formato PDF y enlaces del boleto.</p>
+                    <div class="flex gap-2">
+                        <input type="email" id="email-input" placeholder="ejemplo@correo.com" class="bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent flex-1 transition-all">
+                        <button onclick="sendTicketByEmail()" class="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 font-semibold px-4 py-2 rounded-xl text-sm transition-all duration-200">
+                            Enviar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Compartir Boleto con un amigo -->
+                <div>
+                    <h3 class="text-md font-bold text-white mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-share-nodes text-purple-400"></i> Invita a un amigo
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-3">Comparte el código de la reserva directamente a sus redes sociales o WhatsApp.</p>
+                    <div class="flex items-center gap-2">
+                        <button onclick="shareTicket('WhatsApp')" class="w-10 h-10 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 flex items-center justify-center transition-all duration-200" title="Compartir en WhatsApp">
+                            <i class="fa-brands fa-whatsapp text-lg"></i>
+                        </button>
+                        <button onclick="shareTicket('Telegram')" class="w-10 h-10 rounded-xl bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white border border-sky-500/20 flex items-center justify-center transition-all duration-200" title="Compartir en Telegram">
+                            <i class="fa-brands fa-telegram text-lg"></i>
+                        </button>
+                        <button onclick="shareTicket('Copiar Enlace')" class="flex-1 bg-neutral-950 border border-neutral-800 hover:bg-neutral-900 hover:border-neutral-700 text-gray-300 text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all">
+                            <i class="fa-solid fa-link text-purple-400"></i> Copiar Enlace del Boleto
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Desglose detallado del recibo de pago -->
+            <div class="bg-neutral-900/40 rounded-3xl p-6 border border-neutral-800/60">
+                <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 pb-2 border-b border-neutral-800">
+                    Resumen de Compra & Transacción
+                </h3>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">2x Entrada VIP IMAX (Fila H-12, H-13)</span>
+                        <span class="text-white font-medium">$18.00 USD</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Cargos por Servicio Digital</span>
+                        <span class="text-white font-medium">$4.00 USD</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Combo Palomitas + Refresco (Promo Reservado)</span>
+                        <span class="text-emerald-400 font-medium">¡CORTESÍA!</span>
+                    </div>
+                    <div class="flex justify-between pt-2 border-t border-neutral-800 font-semibold text-base">
+                        <span class="text-white">Total Pagado</span>
+                        <span class="text-purple-400">$24.00 USD</span>
+                    </div>
+                </div>
+
+                <!-- Info de Soporte -->
+                <div class="mt-4 pt-4 border-t border-neutral-800 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-gray-400">
+                    <span><i class="fa-solid fa-headset mr-1"></i> ¿Problemas con tu entrada? <a href="#" class="text-purple-400 underline hover:text-purple-300">Contactar Soporte</a></span>
+                    <span>Código de Autorización Bancaria: <strong>AUTH-83920</strong></span>
+                </div>
+            </div>
+
+            <!-- Botón de regreso a cartelera -->
+            <div class="text-center pt-4">
+                <a href="#" class="inline-flex items-center gap-2 text-gray-400 hover:text-purple-400 font-semibold transition-all duration-200">
+                    <i class="fa-solid fa-arrow-left"></i> Volver a la Cartelera de Películas
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Notificaciones flotantes (Toasts) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // Disparar confeti inmediatamente al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            // Primer disparo rápido
+            confetti({
+                particleCount: 120,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#8b5cf6', '#a78bfa', '#f59e0b', '#10b981', '#06b6d4']
+            });
+
+            // Segundo disparo un segundo después para efecto de cascada
+            setTimeout(() => {
+                confetti({
+                    particleCount: 80,
+                    spread: 100,
+                    origin: { y: 0.75 },
+                    colors: ['#8b5cf6', '#3b82f6', '#34d399']
+                });
+            }, 600);
+
+            // Iniciar tracking de ratón para el efecto interactivo 3D del boleto
+            initTicketParallax();
+        });
+
+        // Configuración de los Temas del Boleto
+        const themes = {
+            purple: {
+                primary: 'rgba(139, 92, 246, 0.4)', // Purple-500
+                glow: 'from-purple-600 to-indigo-600',
+                border: 'border-purple-500/20',
+                accentText: 'text-purple-400',
+                accentBg: 'bg-purple-600/20',
+                bgGlow: '#8b5cf6'
+            },
+            gold: {
+                primary: 'rgba(245, 158, 11, 0.4)', // Amber-500
+                glow: 'from-amber-600 to-yellow-500',
+                border: 'border-amber-500/20',
+                accentText: 'text-amber-400',
+                accentBg: 'bg-amber-600/20',
+                bgGlow: '#f59e0b'
+            },
+            cyan: {
+                primary: 'rgba(6, 182, 212, 0.4)', // Cyan-500
+                glow: 'from-cyan-500 to-emerald-400',
+                border: 'border-cyan-500/20',
+                accentText: 'text-cyan-400',
+                accentBg: 'bg-cyan-600/20',
+                bgGlow: '#06b6d4'
+            },
+            crimson: {
+                primary: 'rgba(225, 29, 72, 0.4)', // Rose-600
+                glow: 'from-rose-600 to-pink-500',
+                border: 'border-rose-500/20',
+                accentText: 'text-rose-400',
+                accentBg: 'bg-rose-600/20',
+                bgGlow: '#e11d48'
+            }
+        };
+
+        // Cambiar el tema del boleto dinámicamente
+        function changeTheme(themeName) {
+            const theme = themes[themeName];
+            if (!theme) return;
+
+            // Cambiar fondo de iluminación general
+            const glowBg = document.getElementById('glow-theme-bg');
+            glowBg.className = `absolute top-[10%] right-[20%] w-[400px] h-[400px] rounded-full transition-all duration-700 blur-[120px]`;
+            glowBg.style.backgroundColor = theme.bgGlow;
+
+            // Cambiar el glow trasero del ticket
+            const ticketGlow = document.getElementById('ticket-glow');
+            ticketGlow.className = `absolute -inset-1 bg-gradient-to-r ${theme.glow} rounded-3xl blur opacity-30 group-hover:opacity-45 transition-all duration-700`;
+
+            // Cambiar textos y decorativos del ticket
+            const highlights = document.querySelectorAll('.text-purple-400');
+            highlights.forEach(el => {
+                el.classList.remove('text-purple-400');
+                el.classList.add(theme.accentText);
+            });
+
+            const highlightBgs = document.querySelectorAll('.bg-purple-600\\/20');
+            highlightBgs.forEach(el => {
+                el.classList.remove('bg-purple-600/20');
+                el.classList.add(theme.accentBg);
+            });
+
+            // Disparar pequeño estallido de confeti temático
+            confetti({
+                particleCount: 40,
+                spread: 40,
+                origin: { y: 0.7 },
+                colors: [theme.bgGlow, '#ffffff']
+            });
+
+            showToast(`Tema del boleto cambiado a: ${themeName.toUpperCase()}`, 'info');
+        }
+
+        // Simulación de interacción 3D para la tarjeta de boleto (Efecto de inclinación)
+        function initTicketParallax() {
+            const ticket = document.getElementById('ticket-body');
+            const container = ticket.parentElement;
+
+            container.addEventListener('mousemove', (e) => {
+                const rect = container.getBoundingClientRect();
+                const x = e.clientX - rect.left; // posición x
+                const y = e.clientY - rect.top;  // posición y
+
+                // Calcular inclinación (-10 a 10 grados)
+                const rotateX = ((y / rect.height) - 0.5) * -12;
+                const rotateY = ((x / rect.width) - 0.5) * 12;
+
+                ticket.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+            });
+
+            container.addEventListener('mouseleave', () => {
+                // Restaurar posición original suavemente
+                ticket.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+            });
+        }
+
+        // Función para copiar texto al portapapeles de manera confiable
+        function copyToClipboard(text, successMessage) {
+            // Intenta utilizar la API recomendada para iframe sandbox
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed'; // Evita scroll
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMessage, 'success');
+            } catch (err) {
+                showToast('No se pudo copiar el código', 'error');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // Notificaciones Flotantes / Toast
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            // Iconos del Toast
+            let icon = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+            if (type === 'error') {
+                icon = '<i class="fa-solid fa-circle-exclamation text-rose-400"></i>';
+            } else if (type === 'info') {
+                icon = '<i class="fa-solid fa-circle-info text-blue-400"></i>';
+            }
+
+            toast.className = `flex items-center gap-3 bg-slate-900 border border-slate-800 text-gray-200 px-5 py-3 rounded-2xl shadow-2xl pointer-events-auto transform translate-y-5 opacity-0 transition-all duration-300 max-w-sm`;
+            toast.innerHTML = `
+                ${icon}
+                <span class="text-xs font-semibold">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            // Animación de Entrada
+            setTimeout(() => {
+                toast.classList.remove('translate-y-5', 'opacity-0');
+            }, 10);
+
+            // Eliminación automática
+            setTimeout(() => {
+                toast.classList.add('translate-y-[-20px]', 'opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Simular el guardado de billeteras electrónicas
+        function simulateAddToWallet(walletName) {
+            showToast(`Agregando entrada a tu ${walletName}...`, 'info');
+            
+            setTimeout(() => {
+                showToast(`¡Listo! El boleto "NEON HORIZONS 2088" se guardó en tu ${walletName}`, 'success');
+            }, 1200);
+        }
+
+        // Enviar boleto por correo
+        function sendTicketByEmail() {
+            const emailInput = document.getElementById('email-input');
+            const email = emailInput.value.trim();
+
+            if (!email || !email.includes('@')) {
+                showToast('Por favor, ingresa un correo electrónico válido.', 'error');
+                return;
+            }
+
+            showToast(`Enviando boleto digital a: ${email}...`, 'info');
+            
+            setTimeout(() => {
+                showToast(`¡Boleto enviado con éxito! Revisa tu bandeja de entrada o spam`, 'success');
+                emailInput.value = ''; // Limpiar campo
+            }, 1500);
+        }
+
+        // Simular compartir
+        function shareTicket(platform) {
+            const reservationCode = "SH-94038";
+            if (platform === 'Copiar Enlace') {
+                copyToClipboard(`https://starlightcinemas.com/ticket/verify/${reservationCode}`, '¡Enlace de boleto copiado al portapapeles!');
+            } else {
+                showToast(`Abriendo ${platform} para compartir tu código ${reservationCode}...`, 'info');
+            }
+        }
+    </script>
+</body>
+</html>

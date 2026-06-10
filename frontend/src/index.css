@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  /* === Denim palette === */
+  --color-denim-50: #f2f6fd;
+  --color-denim-100: #e4edfa;
+  --color-denim-200: #c2d9f5;
+  --color-denim-300: #8cb9ed;
+  --color-denim-400: #4f95e1;
+  --color-denim-500: #2878cf;
+  --color-denim-600: #1a5fb4;
+  --color-denim-700: #164a8e;
+  --color-denim-800: #164076;
+  --color-denim-900: #183762;
+  --color-denim-950: #102341;
+
+  /* === Status colors === */
+  --color-success-light: #dcfce7;
+  --color-success:       #16a34a;
+  --color-success-dark:  #14532d;
+
+  --color-warning-light: #fef9c3;
+  --color-warning:       #ca8a04;
+  --color-warning-dark:  #713f12;
+
+  --color-error-light:   #fee2e2;
+  --color-error:         #dc2626;
+  --color-error-dark:    #7f1d1d;
+
+  --color-info-light:    var(--color-denim-100);
+  --color-info:          var(--color-denim-500);
+  --color-info-dark:     var(--color-denim-800);
+
+  /* === Semantic aliases (easy to use in components) === */
+  --color-primary:         var(--color-denim-600);
+  --color-primary-hover:   var(--color-denim-700);
+  --color-primary-active:  var(--color-denim-800);
+  --color-primary-subtle:  var(--color-denim-50);
+  --color-primary-muted:   var(--color-denim-100);
+
+  --color-on-primary:      #ffffff;
+
+  --color-status-success:  var(--color-success);
+  --color-status-warning:  var(--color-warning);
+  --color-status-error:    var(--color-error);
+  --color-status-info:     var(--color-info);
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font-family: var(--sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #080c14;
+  color: var(--color-denim-100);
+}
+
+#root {
+  min-height: 100svh;
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

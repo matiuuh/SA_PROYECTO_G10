@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package suscripcion.v1;
+
+message Plan {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  string precio_base = 4;
+  string moneda_base = 5;
+  int32 perfiles_maximos = 6;
+  bool activo = 7;
+  string creado_en = 8;
+  string actualizado_en = 9;
+}
+
+message Subscription {
+  string id = 1;
+  string cuenta_id = 2;
+  string plan_id = 3;
+  string estado = 4;
+  string fecha_inicio = 5;
+  string fecha_fin = 6;
+  string creado_en = 7;
+  string actualizado_en = 8;
+}
+
+message ListPlansRequest {}
+
+message ListPlansResponse {
+  repeated Plan plans = 1;
+}
+
+message CreatePlanRequest {
+  string nombre = 1;
+  string descripcion = 2;
+  string precio_base = 3;
+  string moneda_base = 4;
+  int32 perfiles_maximos = 5;
+}
+
+message CreateSubscriptionRequest {
+  string cuenta_id = 1;
+  string plan_id = 2;
+}
+
+message GetSubscriptionByAccountRequest {
+  string cuenta_id = 1;
+}
+
+message CancelSubscriptionRequest {
+  string suscripcion_id = 1;
+}
+
+message CancelSubscriptionResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+service SuscripcionService {
+  rpc ListPlans (ListPlansRequest) returns (ListPlansResponse);
+  rpc CreatePlan (CreatePlanRequest) returns (Plan);
+  rpc CreateSubscription (CreateSubscriptionRequest) returns (Subscription);
+  rpc GetSubscriptionByAccount (GetSubscriptionByAccountRequest) returns (Subscription);
+  rpc CancelSubscription (CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
+}
