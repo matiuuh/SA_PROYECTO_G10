@@ -108,9 +108,7 @@ def build_subscription_router(container: Container) -> APIRouter:
     # ── Solo administrador ────────────────────────────────────────────────────
 
     @router.get("/active/accounts", response_model=ActiveSubscriptionAccountsResponse)
-    def list_active_subscription_accounts(
-        _: TokenData = Depends(require_admin),
-    ) -> ActiveSubscriptionAccountsResponse:
+    def list_active_subscription_accounts() -> ActiveSubscriptionAccountsResponse:
         return ActiveSubscriptionAccountsResponse(
             cuenta_ids=container.subscription_service.list_active_account_ids()
         )

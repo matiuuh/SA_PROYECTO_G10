@@ -359,10 +359,10 @@ export function AdminCatalogPage() {
                     }
                     posterUrl={item.url_portada}
                     isNew={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) >= new Date().getFullYear() - 1 : false}
-                    onClick={() => navigate(`/movie/${item.id}`)}
+                    onClick={() => navigate(`/movie/${item.id}?admin=1`)}
                   />
                   <div className={`grid gap-2 ${item.tipo === 'serie' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <Button variant="ghost" onClick={() => navigate(`/movie/${item.id}`)}>
+                    <Button variant="ghost" onClick={() => navigate(`/movie/${item.id}?admin=1`)}>
                       <Eye size={14} />
                       Ver
                     </Button>

@@ -171,6 +171,7 @@ export function MovieDetailPage() {
   const [searchParams] = useSearchParams()
   const requestedEpisodeId = searchParams.get('episode')?.trim() ?? ''
   const shouldAutoplay = searchParams.get('autoplay') === '1'
+  const isAdminView = searchParams.get('admin') === '1'
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
   const requestedStartSeconds = parseRequestedStart(searchParams.get('start'))
   const session = getActiveSession()
@@ -734,6 +735,7 @@ export function MovieDetailPage() {
             <span>{detail.tipo === 'serie' ? 'Serie' : 'Pelicula'}</span>
           </div>
 
+          {!isAdminView && (
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {!isAdmin && hasSubscription && (
               <>
@@ -819,8 +821,9 @@ export function MovieDetailPage() {
               <Share2 size={15} strokeWidth={1.75} />
             </button>
           </div>
+          )}
 
-          {playbackError ? (
+          {!isAdminView && playbackError ? (
             <p className="text-sm text-[var(--color-warning)]">{playbackError}</p>
           ) : null}
         </div>
