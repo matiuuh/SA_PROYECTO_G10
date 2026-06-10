@@ -203,6 +203,7 @@ export function PanelPage() {
 
     return topContent
       ? {
+          id: topContent.id,
           title: topContent.titulo,
           description: topContent.sinopsis || 'Disponible en Quetzal TV.',
           genre: getTypeLabel(topContent.tipo),
@@ -211,8 +212,10 @@ export function PanelPage() {
             topContent.porcentaje_recomendacion > 0
               ? Math.max(0, Math.min(10, topContent.porcentaje_recomendacion / 10))
               : null,
+          backdropUrl: topContent.url_portada || undefined,
         }
       : {
+          id: '',
           title: 'Catalogo Quetzal TV',
           description: 'Explora las peliculas y series disponibles en la plataforma.',
           genre: 'Streaming',

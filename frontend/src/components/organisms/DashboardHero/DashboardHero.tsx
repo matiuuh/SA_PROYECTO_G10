@@ -1,8 +1,10 @@
+import { useNavigate } from 'react-router-dom'
 import { Play, Info, Star, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { Badge } from '@/components/atoms'
 
 interface DashboardHeroProps {
+  id?: string
   title: string
   description: string
   genre: string
@@ -12,6 +14,7 @@ interface DashboardHeroProps {
 }
 
 export function DashboardHero({
+  id,
   title,
   description,
   genre,
@@ -19,6 +22,7 @@ export function DashboardHero({
   rating,
   backdropUrl,
 }: DashboardHeroProps) {
+  const navigate = useNavigate()
   return (
     <section className="relative h-[56vh] max-h-[580px] min-h-[380px] w-full overflow-hidden">
       <div className="absolute inset-0 bg-[#0a0e19]">
@@ -80,7 +84,7 @@ export function DashboardHero({
           </p>
 
           <div className="flex items-center gap-3">
-            <Button variant="primary" size="md" className="gap-2">
+            <Button variant="primary" size="md" className="gap-2" onClick={() => id && navigate(`/movie/${id}?autoplay=1`)}>
               <Play size={16} fill="currentColor" strokeWidth={0} />
               Reproducir
             </Button>
@@ -88,6 +92,7 @@ export function DashboardHero({
               variant="ghost"
               size="md"
               className="gap-2 border border-white/[0.12] hover:border-white/25 hover:bg-white/[0.06]"
+              onClick={() => id && navigate(`/movie/${id}`)}
             >
               <Info size={16} strokeWidth={1.75} />
               Mas info

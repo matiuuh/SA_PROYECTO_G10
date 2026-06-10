@@ -171,6 +171,7 @@ export function MovieDetailPage() {
   const [searchParams] = useSearchParams()
   const requestedEpisodeId = searchParams.get('episode')?.trim() ?? ''
   const shouldAutoplay = searchParams.get('autoplay') === '1'
+  const isAdminView = searchParams.get('admin') === '1'
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
   const requestedStartSeconds = parseRequestedStart(searchParams.get('start'))
   const session = getActiveSession()
@@ -682,7 +683,7 @@ export function MovieDetailPage() {
         </button>
 
         <div className="absolute bottom-8 left-4 right-4 flex flex-col gap-4 sm:left-8 sm:right-8 lg:left-16 lg:right-16">
-          {!hasSubscription && (
+          {!hasSubscription && !isAdminView && (
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[var(--color-denim-200)]">
               <Lock size={13} />
               Vista previa disponible. Activa un plan para reproducir completo.
@@ -723,6 +724,7 @@ export function MovieDetailPage() {
             <span>{detail.tipo === 'serie' ? 'Serie' : 'Pelicula'}</span>
           </div>
 
+          {!isAdminView && (
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {hasSubscription ? (
               <>
@@ -807,8 +809,9 @@ export function MovieDetailPage() {
               <Share2 size={15} strokeWidth={1.75} />
             </button>
           </div>
+          )}
 
-          {playbackError ? (
+          {!isAdminView && playbackError ? (
             <p className="text-sm text-[var(--color-warning)]">{playbackError}</p>
           ) : null}
         </div>
