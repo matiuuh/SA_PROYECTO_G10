@@ -75,6 +75,7 @@ function mapCatalogToContentItem(content: CatalogContent): ContentItem {
 export function PanelPage() {
   const navigate = useNavigate()
   const session = getActiveSession()
+  const isAdmin = session?.account.rol === 'administrador'
   const activeProfile = getStoredActiveProfile()
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
@@ -394,7 +395,32 @@ export function PanelPage() {
           </div>
         </div>
 
-        {!isLoadingSubscription && !hasSubscription && (
+        {isAdmin && (
+          <div className="mb-8 px-4 sm:px-6 lg:px-8">
+            <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--color-denim-300)]">
+                    Panel de administrador
+                  </p>
+                  <h2 className="mb-2 text-2xl font-bold text-white">
+                    Gestionar contenido y catalogo
+                  </h2>
+                  <p className="max-w-2xl text-sm text-[var(--color-denim-200)]">
+                    Accede al panel de administracion para subir peliculas, series, gestionar el catalogo y ver estadisticas.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Link to="/admin">
+                    <Button size="md">Ir a Admin</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isLoadingSubscription && !hasSubscription && !isAdmin && (
           <div className="mb-8 px-4 sm:px-6 lg:px-8">
             <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

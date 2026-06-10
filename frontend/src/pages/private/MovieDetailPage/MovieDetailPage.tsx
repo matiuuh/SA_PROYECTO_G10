@@ -175,6 +175,7 @@ export function MovieDetailPage() {
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
   const requestedStartSeconds = parseRequestedStart(searchParams.get('start'))
   const session = getActiveSession()
+  const isAdmin = session?.account.rol === 'administrador'
   const activeProfile = getStoredActiveProfile()
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
@@ -682,8 +683,18 @@ export function MovieDetailPage() {
           Volver
         </button>
 
+        {isAdmin && (
+          <button
+            onClick={() => navigate('/admin')}
+            className="group absolute right-4 top-6 flex items-center gap-1.5 text-sm text-[var(--color-denim-300)] transition-colors duration-200 hover:text-white sm:right-8"
+          >
+            Ir a Admin
+            <ChevronLeft size={18} strokeWidth={1.75} className="rotate-180 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </button>
+        )}
+
         <div className="absolute bottom-8 left-4 right-4 flex flex-col gap-4 sm:left-8 sm:right-8 lg:left-16 lg:right-16">
-          {!hasSubscription && !isAdminView && (
+          {!hasSubscription && !isAdmin && (
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[var(--color-denim-200)]">
               <Lock size={13} />
               Vista previa disponible. Activa un plan para reproducir completo.
@@ -726,7 +737,7 @@ export function MovieDetailPage() {
 
           {!isAdminView && (
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            {hasSubscription ? (
+            {!isAdmin && hasSubscription && (
               <>
                 {savedProgress?.progreso_segundos && savedProgress.progreso_segundos > 0 ? (
                   <>
@@ -751,7 +762,8 @@ export function MovieDetailPage() {
                   </button>
                 )}
               </>
-            ) : (
+            )}
+            {!isAdmin && !hasSubscription && (
               <Link to="/subscription/plans">
                 <Button className="gap-2">
                   <Lock size={16} />

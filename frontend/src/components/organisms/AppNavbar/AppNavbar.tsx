@@ -124,14 +124,16 @@ export function AppNavbar() {
           </Link>
 
           <div className="flex items-center gap-2">
-            <Link
-              to="/subscription/plans"
-              aria-label="Planes"
-              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-            >
-              <span className="hidden sm:inline">Planes</span>
-              <span className="sm:hidden">Plan</span>
-            </Link>
+            {session?.account.rol !== 'administrador' && (
+              <Link
+                to="/subscription/plans"
+                aria-label="Planes"
+                className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+              >
+                <span className="hidden sm:inline">Planes</span>
+                <span className="sm:hidden">Plan</span>
+              </Link>
+            )}
 
             {hasSubscription && (
               <>
