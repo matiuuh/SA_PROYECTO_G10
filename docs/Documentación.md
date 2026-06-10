@@ -34,6 +34,14 @@ Integrantes:
 - [Diagrama de secuencia](./Diagramas_Estructurales/Diagrama_Secuencia.md)
 - [Diagramas entidad relacion](./ER/DiagramasER.md)
 
+### Principios Solid
+- [Principios Solid](./Principios_Solid/Principios_Solid.md)
+
+### Justificacion de Toma de decisiones
+- [Justificacion toma de decisiones](./Justificacion/justificacion_decisiones.md)
+
+### Diagramas Estructurales, Comportamentales y Persistencia
+- [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
 ## Introducción
 
 El presente documento corresponde al Proyecto Fase 1 del curso de Software Avanzado, cuyo objetivo es el diseño y desarrollo de **Quetzal TV**, una plataforma de streaming de video bajo demanda orientada a operar en múltiples países con soporte para diferentes divisas y pasarelas de pago locales.
