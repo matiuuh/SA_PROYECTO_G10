@@ -1,30 +1,9 @@
-import path from 'path';
-import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 
-const PROTO_PATH = path.resolve('/app/proto/divisas/v1/divisas.proto');
-const DIVISAS_GRPC_TARGET = process.env['DIVISAS_GRPC_TARGET'] ?? 'divisas-service:5005';
-const BASE_CURRENCY = (process.env['BASE_CURRENCY'] ?? 'USD').toUpperCase();
-
-const packageDef = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-  includeDirs: ['/app/proto'],
-});
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const grpcObject = grpc.loadPackageDefinition(packageDef) as any;
-const DivisasService = grpcObject.divisas.v1.DivisasService as grpc.ServiceClientConstructor;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DivisasClient = any;
-
-function createClient(): DivisasClient {
-  return new DivisasService(DIVISAS_GRPC_TARGET, grpc.credentials.createInsecure());
-}
+const API_GATEWAY_URL = (process.env['API_GATEWAY_URL'] ?? 'http://localhost:4000').replace(/\/$/, '');
+const BASE_CURRENCY   = (process.env['BASE_CURRENCY'] ?? 'USD').toUpperCase();
 
 export async function convertirMontoDesdeBase(
   montoBase: number,
@@ -36,30 +15,40 @@ export async function convertirMontoDesdeBase(
     return montoBase;
   }
 
-  const client = createClient();
+  const url    = `${API_GATEWAY_URL}/api/divisas/api/v1/convertir`;
+  const body   = JSON.stringify({ monto: montoBase, moneda_origen: BASE_CURRENCY, moneda_destino: destino });
+  const parsed = new URL(url);
+  const lib    = parsed.protocol === 'https:' ? https : http;
 
-  return await new Promise<number>((resolve, reject) => {
-    client.ConvertirMonto(
+  return new Promise<number>((resolve, reject) => {
+    const req = lib.request(
       {
-        monto: montoBase,
-        moneda_origen: BASE_CURRENCY,
-        moneda_destino: destino,
+        hostname: parsed.hostname,
+        port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path:     parsed.pathname,
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
       },
-      (err: grpc.ServiceError | null, response?: { monto_convertido?: number }) => {
-        client.close();
-
-        if (err) {
-          reject(new Error(`no se pudo convertir monto con divisas: ${err.message}`));
-          return;
-        }
-
-        if (!response || response.monto_convertido == null) {
-          reject(new Error('divisas no devolvio monto_convertido'));
-          return;
-        }
-
-        resolve(response.monto_convertido);
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString()) as { monto_convertido?: number; error?: string };
+            if (data.monto_convertido == null) {
+              reject(new Error(data.error ?? 'divisas no devolvió monto_convertido'));
+              return;
+            }
+            resolve(data.monto_convertido);
+          } catch (e) {
+            reject(e);
+          }
+        });
       },
     );
+
+    req.on('error', (err) => reject(new Error(`no se pudo contactar divisas vía API Gateway: ${err.message}`)));
+    req.write(body);
+    req.end();
   });
 }

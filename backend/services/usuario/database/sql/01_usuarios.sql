@@ -37,6 +37,7 @@ CREATE TABLE usuarios.perfiles (
     nombre VARCHAR(80) NOT NULL,
     color VARCHAR(7) DEFAULT '#6D28D9',
     es_principal BOOLEAN NOT NULL DEFAULT FALSE,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     eliminado_en TIMESTAMPTZ,
@@ -161,11 +162,13 @@ SELECT
     p.nombre,
     p.color,
     p.es_principal,
+    p.activo,
     p.creado_en,
     p.actualizado_en
 FROM usuarios.perfiles p
 JOIN usuarios.cuentas c ON c.id = p.cuenta_id
 WHERE p.eliminado_en IS NULL
+  AND p.activo = TRUE
   AND c.eliminado_en IS NULL;
 
 -- =========================================================

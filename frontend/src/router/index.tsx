@@ -4,15 +4,19 @@ import { LandingPage, AuthPage, NotFoundPage } from '@/pages/public'
 import {
   PanelPage,
   SubscriptionPlansPage,
+  SubscriptionManagementPage,
   SubscriptionCheckoutPage,
   SubscriptionConfirmationPage,
   UserProfilePage,
   UserSettingsPage,
   ProfileSelectionPage,
   MovieDetailPage,
+  HistoryPage,
   AdminDashboardPage,
+  AdminCatalogPage,
   UploadMoviePage,
   UploadSeriesPage,
+  UploadSeriesEpisodesPage,
 } from '@/pages/private'
 
 export const router = createBrowserRouter([
@@ -35,10 +39,12 @@ export const router = createBrowserRouter([
       { path: '/profiles',                    element: <ProfileSelectionPage /> },
       { path: '/panel',                       element: <PanelPage /> },
       { path: '/subscription/plans',          element: <SubscriptionPlansPage /> },
+      { path: '/subscription/manage',         element: <SubscriptionManagementPage /> },
       { path: '/subscription/checkout',       element: <SubscriptionCheckoutPage /> },
       { path: '/subscription/confirmation',   element: <SubscriptionConfirmationPage /> },
       { path: '/profile',                     element: <UserProfilePage /> },
       { path: '/settings',                    element: <UserSettingsPage /> },
+      { path: '/history',                     element: <HistoryPage /> },
       { path: '/movie/:id',                   element: <MovieDetailPage /> },
     ],
   },
@@ -46,8 +52,10 @@ export const router = createBrowserRouter([
     element: <AdminLayout />,
     children: [
       { path: '/admin',               element: <AdminDashboardPage /> },
+      { path: '/admin/catalog',       element: <AdminCatalogPage /> },
       { path: '/admin/upload/movie',  element: <UploadMoviePage /> },
       { path: '/admin/upload/series', element: <UploadSeriesPage /> },
+      { path: '/admin/series/:id/episodes', element: <UploadSeriesEpisodesPage /> },
     ],
   },
   {

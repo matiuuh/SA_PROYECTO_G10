@@ -1,239 +1,180 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Film,
-  Tv2,
-  Users,
-  TrendingUp,
-  Eye,
-  Upload,
-  Star,
-  Clock,
-  ArrowUpRight,
-  PlayCircle,
-} from 'lucide-react'
-import { ScrollReveal, Button } from '@/components/atoms'
+import { Film, Info, List, Tv2, Upload } from 'lucide-react'
+import { Button, ScrollReveal } from '@/components/atoms'
+import { MediaCard } from '@/components/molecules'
+import { listCatalogContent } from '@/lib/catalogo-api'
+import type { CatalogContent } from '@/types/catalog'
 import dashboardSvg from '@/assets/Admin/dashboard.svg'
-
-interface StatCard {
-  label: string
-  value: string
-  change: string
-  positive: boolean
-  icon: React.ReactNode
-  color: string
-}
-
-interface RecentItem {
-  title: string
-  type: 'Película' | 'Serie'
-  date: string
-  status: 'Publicado' | 'Borrador' | 'En revisión'
-}
-
-const STATS: StatCard[] = [
-  {
-    label: 'Total películas',
-    value: '248',
-    change: '+12 este mes',
-    positive: true,
-    icon: <Film size={20} strokeWidth={1.5} />,
-    color: 'from-[var(--color-denim-700)] to-[var(--color-denim-900)]',
-  },
-  {
-    label: 'Total series',
-    value: '89',
-    change: '+5 este mes',
-    positive: true,
-    icon: <Tv2 size={20} strokeWidth={1.5} />,
-    color: 'from-[#1a3a5c] to-[#0d1f35]',
-  },
-  {
-    label: 'Usuarios activos',
-    value: '14,832',
-    change: '+3.2% esta semana',
-    positive: true,
-    icon: <Users size={20} strokeWidth={1.5} />,
-    color: 'from-[#1e3a2f] to-[#0d1f1a]',
-  },
-  {
-    label: 'Reproducciones hoy',
-    value: '9,410',
-    change: '-1.8% vs ayer',
-    positive: false,
-    icon: <Eye size={20} strokeWidth={1.5} />,
-    color: 'from-[#3a1e1e] to-[#1f0d0d]',
-  },
-]
-
-const RECENT: RecentItem[] = [
-  { title: 'El Último Horizonte', type: 'Película',  date: 'Hoy, 10:32',   status: 'Publicado'   },
-  { title: 'Código Rojo',         type: 'Serie',     date: 'Hoy, 08:15',   status: 'En revisión' },
-  { title: 'Sombras del Olvido',  type: 'Película',  date: 'Ayer, 22:47',  status: 'Publicado'   },
-  { title: 'Mundos Paralelos',    type: 'Serie',     date: 'Ayer, 18:03',  status: 'Borrador'    },
-  { title: 'Cazadores de Sombras',type: 'Película',  date: '06 jun, 14:20',status: 'Publicado'   },
-]
-
-const STATUS_STYLES: Record<RecentItem['status'], string> = {
-  'Publicado':   'bg-[var(--color-success)]/15 text-[var(--color-success)]',
-  'En revisión': 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]',
-  'Borrador':    'bg-white/[0.07] text-[var(--color-denim-400)]',
-}
-
-const TOP_CONTENT = [
-  { title: 'El Detective',       views: '32,840', rating: 8.5, type: 'Película' },
-  { title: 'Mundos Paralelos',   views: '28,190', rating: 8.1, type: 'Serie'    },
-  { title: 'Cazadores',          views: '24,530', rating: 8.3, type: 'Serie'    },
-  { title: 'Amor en París',      views: '21,760', rating: 7.3, type: 'Película' },
-]
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
+  const [catalog, setCatalog] = useState<CatalogContent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        const contents = await listCatalogContent()
+        setCatalog(contents)
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'No se pudo cargar el catalogo administrativo.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    void loadCatalog()
+  }, [])
+
+  const stats = useMemo(() => {
+    const movies = catalog.filter((item) => item.tipo === 'pelicula')
+    const series = catalog.filter((item) => item.tipo === 'serie')
+
+    return {
+      total: catalog.length,
+      movies: movies.length,
+      series: series.length,
+      latest: [...catalog]
+        .sort((a, b) => {
+          const left = a.fecha_lanzamiento ? new Date(a.fecha_lanzamiento).getTime() : 0
+          const right = b.fecha_lanzamiento ? new Date(b.fecha_lanzamiento).getTime() : 0
+          return right - left
+        })
+        .slice(0, 4),
+    }
+  }, [catalog])
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
-
       <ScrollReveal variant="fade-up">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-white">Bienvenido de nuevo</h2>
+            <h2 className="text-2xl font-bold text-white">Panel administrativo</h2>
             <p className="text-sm text-[var(--color-denim-400)] mt-0.5">
-              Gestiona el contenido de la plataforma desde aquí.
+              Desde aqui puedes registrar contenido nuevo y revisar la cartelera real de la plataforma.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => navigate('/admin/upload/series')}>
               <Tv2 size={14} />
-              Nueva serie
+              Subir serie
             </Button>
             <Button size="sm" onClick={() => navigate('/admin/upload/movie')}>
               <Film size={14} />
-              Nueva película
+              Subir pelicula
             </Button>
           </div>
         </div>
       </ScrollReveal>
 
-      <ScrollReveal variant="fade-up" delay={60}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-          {STATS.map((stat) => (
-            <div
-              key={stat.label}
-              className="relative rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5 overflow-hidden group hover:border-white/[0.12] transition-colors duration-200"
-            >
-              <div className={`absolute top-0 right-0 w-24 h-24 rounded-bl-full bg-gradient-to-br ${stat.color} opacity-25`} />
-              <div className="relative z-10">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-[var(--color-denim-500)]">{stat.icon}</span>
-                  <ArrowUpRight size={14} className="text-[var(--color-denim-700)] group-hover:text-[var(--color-denim-400)] transition-colors" />
-                </div>
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-[var(--color-denim-400)] mt-0.5">{stat.label}</p>
-                <p className={`text-xs mt-2 font-medium ${stat.positive ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
-                  {stat.change}
-                </p>
-              </div>
+      <ScrollReveal variant="fade-up" delay={40}>
+        <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 p-5 mb-8">
+          <div className="flex items-start gap-3">
+            <Info size={18} className="text-[var(--color-denim-300)] shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-white">Vista sincronizada con backend</p>
+              <p className="text-sm text-[var(--color-denim-300)] mt-1">
+                Este dashboard ya no muestra usuarios, reproducciones ni rankings simulados. Solo presenta acciones y
+                datos que hoy existen en el backend del catalogo.
+              </p>
             </div>
-          ))}
+          </div>
         </div>
       </ScrollReveal>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <ScrollReveal variant="fade-up" delay={80}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+            <p className="text-sm text-[var(--color-denim-400)]">Contenido total</p>
+            <p className="mt-2 text-3xl font-bold text-white">{stats.total}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+            <p className="text-sm text-[var(--color-denim-400)]">Peliculas</p>
+            <p className="mt-2 text-3xl font-bold text-white">{stats.movies}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+            <p className="text-sm text-[var(--color-denim-400)]">Series</p>
+            <p className="mt-2 text-3xl font-bold text-white">{stats.series}</p>
+          </div>
+        </div>
+      </ScrollReveal>
 
-        <ScrollReveal variant="fade-up" delay={100} className="xl:col-span-2">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6 mb-8">
+        <ScrollReveal variant="fade-up" delay={120}>
           <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                <Clock size={15} className="text-[var(--color-denim-500)]" />
-                <h3 className="text-sm font-semibold text-white">Contenido reciente</h3>
+                <List size={15} className="text-[var(--color-denim-500)]" />
+                <h3 className="text-sm font-semibold text-white">Contenido reciente del catalogo</h3>
               </div>
-              <button className="text-xs text-[var(--color-denim-400)] hover:text-white transition-colors">
-                Ver todo
-              </button>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/admin/catalog')}>
+                Ver catalogo
+              </Button>
             </div>
-            <div className="divide-y divide-white/[0.04]">
-              {RECENT.map((item) => (
-                <div key={item.title} className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-denim-900)]/60 flex items-center justify-center shrink-0">
-                    {item.type === 'Película'
-                      ? <Film size={14} className="text-[var(--color-denim-400)]" />
-                      : <Tv2 size={14} className="text-[var(--color-denim-400)]" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{item.title}</p>
-                    <p className="text-xs text-[var(--color-denim-500)]">{item.type} · {item.date}</p>
-                  </div>
-                  <span className={`shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[item.status]}`}>
-                    {item.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+
+            {isLoading ? (
+              <div className="flex min-h-[240px] items-center justify-center text-white">
+                Cargando contenido...
+              </div>
+            ) : errorMessage ? (
+              <div className="px-5 py-6 text-sm text-red-300">{errorMessage}</div>
+            ) : stats.latest.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-lg font-semibold text-white">Todavia no hay contenido registrado.</p>
+                <p className="mt-2 text-sm text-[var(--color-denim-400)]">
+                  Usa los botones de arriba para publicar la primera pelicula o serie.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
+                {stats.latest.map((item) => (
+                  <MediaCard
+                    key={item.id}
+                    title={item.titulo}
+                    genre={item.tipo === 'serie' ? 'Serie' : 'Pelicula'}
+                    year={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) : new Date().getFullYear()}
+                    rating={Math.max(0, Math.min(10, item.porcentaje_recomendacion / 10))}
+                    posterUrl={item.url_portada}
+                    isNew={item.fecha_lanzamiento ? Number(item.fecha_lanzamiento.slice(0, 4)) >= new Date().getFullYear() - 1 : false}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </ScrollReveal>
 
-        <ScrollReveal variant="fade-up" delay={140}>
-          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden h-full flex flex-col">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/[0.06]">
-              <TrendingUp size={15} className="text-[var(--color-denim-500)]" />
-              <h3 className="text-sm font-semibold text-white">Top contenido</h3>
-            </div>
-            <div className="flex-1 divide-y divide-white/[0.04]">
-              {TOP_CONTENT.map((item, i) => (
-                <div key={item.title} className="flex items-center gap-3 px-5 py-3.5">
-                  <span className="text-xs font-bold text-[var(--color-denim-700)] w-4 text-center shrink-0">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{item.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="flex items-center gap-1 text-[11px] text-[var(--color-denim-400)]">
-                        <PlayCircle size={11} />
-                        {item.views}
-                      </span>
-                      <span className="flex items-center gap-1 text-[11px] text-[var(--color-warning)]">
-                        <Star size={10} fill="currentColor" />
-                        {item.rating}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-[var(--color-denim-600)] shrink-0">{item.type}</span>
+        <ScrollReveal variant="fade-up" delay={160}>
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden h-full">
+            <div className="flex flex-col md:flex-row items-center gap-6 px-6 py-6 h-full">
+              <div className="flex-1">
+                <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-500)] mb-1">
+                  Acciones disponibles
+                </p>
+                <h3 className="text-xl font-bold text-white mb-2">Registrar contenido nuevo</h3>
+                <p className="text-sm text-[var(--color-denim-400)] mb-5">
+                  El backend actual permite registrar peliculas y la ficha general de series. Las demas funciones
+                  administrativas se iran activando cuando existan endpoints reales.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={() => navigate('/admin/upload/movie')}>
+                    <Upload size={15} />
+                    Subir pelicula
+                  </Button>
+                  <Button variant="outline" onClick={() => navigate('/admin/upload/series')}>
+                    <Upload size={15} />
+                    Subir serie
+                  </Button>
                 </div>
-              ))}
+              </div>
+              <div className="w-full md:w-64 shrink-0 opacity-80">
+                <img src={dashboardSvg} alt="Dashboard illustration" className="w-full h-auto" />
+              </div>
             </div>
           </div>
         </ScrollReveal>
       </div>
-
-      <ScrollReveal variant="fade-up" delay={180}>
-        <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden">
-          <div className="flex flex-col md:flex-row items-center gap-6 px-6 py-6">
-            <div className="flex-1">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-500)] mb-1">
-                Acciones rápidas
-              </p>
-              <h3 className="text-xl font-bold text-white mb-2">Agrega nuevo contenido</h3>
-              <p className="text-sm text-[var(--color-denim-400)] mb-5 max-w-md">
-                Sube películas o series al catálogo. Completa el formulario con metadatos, géneros, reparto y el archivo multimedia.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => navigate('/admin/upload/movie')}>
-                  <Upload size={15} />
-                  Subir película
-                </Button>
-                <Button variant="outline" onClick={() => navigate('/admin/upload/series')}>
-                  <Upload size={15} />
-                  Subir serie
-                </Button>
-              </div>
-            </div>
-            <div className="w-full md:w-72 shrink-0 opacity-80">
-              <img src={dashboardSvg} alt="Dashboard illustration" className="w-full h-auto" />
-            </div>
-          </div>
-        </div>
-      </ScrollReveal>
-
     </div>
   )
 }

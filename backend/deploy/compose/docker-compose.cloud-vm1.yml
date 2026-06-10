@@ -1,0 +1,100 @@
+name: quetzaltv-vm1
+
+# ─── VM1: Usuarios · Suscripción · Catálogo ───────────────────────────────────
+#
+#   Esta VM no aloja bases de datos ni Redis.
+#   Las BDs viven en VM3 y se alcanzan por IP interna de GCP.
+#   Los servicios de VM2 (divisas, notificaciones) se alcanzan por VM2_HOST.
+#
+#   Variables de entorno requeridas en .env de esta VM:
+#     DB_VM3_HOST   — IP interna de VM3
+#     VM2_HOST      — IP interna de VM2
+#     VM4_HOST      — IP interna/pública de VM4 (api-gateway)
+#     DB_PASSWORD   — contraseña compartida de postgres
+#     JWT_SECRET    — clave de firma JWT
+#
+#   Levantar:  docker compose -f docker-compose.cloud-vm1.yml up --build -d
+#   Detener:   docker compose -f docker-compose.cloud-vm1.yml down
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # USUARIO  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  usuario-service:
+    build:
+      context: ../../services/usuario
+      dockerfile: Dockerfile
+    container_name: quetzal-usuario-service
+    restart: unless-stopped
+    environment:
+      APP_NAME: usuario-service
+      APP_ENV: production
+      APP_PORT: 8001
+      GRPC_PORT: 5001
+      NOTIFICATIONS_ENABLED: "true"
+      API_GATEWAY_URL: http://${VM4_HOST}:80
+      NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
+      STORAGE_BACKEND: postgres
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      DB_HOST: ${DB_VM3_HOST}
+      DB_PORT: 5437
+      DB_NAME: quetzal_usuario
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8001:8001"
+      - "5001:5001"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SUSCRIPCIÓN  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  suscripcion-service:
+    build:
+      context: ../../services/suscripcion
+      dockerfile: Dockerfile
+    container_name: quetzal-suscripcion-service
+    restart: unless-stopped
+    environment:
+      APP_NAME: suscripcion-service
+      APP_ENV: production
+      APP_PORT: 8002
+      GRPC_PORT: 5002
+      API_GATEWAY_URL: http://${VM4_HOST}:80
+      CONVERSION_TIMEOUT_SECONDS: 3.0
+      JWT_SECRET: ${JWT_SECRET}
+      DB_HOST: ${DB_VM3_HOST}
+      DB_PORT: 5438
+      DB_NAME: quetzal_suscripcion
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8002:8002"
+      - "5002:5002"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # CATÁLOGO  (Go · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  catalogo-service:
+    build:
+      context: ../..
+      dockerfile: services/catalogo/Dockerfile
+    container_name: quetzal-catalogo-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5433/quetzal_catalogo?sslmode=disable
+      GRPC_PORT: 5003
+      HTTP_PORT: 8003
+      JWT_SECRET: ${JWT_SECRET}
+      SUBSCRIPCION_API_URL: http://${VM4_HOST}:80/api/suscripcion
+      USUARIO_API_URL: http://${VM4_HOST}:80/api/usuario
+      API_GATEWAY_URL: http://${VM4_HOST}:80
+      NOTIFICACIONES_GRPC_TARGET: ${VM2_HOST}:5007
+    ports:
+      - "5003:5003"
+      - "8003:8003"

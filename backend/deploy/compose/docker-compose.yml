@@ -1,19 +1,52 @@
+name: quetzaltv-deploy
+
+# ─── Estructura ───────────────────────────────────────────────────────────────
+#   Un único postgres corre el script 00-create-multiple-dbs.sh que:
+#     1. Crea todas las bases de datos
+#     2. Ejecuta los SQL de esquema y seed de cada servicio
+#   Los archivos .sql se montan en /init-scripts/ con los nombres que ya
+#   espera el script de inicialización.
+#
+#   Servicio               REST    gRPC    DB
+#   ──────────────────────────────────────────────────────────
+#   usuario-service        :8001   :5001   quetzal_usuario
+#   suscripcion-service    :8002   :5002   quetzal_suscripcion
+#   catalogo-service       :8003   :5003   quetzal_catalogo
+#   streaming-service      :8004   :5004   quetzal_streaming
+#   divisas-service         —      :5005   quetzal_divisas
+#   notificaciones-service  —      :5007   quetzal_notificaciones
+#   cobros-service         :8006   :5006   quetzal_cobros
+#   redis                   —       —      :6379
+#   postgres                —       —      :5432
+#
+# Levantar todo:       docker compose -f docker-compose.yml up --build -d
+# Solo un servicio:    docker compose -f docker-compose.yml up --build usuario-service
+# Ver logs:            docker compose -f docker-compose.yml logs -f
+# Reset completo:      docker compose -f docker-compose.yml down -v
+
 services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # INFRAESTRUCTURA COMPARTIDA
+  # ════════════════════════════════════════════════════════════════════════════
+
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: quetzal-postgres-local
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: quetzal_dev
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
+      # Script principal de inicialización
       - ./init/00-create-multiple-dbs.sh:/docker-entrypoint-initdb.d/00-create-multiple-dbs.sh:ro
+      # SQL montados con los nombres que espera el script
       - ../../services/usuario/database/sql/01_usuarios.sql:/init-scripts/10-usuarios.sql:ro
+      - ../../services/usuario/database/seed/01_admin_seed.sql:/init-scripts/11-usuarios-seed-admin.sql:ro
       - ../../services/suscripcion/database/sql/04_suscripciones.sql:/init-scripts/20-suscripciones.sql:ro
+      - ../../services/suscripcion/database/seed/01_planes_seed.sql:/init-scripts/21-suscripciones-seed-planes.sql:ro
       - ../../services/catalogo/database/sql/01_schema.sql:/init-scripts/30-catalogo-schema.sql:ro
       - ../../services/catalogo/database/sql/02_procedures.sql:/init-scripts/31-catalogo-procedures.sql:ro
       - ../../services/streaming/database/sql/01_schema.sql:/init-scripts/40-streaming-schema.sql:ro
@@ -22,11 +55,13 @@ services:
       - ../../services/divisas/database/sql/02_procedures.sql:/init-scripts/46-divisas-procedures.sql:ro
       - ../../services/notificaciones/database/sql/01_schema.sql:/init-scripts/47-notificaciones-schema.sql:ro
       - ../../services/cobros/database/sql/01_schema.sql:/init-scripts/50-cobros-schema.sql:ro
+    ports:
+      - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quetzal_dev"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -42,6 +77,10 @@ services:
       timeout: 5s
       retries: 5
 
+  # ════════════════════════════════════════════════════════════════════════════
+  # USUARIO  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
   usuario-service:
     build:
       context: ../../services/usuario
@@ -53,6 +92,9 @@ services:
       APP_ENV: development
       APP_PORT: 8001
       GRPC_PORT: 5001
+      NOTIFICATIONS_ENABLED: "true"
+      API_GATEWAY_URL: http://api-gateway:4000
+      NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
       STORAGE_BACKEND: postgres
       JWT_SECRET: change-me-local
       JWT_ALGORITHM: HS256
@@ -73,6 +115,10 @@ services:
       redis:
         condition: service_healthy
 
+  # ════════════════════════════════════════════════════════════════════════════
+  # SUSCRIPCIÓN  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
   suscripcion-service:
     build:
       context: ../../services/suscripcion
@@ -84,6 +130,9 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 5002
+      API_GATEWAY_URL: http://api-gateway:4000
+      CONVERSION_TIMEOUT_SECONDS: 3.0
+      JWT_SECRET: change-me-local
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: quetzal_suscripcion
@@ -96,6 +145,10 @@ services:
       postgres:
         condition: service_healthy
 
+  # ════════════════════════════════════════════════════════════════════════════
+  # CATÁLOGO  (Go · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
   catalogo-service:
     build:
       context: ../..
@@ -103,13 +156,23 @@ services:
     container_name: quetzal-catalogo-service-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_catalogo
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_catalogo?sslmode=disable
       GRPC_PORT: 5003
+      HTTP_PORT: 8003
+      JWT_SECRET: change-me-local
+      SUBSCRIPCION_API_URL: http://api-gateway:4000/api/suscripcion
+      USUARIO_API_URL: http://api-gateway:4000/api/usuario
+      API_GATEWAY_URL: http://api-gateway:4000
     ports:
       - "5003:5003"
+      - "8003:8003"
     depends_on:
       postgres:
         condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STREAMING  (Go · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
 
   streaming-service:
     build:
@@ -118,13 +181,19 @@ services:
     container_name: quetzal-streaming-service-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming?sslmode=disable
       GRPC_PORT: 5004
+      HTTP_PORT: 8004
     ports:
       - "5004:5004"
+      - "8004:8004"
     depends_on:
       postgres:
         condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # DIVISAS  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
 
   divisas-service:
     build:
@@ -133,16 +202,22 @@ services:
     container_name: quetzal-divisas-service-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_divisas
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_divisas?sslmode=disable
       REDIS_URL: redis://redis:6379
       GRPC_PORT: 5005
+      HTTP_PORT: 8005
     ports:
       - "5005:5005"
+      - "8005:8005"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NOTIFICACIONES  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
 
   notificaciones-service:
     build:
@@ -153,13 +228,19 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_notificaciones
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_notificaciones?sslmode=disable
       GRPC_PORT: 5007
+      HTTP_PORT: 8007
     ports:
       - "5007:5007"
+      - "8007:8007"
     depends_on:
       postgres:
         condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # COBROS  (TypeScript · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
 
   cobros-service:
     build:
@@ -168,14 +249,15 @@ services:
     container_name: quetzal-cobros-service-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_cobros
-      DIVISAS_GRPC_TARGET: divisas-service:5005
-      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_cobros?sslmode=disable
+      API_GATEWAY_URL: http://api-gateway:4000
       DEFAULT_NOTIFICATION_USER_NAME: Usuario
       BASE_CURRENCY: USD
       GRPC_PORT: 5006
+      HTTP_PORT: 8006
     ports:
       - "5006:5006"
+      - "8006:8006"
     depends_on:
       postgres:
         condition: service_healthy
@@ -184,6 +266,40 @@ services:
       notificaciones-service:
         condition: service_started
 
+  # ════════════════════════════════════════════════════════════════════════════
+  # API GATEWAY  (Node.js/TypeScript — proxy + validación JWT)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  api-gateway:
+    build:
+      context: ../../api-gateway
+      dockerfile: Dockerfile
+    container_name: quetzal-api-gateway-local
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      JWT_SECRET: change-me-local
+      # Sin FRONTEND_URL en local — el frontend corre con pnpm dev por separado
+      USUARIO_SERVICE_URL:        http://usuario-service:8001
+      SUSCRIPCION_SERVICE_URL:    http://suscripcion-service:8002
+      CATALOGO_SERVICE_URL:       http://catalogo-service:8003
+      STREAMING_SERVICE_URL:      http://streaming-service:8004
+      COBROS_SERVICE_URL:         http://cobros-service:8006
+      DIVISAS_SERVICE_URL:        http://divisas-service:8005
+      NOTIFICACIONES_SERVICE_URL: http://notificaciones-service:8007
+    ports:
+      - "4000:4000"
+    depends_on:
+      - usuario-service
+      - suscripcion-service
+      - catalogo-service
+      - streaming-service
+      - cobros-service
+
+# ════════════════════════════════════════════════════════════════════════════
+# VOLÚMENES
+# ════════════════════════════════════════════════════════════════════════════
+
 volumes:
-  postgres_data:
+  pg_data:
   redis_data:

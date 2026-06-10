@@ -1,37 +1,97 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
-import { Button, Logo } from '@/components/atoms'
-import LoginIllustration  from '@/assets/Auth/Login.svg'
+import { Button, Logo, Select } from '@/components/atoms'
+import LoginIllustration from '@/assets/Auth/Login.svg'
 import RegisterIllustration from '@/assets/Auth/Register.svg'
+import { storeSession } from '@/lib/auth'
+import { loginUser, registerUser } from '@/lib/usuario-api'
+import type { AuthResponse } from '@/types/auth'
+import type { SelectOption } from '@/components/atoms'
 
 type Mode = 'login' | 'register'
+
+type AuthLocationState = {
+  from?: string
+}
 
 const inputClass =
   'w-full px-4 py-2.5 rounded-lg bg-[#111827] border border-white/[0.08] text-white placeholder:text-[var(--color-denim-600)] focus:outline-none focus:border-[var(--color-denim-500)] transition-colors text-sm'
 
+const COUNTRY_OPTIONS: SelectOption[] = [
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Bolivia', label: 'Bolivia' },
+  { value: 'Brasil', label: 'Brasil' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Costa Rica', label: 'Costa Rica' },
+  { value: 'Cuba', label: 'Cuba' },
+  { value: 'Ecuador', label: 'Ecuador' },
+  { value: 'El Salvador', label: 'El Salvador' },
+  { value: 'Espana', label: 'Espana' },
+  { value: 'Estados Unidos', label: 'Estados Unidos' },
+  { value: 'Guatemala', label: 'Guatemala' },
+  { value: 'Honduras', label: 'Honduras' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Nicaragua', label: 'Nicaragua' },
+  { value: 'Panama', label: 'Panama' },
+  { value: 'Paraguay', label: 'Paraguay' },
+  { value: 'Peru', label: 'Peru' },
+  { value: 'Puerto Rico', label: 'Puerto Rico' },
+  { value: 'Republica Dominicana', label: 'Republica Dominicana' },
+  { value: 'Uruguay', label: 'Uruguay' },
+  { value: 'Venezuela', label: 'Venezuela' },
+]
+
+function toSession(auth: AuthResponse) {
+  return {
+    accessToken: auth.access_token,
+    tokenType: auth.token_type,
+    expiresAt: auth.expires_at,
+    account: auth.account,
+  }
+}
+
+function getHomeRouteByRole(role: string): string {
+  return role === 'administrador' ? '/admin' : '/panel'
+}
+
 export function AuthPage() {
   const location = useLocation()
-  const navigate  = useNavigate()
+  const navigate = useNavigate()
+  const locationState = (location.state ?? {}) as AuthLocationState
 
-  const [mode, setMode]               = useState<Mode>(location.pathname === '/register' ? 'register' : 'login')
-  const [sliding, setSliding]         = useState(false)
+  const [mode, setMode] = useState<Mode>(location.pathname === '/register' ? 'register' : 'login')
+  const [sliding, setSliding] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [loginError, setLoginError] = useState('')
+  const [registerError, setRegisterError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [registerForm, setRegisterForm] = useState({
-    name: '', email: '', password: '', confirmPassword: '',
+    name: '',
+    email: '',
+    country: '',
+    password: '',
+    confirmPassword: '',
   })
 
   useEffect(() => {
     const target: Mode = location.pathname === '/register' ? 'register' : 'login'
     if (target !== mode) switchMode(target)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname])
 
   function switchMode(target?: Mode) {
     const next = target ?? (mode === 'login' ? 'register' : 'login')
     if (next === mode || sliding) return
+
+    setLoginError('')
+    setRegisterError('')
     setSliding(true)
+
     setTimeout(() => {
       setMode(next)
       setSliding(false)
@@ -39,17 +99,63 @@ export function AuthPage() {
     }, 350)
   }
 
-  function handleLoginSubmit(e: React.FormEvent) {
+  async function handleLoginSubmit(e: React.FormEvent) {
     e.preventDefault()
-    navigate('/panel')
+    setIsSubmitting(true)
+    setLoginError('')
+
+    try {
+      const auth = await loginUser({
+        correo: loginForm.email.trim(),
+        contrasena: loginForm.password,
+      })
+
+      const session = toSession(auth)
+      storeSession(session)
+      const target = locationState.from ?? getHomeRouteByRole(session.account.rol)
+      navigate(target, { replace: true })
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'No se pudo iniciar sesion.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function handleRegisterSubmit(e: React.FormEvent) {
+  async function handleRegisterSubmit(e: React.FormEvent) {
     e.preventDefault()
-    navigate('/panel')
+    setRegisterError('')
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setRegisterError('Las contrasenas no coinciden.')
+      return
+    }
+
+    if (!registerForm.country) {
+      setRegisterError('Debes seleccionar un pais.')
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const auth = await registerUser({
+        nombre: registerForm.name.trim(),
+        correo: registerForm.email.trim(),
+        contrasena: registerForm.password,
+        pais: registerForm.country.trim(),
+      })
+
+      const session = toSession(auth)
+      storeSession(session)
+      navigate(getHomeRouteByRole(session.account.rol), { replace: true })
+    } catch (error) {
+      setRegisterError(error instanceof Error ? error.message : 'No se pudo crear la cuenta.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const isLogin    = mode === 'login'
+  const isLogin = mode === 'login'
   const panelOrder = isLogin ? 'flex-row' : 'flex-row-reverse'
 
   return (
@@ -71,7 +177,6 @@ export function AuthPage() {
           className={`flex ${panelOrder} rounded-2xl overflow-hidden shadow-2xl shadow-black/60 border border-white/[0.07] transition-all duration-500`}
           style={{ minHeight: 540 }}
         >
-          {/* ── Illustration panel ── */}
           <div
             className="hidden md:flex flex-col items-center justify-center w-1/2 relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #0d1a35 0%, #0a1628 100%)' }}
@@ -95,18 +200,17 @@ export function AuthPage() {
               />
               <div className="text-center">
                 <h2 className="text-xl font-bold text-white mb-2">
-                  {isLogin ? '¡Bienvenido de nuevo!' : '¡Únete hoy!'}
+                  {isLogin ? 'Bienvenido de nuevo' : 'Unete hoy'}
                 </h2>
                 <p className="text-sm text-[var(--color-denim-300)] leading-relaxed max-w-xs">
                   {isLogin
                     ? 'Accede a todo tu contenido favorito en un solo lugar.'
-                    : 'Crea tu cuenta gratis y empieza a disfrutar sin límites.'}
+                    : 'Crea tu cuenta gratis y empieza a disfrutar sin limites.'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* ── Form panel ── */}
           <div className="flex-1 bg-[#0d1220] flex flex-col justify-center px-8 py-10 md:px-12">
             <div
               className={`transition-all duration-350 ${
@@ -115,22 +219,22 @@ export function AuthPage() {
             >
               {isLogin ? (
                 <>
-                  <h1 className="text-2xl font-bold text-white mb-1">Iniciar sesión</h1>
+                  <h1 className="text-2xl font-bold text-white mb-1">Iniciar sesion</h1>
                   <p className="text-sm text-[var(--color-denim-300)] mb-8">
-                    Continúa disfrutando tu contenido favorito.
+                    Continua disfrutando tu contenido favorito.
                   </p>
 
                   <form onSubmit={handleLoginSubmit} className="flex flex-col gap-5">
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="login-email" className="text-sm font-medium text-[var(--color-denim-200)]">
-                        Correo electrónico
+                        Correo electronico
                       </label>
                       <input
                         id="login-email"
                         type="email"
                         required
                         value={loginForm.email}
-                        onChange={(e) => setLoginForm((p) => ({ ...p, email: e.target.value }))}
+                        onChange={(e) => setLoginForm((prev) => ({ ...prev, email: e.target.value }))}
                         placeholder="tu@email.com"
                         className={inputClass}
                       />
@@ -139,36 +243,39 @@ export function AuthPage() {
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
                         <label htmlFor="login-password" className="text-sm font-medium text-[var(--color-denim-200)]">
-                          Contraseña
+                          Contrasena
                         </label>
-                        <Link to="#" className="text-xs text-[var(--color-denim-400)] hover:text-white transition-colors">
-                          ¿Olvidaste tu contraseña?
-                        </Link>
                       </div>
                       <input
                         id="login-password"
                         type="password"
                         required
                         value={loginForm.password}
-                        onChange={(e) => setLoginForm((p) => ({ ...p, password: e.target.value }))}
+                        onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
                         placeholder="••••••••"
                         className={inputClass}
                       />
                     </div>
 
-                    <Button type="submit" variant="primary" size="md" className="w-full mt-1">
-                      Iniciar sesión
+                    {loginError && (
+                      <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                        {loginError}
+                      </p>
+                    )}
+
+                    <Button type="submit" variant="primary" size="md" className="w-full mt-1" disabled={isSubmitting}>
+                      {isSubmitting ? 'Iniciando sesion...' : 'Iniciar sesion'}
                     </Button>
                   </form>
 
                   <p className="text-center text-sm text-[var(--color-denim-400)] mt-6">
-                    ¿No tienes cuenta?{' '}
+                    No tienes cuenta?{' '}
                     <button
                       type="button"
                       onClick={() => switchMode('register')}
                       className="text-[var(--color-denim-300)] hover:text-white transition-colors font-medium"
                     >
-                      Regístrate gratis
+                      Registrate gratis
                     </button>
                   </p>
                 </>
@@ -176,7 +283,7 @@ export function AuthPage() {
                 <>
                   <h1 className="text-2xl font-bold text-white mb-1">Crea tu cuenta</h1>
                   <p className="text-sm text-[var(--color-denim-400)] mb-6">
-                    Empieza gratis. Sin tarjeta de crédito.
+                    Empieza gratis. Sin tarjeta de credito.
                   </p>
 
                   <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4">
@@ -190,15 +297,15 @@ export function AuthPage() {
                         type="text"
                         required
                         value={registerForm.name}
-                        onChange={(e) => setRegisterForm((p) => ({ ...p, name: e.target.value }))}
-                        placeholder="Juan García"
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Juan Garcia"
                         className={inputClass}
                       />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="reg-email" className="text-sm font-medium text-[var(--color-denim-200)]">
-                        Correo electrónico
+                        Correo electronico
                       </label>
                       <input
                         id="reg-email"
@@ -206,15 +313,28 @@ export function AuthPage() {
                         type="email"
                         required
                         value={registerForm.email}
-                        onChange={(e) => setRegisterForm((p) => ({ ...p, email: e.target.value }))}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
                         placeholder="tu@email.com"
                         className={inputClass}
                       />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
+                      <label htmlFor="reg-country" className="text-sm font-medium text-[var(--color-denim-200)]">
+                        Pais
+                      </label>
+                      <Select
+                        value={registerForm.country}
+                        onChange={(value) => setRegisterForm((prev) => ({ ...prev, country: value }))}
+                        options={COUNTRY_OPTIONS}
+                        placeholder="Selecciona tu pais"
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
                       <label htmlFor="reg-password" className="text-sm font-medium text-[var(--color-denim-200)]">
-                        Contraseña
+                        Contrasena
                       </label>
                       <div className="relative">
                         <input
@@ -224,8 +344,8 @@ export function AuthPage() {
                           required
                           minLength={8}
                           value={registerForm.password}
-                          onChange={(e) => setRegisterForm((p) => ({ ...p, password: e.target.value }))}
-                          placeholder="Mínimo 8 caracteres"
+                          onChange={(e) => setRegisterForm((prev) => ({ ...prev, password: e.target.value }))}
+                          placeholder="Minimo 8 caracteres"
                           className={`${inputClass} pr-11`}
                         />
                         <button
@@ -241,7 +361,7 @@ export function AuthPage() {
 
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="reg-confirm" className="text-sm font-medium text-[var(--color-denim-200)]">
-                        Confirmar contraseña
+                        Confirmar contrasena
                       </label>
                       <input
                         id="reg-confirm"
@@ -249,36 +369,31 @@ export function AuthPage() {
                         type={showPassword ? 'text' : 'password'}
                         required
                         value={registerForm.confirmPassword}
-                        onChange={(e) => setRegisterForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                        placeholder="Repite tu contraseña"
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                        placeholder="Repite tu contrasena"
                         className={inputClass}
                       />
                     </div>
 
-                    <p className="text-xs text-[var(--color-denim-500)] leading-relaxed">
-                      Al registrarte aceptas nuestros{' '}
-                      <Link to="#" className="text-[var(--color-denim-400)] hover:text-white transition-colors underline underline-offset-2">
-                        Términos de servicio
-                      </Link>{' '}
-                      y{' '}
-                      <Link to="#" className="text-[var(--color-denim-400)] hover:text-white transition-colors underline underline-offset-2">
-                        Política de privacidad
-                      </Link>.
-                    </p>
+                    {registerError && (
+                      <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                        {registerError}
+                      </p>
+                    )}
 
-                    <Button type="submit" variant="primary" size="md" className="w-full mt-1">
-                      Crear cuenta gratis
+                    <Button type="submit" variant="primary" size="md" className="w-full mt-1" disabled={isSubmitting}>
+                      {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta gratis'}
                     </Button>
                   </form>
 
                   <p className="text-center text-sm text-[var(--color-denim-500)] mt-6">
-                    ¿Ya tienes cuenta?{' '}
+                    Ya tienes cuenta?{' '}
                     <button
                       type="button"
                       onClick={() => switchMode('login')}
                       className="text-[var(--color-denim-300)] hover:text-white transition-colors font-medium"
                     >
-                      Iniciar sesión
+                      Iniciar sesion
                     </button>
                   </p>
                 </>

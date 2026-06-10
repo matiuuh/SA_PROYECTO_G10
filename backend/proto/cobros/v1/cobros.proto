@@ -57,6 +57,8 @@ message ProcesarPagoRequest {
   double        monto_base     = 5;
   string        moneda_local   = 6;
   string        correo_destino = 7;
+  string        nombre_usuario = 8;
+  string        descripcion_plan = 9;
 }
 
 message ProcesarPagoResponse {

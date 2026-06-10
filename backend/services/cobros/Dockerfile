@@ -30,5 +30,6 @@ RUN pnpm install --ignore-scripts --prod
 COPY proto /app/proto
 
 EXPOSE 5006
+EXPOSE 8006
 
 CMD ["node", "dist/server.js"]

@@ -51,8 +51,8 @@ async function handleEnviarRecibo(call: AnyCall, callback: AnyCallback): Promise
       moneda: string;
       fecha: string;
     };
-    if (!req.correo_destino || !req.id_transaccion) {
-      grpcError(callback, grpcStatus.INVALID_ARGUMENT, 'correo_destino e id_transaccion son requeridos');
+    if (!req.id_transaccion) {
+      grpcError(callback, grpcStatus.INVALID_ARGUMENT, 'id_transaccion es requerido');
       return;
     }
     const result = await enviarRecibo(req);

@@ -5,6 +5,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -12,17 +13,19 @@ import (
 
 	"quetzaltv/services/catalogo/internal/application"
 	"quetzaltv/services/catalogo/internal/domain"
+	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
 	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 )
 
 // Handler implementa catalogov1.CatalogoServiceServer.
 type Handler struct {
 	catalogov1.UnimplementedCatalogoServiceServer
-	svc *application.CatalogoService
+	svc    *application.CatalogoService
+	alerts *alerts.Dispatcher
 }
 
-func NewHandler(svc *application.CatalogoService) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher) *Handler {
+	return &Handler{svc: svc, alerts: dispatcher}
 }
 
 // ─── Lectura ──────────────────────────────────────────────────────────────────
@@ -139,6 +142,7 @@ func (h *Handler) CrearContenido(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	c.ID = id
+	h.dispatchNewContentAlert(c)
 	return toProtoContent(*c), nil
 }
 
@@ -264,4 +268,20 @@ func protoToReaction(r catalogov1.TipoReaccion) domain.ReactionType {
 		return domain.ReactionLike
 	}
 	return domain.ReactionDislike
+}
+
+func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
+	if h.alerts == nil || content == nil {
+		return
+	}
+
+	contentCopy := *content
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		if err := h.alerts.DispatchNewContentAlert(ctx, contentCopy); err != nil {
+			log.Printf("[catalogo] fallo al despachar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
+		}
+	}()
 }

@@ -8,10 +8,13 @@ export interface Profile {
   avatarUrl?: string
   color: string
   isKids?: boolean
+  isPrimary?: boolean
+  isEnabled?: boolean
 }
 
 interface ProfileSelectorProps {
   profiles: Profile[]
+  activeProfileId?: string | null
   maxProfiles?: number
   onSelectProfile: (profileId: string) => void
   onAddProfile?: () => void
@@ -20,6 +23,7 @@ interface ProfileSelectorProps {
 
 export function ProfileSelector({
   profiles,
+  activeProfileId = null,
   maxProfiles = 5,
   onSelectProfile,
   onAddProfile,
@@ -31,7 +35,7 @@ export function ProfileSelector({
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
       <div className="text-center mb-12">
-        <h1 className="text-5xl font-bold text-white mb-4">¿Quién está viendo?</h1>
+        <h1 className="text-5xl font-bold text-white mb-4">Quien esta viendo?</h1>
         <p className="text-xl text-[var(--color-denim-400)]">
           Selecciona tu perfil para continuar
         </p>
@@ -42,11 +46,13 @@ export function ProfileSelector({
           <ProfileCard
             key={profile.id}
             id={profile.id}
-            name={profile.name}
+            name={profile.isPrimary ? `${profile.name} (Principal)` : profile.name}
             avatarUrl={profile.avatarUrl}
             color={profile.color}
+            isEnabled={profile.isEnabled ?? true}
+            isActive={profile.id === activeProfileId}
             isEditing={isEditing}
-            onClick={() => !isEditing && onSelectProfile(profile.id)}
+            onClick={() => !isEditing && (profile.isEnabled ?? true) && onSelectProfile(profile.id)}
             onEdit={() => onEditProfile?.(profile.id)}
           />
         ))}
