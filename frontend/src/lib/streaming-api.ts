@@ -3,8 +3,15 @@ import type {
   PlaybackHistoryResponse,
   UpdatePlaybackProgressPayload,
 } from '@/types/streaming'
+import { getActiveSession } from '@/lib/auth'
 
 const API_BASE_URL = import.meta.env.VITE_STREAMING_API_URL ?? 'http://localhost:8004'
+
+function authHeaders(): Record<string, string> {
+  const session = getActiveSession()
+  if (!session) return {}
+  return { Authorization: `Bearer ${session.accessToken}` }
+}
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -31,7 +38,9 @@ export async function getPlaybackProgress(
     params.set('episodio_id', episodioId)
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/progress?${params.toString()}`)
+  const response = await fetch(`${API_BASE_URL}/api/v1/progress?${params.toString()}`, {
+    headers: { ...authHeaders() },
+  })
 
   if (response.status === 404) {
     return null
@@ -51,6 +60,7 @@ export async function updatePlaybackProgress(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify(payload),
   })
@@ -64,7 +74,9 @@ export async function getPlaybackHistory(
   perfilId: string,
   limit = 10,
 ): Promise<PlaybackProgress[]> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/history/${perfilId}?limit=${limit}`)
+  const response = await fetch(`${API_BASE_URL}/api/v1/history/${perfilId}?limit=${limit}`, {
+    headers: { ...authHeaders() },
+  })
 
   if (!response.ok) {
     throw new Error(await parseError(response))
