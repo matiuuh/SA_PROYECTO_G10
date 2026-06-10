@@ -6,16 +6,27 @@ El modelo **4+1** permite describir la arquitectura del sistema desde diferentes
 
 En esta sección se documentan dos vistas apoyadas por las imágenes proporcionadas por el equipo:
 
-- La **vista de despliegue**, representada por `VISTAFISICA.png`.
-- La **vista de desarrollo**, representada por `VISTA DE COMPONENTES.png`.
+- La **vista Lógica**
+- La **vista de Desarrollo**
+- La **vista de Despliegue**
+- La **vista de Procesos**
+- La **vista de Escenarios**
+
+![Diagrma_4+1](./img/Proyecto-SA-Junio2026-4+1.drawio.svg)
+
+## Vista Lógica
+
+La **vista lógica** describe la organización del sistema desde la perspectiva de los módulos o componentes de software que lo componen. En esta vista se identifican las partes principales del sistema, sus responsabilidades y cómo se relacionan entre sí. En el caso de **Quetxal TV**, la vista lógica se representa mediante un diagrama de componentes que muestra los microservicios principales del sistema, el `API Gateway` y el frontend. Cada componente se conecta con la api para mostrar las dependencias y la comunicación entre ellos. Esta vista es fundamental para entender cómo está estructurado el software y cómo se divide el dominio en partes manejables.
+
+![Diagrama de Lógico](./img/Proyecto-SA-Junio2026-Vista-Lógica.drawio.svg)
 
 
 
-## Vista de Desarrollo
+## Vista de Componentes
 
 La **vista de desarrollo** describe cómo está organizado el sistema desde la perspectiva del diseño del software. Su objetivo no es mostrar puertos o nodos físicos, sino la forma en que el sistema se divide en capas, paquetes y componentes para facilitar su construcción, mantenimiento y evolución.
 
-![Vista de desarrollo](./img/VISTA%20DE%20COMPONENTES.png)
+![Vista de desarrollo](./img/DiagramaComponentesPROYECTO.drawio.svg)
 
 ### Naturaleza del diagrama
 
@@ -31,10 +42,11 @@ Por ello, esta vista de desarrollo puede explicarse como una representación est
 El sistema se divide en cinco grandes áreas:
 
 - **Capa UI**
-- **Capa de Aplicación**
+- **Capa de API**
 - **Capa de Negocio**
 - **Capa de Infraestructura**
 - **Capa de Datos**
+- **Integraciones Externas**
 
 Esta organización permite separar responsabilidades y mantener una arquitectura más clara y desacoplada.
 
@@ -104,7 +116,7 @@ Esto hace que la arquitectura sea más mantenible, escalable y coherente con los
 
 La **vista de despliegue** describe cómo se distribuyen físicamente los componentes del sistema dentro de la infraestructura tecnológica. Esta vista muestra nodos, servicios desplegados, protocolos de comunicación, puertos, bases de datos, caché e integraciones externas.
 
-![Vista de despliegue](./img/VISTAFISICA.png)
+![Vista de despliegue](./img/Diagrama%20Despliegue%20Proyecto.drawio.svg)
 
 ### Descripción general
 
@@ -161,6 +173,17 @@ Además, el sistema se integra con servicios externos:
 
 En conjunto, esta vista demuestra cómo la plataforma se ejecuta realmente en infraestructura cloud y cómo se conectan sus recursos internos y externos.
 
+## Vista Procesos
+
+La **vista de procesos** describe el flujo de ejecución de las actividades principales del sistema. En esta vista se identifican los pasos que un usuario sigue para interactuar con la plataforma, desde el registro hasta la reproducción de contenido y la calificación.
+
+![Diagrama de procesos](./img/Proyecto-SA-Junio2026-Vista-Procesos.drawio.svg)
+
+## Vista de Escenarios
+
+La **vista de escenarios** se enfoca en casos de uso específicos que representan interacciones típicas entre los usuarios y el sistema. En esta vista se describen escenarios como
+
+![Diagrama de escenarios](./img/Proyecto-SA-Junio2026-Vista-de-Escenarios.drawio.svg)
 
 ## Conclusión
 

@@ -1,4 +1,4 @@
-# Documentación del Proyecto Fase 1: Quetzal TV
+# Documentación del Proyecto Fase : Quetzal TV
 
 Integrantes:
 
@@ -29,17 +29,15 @@ Integrantes:
 
 ### Diagramas Estructurales, Comportamentales y Persistencia
 
-- [Diagrama de arquitectura general](./Diagramas_Estructurales/Diagrama_Arquitectura_General.md)
-- [Diagrama de componentes](./Diagramas_Estructurales/Diagrama_Componentes.md)
-- [Diagrama de actividades](./Diagramas_Actividades/Diagramas.md)
-- [Diagrama de secuencia](./Diagramas_Estructurales/Diagrama_Secuencia.md)
-- [Diagramas entidad relacion](./ER/DiagramasER.md)
+- [Diagrama de arquitectura general](./Diagramas%20Estructurales/Diagrama%20de%20Arquitectura.md)
+- [Diagrama de actividades](./Actividades/Diagrama_Actividades.md)
+- [Diagramas entidad relacion](./ER/EntidadRelacion.md)
 
 ## Introducción
 
-El presente documento corresponde al Proyecto Fase 1 del curso de Software Avanzado, cuyo objetivo es el diseño y desarrollo de **Quetzal TV**, una plataforma de streaming de video bajo demanda orientada a operar en múltiples países con soporte para diferentes divisas y pasarelas de pago locales.
+El presente documento corresponde al Proyecto del curso de Software Avanzado, cuyo objetivo es el diseño y desarrollo de **Quetzal TV**, una plataforma de streaming de video bajo demanda orientada a operar en múltiples países con soporte para diferentes divisas y pasarelas de pago locales.
 
-El sistema está construido sobre una **arquitectura de microservicios poliglota**, donde cada dominio del negocio opera como un servicio completamente autónomo con su propia base de datos. Los microservicios del backend se desarrollan de forma simultánea en **TypeScript, Go y Python**, seleccionados estratégicamente según las características de cada dominio. Toda la comunicación interna entre servicios se realiza de forma síncrona mediante el protocolo **gRPC** con contratos definidos en **Protocol Buffers**, garantizando interoperabilidad estricta entre lenguajes.
+El sistema está construido sobre una **arquitectura de microservicios poliglota**, donde cada dominio del negocio opera como un servicio completamente autónomo con su propia base de datos. Los microservicios del backend se desarrollan de forma simultánea en **TypeScript, Go y Python**, seleccionados estratégicamente según las características de cada dominio. Toda la comunicación interna entre servicios se realiza de forma síncrona mediante el protocolo **gRPC**, garantizando interoperabilidad estricta entre lenguajes.
 
 La seguridad y el enrutamiento se centralizan en un **API Gateway**, único punto de entrada al sistema. Este componente valida las sesiones de usuario mediante **JWT** para la propagación de identidad entre servicios. Para optimizar el rendimiento en consultas de divisas, el **FX-Service** implementa una capa de caché con **Redis** y políticas TTL, evitando consultas repetitivas a APIs externas.
 
