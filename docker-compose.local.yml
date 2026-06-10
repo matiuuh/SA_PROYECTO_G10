@@ -200,6 +200,7 @@ services:
       SUBSCRIPCION_API_URL: http://api-gateway:80/api/suscripcion
       USUARIO_API_URL: http://api-gateway:80/api/usuario
       API_GATEWAY_URL: http://api-gateway:80
+      NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
     ports:
       - "8003:8003"
       - "5003:5003"
@@ -207,6 +208,8 @@ services:
       postgres-catalogo:
         condition: service_healthy
       api-gateway:
+        condition: service_started
+      notificaciones:
         condition: service_started
 
   # ════════════════════════════════════════════════════════════════════════════
