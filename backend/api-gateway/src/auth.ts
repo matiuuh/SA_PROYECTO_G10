@@ -7,6 +7,8 @@ const PUBLIC_ROUTES: Array<{ method: string; prefix: string }> = [
   // Auth pública
   { method: 'POST',    prefix: '/api/usuario/api/v1/auth/login' },
   { method: 'POST',    prefix: '/api/usuario/api/v1/auth/register' },
+  // Endpoint interno: catálogo lo llama sin JWT para resolver emails al enviar alertas
+  { method: 'GET',     prefix: '/api/usuario/api/v1/internal/' },
   // Catálogo — lecturas (el frontend no pasa token para browsing)
   { method: 'GET',     prefix: '/api/catalogo/' },
   // Suscripción — el frontend no pasa token en ninguna de sus llamadas

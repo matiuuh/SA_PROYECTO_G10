@@ -41,7 +41,7 @@ services:
 
   divisas-service:
     build:
-      context: ../..
+      context: backend
       dockerfile: services/divisas/Dockerfile
     container_name: quetzal-divisas-service
     restart: unless-stopped
@@ -63,7 +63,7 @@ services:
 
   notificaciones-service:
     build:
-      context: ../..
+      context: backend
       dockerfile: services/notificaciones/Dockerfile
     container_name: quetzal-notificaciones-service
     restart: unless-stopped
@@ -83,7 +83,7 @@ services:
 
   streaming-service:
     build:
-      context: ../..
+      context: backend
       dockerfile: services/streaming/Dockerfile
     container_name: quetzal-streaming-service
     restart: unless-stopped
@@ -101,7 +101,7 @@ services:
 
   cobros-service:
     build:
-      context: ../..
+      context: backend
       dockerfile: services/cobros/Dockerfile
     container_name: quetzal-cobros-service
     restart: unless-stopped
