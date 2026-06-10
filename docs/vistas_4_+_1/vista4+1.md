@@ -116,7 +116,7 @@ Esto hace que la arquitectura sea más mantenible, escalable y coherente con los
 
 La **vista de despliegue** describe cómo se distribuyen físicamente los componentes del sistema dentro de la infraestructura tecnológica. Esta vista muestra nodos, servicios desplegados, protocolos de comunicación, puertos, bases de datos, caché e integraciones externas.
 
-![Vista de despliegue](./img/Diagrama%20Despliegue%20Proyecto.drawio.svg)
+![Vista de despliegue](./img/Diagrama%20Despliegue%20Proyecto-Página-1.drawio.svg)
 
 ### Descripción general
 
