@@ -17,6 +17,7 @@ Integrantes:
 
 - [Requerimientos funcionales](./RF/RF.md)
 - [Requerimientos no funcionales](./RNF/RNF.md)
+- [Mockups Del Frontend](mockups/mockups.md)
 
 ### Modelo de Casos de Uso
 
