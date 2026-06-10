@@ -32,6 +32,7 @@ Integrantes:
 - [Diagrama de arquitectura general](./Diagramas%20Estructurales/Diagrama%20de%20Arquitectura.md)
 - [Diagrama de actividades](./Actividades/Diagrama_Actividades.md)
 - [Diagramas entidad relacion](./ER/EntidadRelacion.md)
+- [Diagrama local](/docs/Local/Diagrama%20Despliegue%20Proyecto-Page-2.drawio.svg)
 
 ## Introducción
 
