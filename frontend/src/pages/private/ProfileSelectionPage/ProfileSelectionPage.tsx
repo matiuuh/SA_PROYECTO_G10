@@ -88,6 +88,12 @@ export function ProfileSelectionPage() {
           getSubscriptionStatusByAccount(accountId),
           listActivePlans(),
         ])
+
+        if (!subscriptionStatus.tiene_suscripcion) {
+          navigate('/subscription/plans', { replace: true })
+          return
+        }
+
         const maxActiveProfiles = subscriptionStatus.suscripcion
           ? plans.find((plan) => plan.id === subscriptionStatus.suscripcion?.plan_id)?.perfiles_maximos ?? 1
           : 1
