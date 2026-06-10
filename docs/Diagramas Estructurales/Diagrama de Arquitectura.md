@@ -8,6 +8,8 @@ Además, el diagrama refleja restricciones clave del enunciado, como el uso obli
 
 ## Descripción general del diagrama
 
+![Diagrama de Arquitectura](./img/Diagrama%20Arqui%20Simetrica-Page-2.drawio.svg)
+
 El diagrama muestra una arquitectura sincrónica desplegada en **Google Cloud Platform**, donde el cliente accede al sistema a través de una aplicación web construida con **React + Vite**. Tanto el usuario final como el administrador consumen la plataforma por medio de solicitudes **HTTPS**, las cuales llegan primero al **API Gateway**. Este componente actúa como único punto de entrada, cumpliendo con el requisito del enunciado de impedir el acceso directo del cliente a los microservicios internos.
 
 El **API Gateway** centraliza funciones de seguridad y enrutamiento. En esta capa se gestionan los mecanismos de autenticación y sesión, específicamente el uso de **JWT** para la propagación de identidad entre servicios y **cookies** para el mantenimiento de sesión del cliente. A partir de este punto, la comunicación hacia el ecosistema backend se realiza exclusivamente mediante **gRPC**, lo que garantiza contratos estrictos y una integración uniforme entre servicios escritos en distintos lenguajes.
@@ -28,23 +30,19 @@ Desarrollado en **Go**, este servicio administra la reproducción y el avance de
 
 También desarrollado en **Go**, este microservicio se encarga de la consulta de películas y series, soportando búsquedas, filtrado y visualización de detalles del contenido. Su base dedicada, **Catalogo DB**, permite aislar la información del catálogo, géneros, fichas técnicas y posiblemente la relación con actores o metadatos adicionales.
 
-### 4. Servicio de Calificaciones
-
-Implementado en **Go**, este servicio administra las valoraciones y recomendaciones de la comunidad. Su función responde al módulo de **Sistema de Calificaciones Dinámico**, donde los usuarios pueden calificar contenido y el sistema calcula un porcentaje global de recomendación. El almacenamiento se realiza en **Calificaciones DB**, favoreciendo el desacoplamiento del dominio de ratings respecto al resto de la plataforma.
-
-### 5. Servicio de Suscripciones
+### 4. Servicio de Suscripciones
 
 Este microservicio, desarrollado en **Python**, administra planes, membresías y validación del acceso según la suscripción activa del usuario. Cumple directamente con el módulo de **Gestión de Planes y Suscripciones**, permitiendo consultar, modificar o cancelar planes. Opera con su propia base de datos, **Suscripciones DB**.
 
-### 6. Servicio de Cobros
+### 5. Servicio de Cobros
 
 Desarrollado en **TypeScript**, este servicio gestiona pagos y recibos. Se integra con el servicio de suscripciones para formalizar la contratación o renovación de planes y utiliza **Cobros DB** como almacenamiento independiente. Además, consulta al servicio financiero para obtener el tipo de cambio correspondiente cuando es necesario presentar montos en moneda local.
 
-### 7. FX-Service
+### 6. FX-Service
 
 Este servicio financiero, implementado en **TypeScript**, cumple uno de los requisitos explícitos del enunciado: consultar tipos de cambio para convertir el costo de los planes según la moneda del usuario. El diagrama muestra que se conecta a una **API externa de divisas** y utiliza **Redis Cache** con **TTL** para evitar consultas repetitivas, reduciendo latencia y dependencia directa de servicios externos. También mantiene una base de datos propia, **Divisas DB**, para soporte de configuraciones, histórico o persistencia complementaria.
 
-### 8. Servicio de Notificaciones
+### 7. Servicio de Notificaciones
 
 Desarrollado en **TypeScript**, este microservicio administra el envío de correos electrónicos para confirmación de registro, recibos y alertas. Su comunicación con un servicio de **SMTP / Email** evidencia el cumplimiento del módulo de **Sistema de notificaciones por correo** definido en el enunciado.
 
@@ -104,3 +102,5 @@ La arquitectura propuesta para **Quetxal TV** responde de forma adecuada a los r
 La separación por dominios de negocio y por bases de datos independientes fortalece la autonomía de cada servicio, facilita el mantenimiento y reduce el impacto de cambios futuros. A su vez, la adopción de **Docker**, **Redis** y **Google Cloud Platform** demuestra que la solución no solo cubre las funciones de negocio solicitadas, sino que también considera aspectos de despliegue, rendimiento e infraestructura exigidos por el enunciado.
 
 En conclusión, el diagrama de arquitectura no solo representa la estructura técnica del sistema, sino que también evidencia el cumplimiento de las restricciones académicas del proyecto, especialmente en cuanto a seguridad, integración entre lenguajes, separación de responsabilidades y despliegue en la nube.
+
+[Volver a Documentación](/docs/Documentación.md)

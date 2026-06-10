@@ -28,9 +28,9 @@ Integrantes:
 
 ### Diagramas Estructurales, Comportamentales y Persistencia
 
-- [Diagrama de arquitectura general](./Diagramas_Estructurales/Diagrama_Arquitectura_General.md)
-- [Diagrama de actividades](./Diagramas_Actividades/Diagramas.md)
-- [Diagramas entidad relacion](./ER/DiagramasER.md)
+- [Diagrama de arquitectura general](./Diagramas%20Estructurales/Diagrama%20de%20Arquitectura.md)
+- [Diagrama de actividades](./Actividades/Diagrama_Actividades.md)
+- [Diagramas entidad relacion](./ER/EntidadRelacion.md)
 
 ## Introducción
 
