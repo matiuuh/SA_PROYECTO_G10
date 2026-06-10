@@ -6,8 +6,8 @@ El modelo **4+1** permite describir la arquitectura del sistema desde diferentes
 
 En esta sección se documentan dos vistas apoyadas por las imágenes proporcionadas por el equipo:
 
-- La **vista de despliegue**, representada por `VISTAFISICA.png`.
-- La **vista de desarrollo**, representada por `VISTA DE COMPONENTES.png`.
+- La **vista de despliegue**
+- La **vista de desarrollo**
 
 
 
