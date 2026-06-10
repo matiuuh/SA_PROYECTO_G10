@@ -1,23 +1,33 @@
-import { Play, Star, Film, Plus } from 'lucide-react'
+import { Play, Star, Film, ThumbsUp } from 'lucide-react'
+import { useState } from 'react'
 
 export interface MediaCardProps {
   title: string
   genre: string
   year: number
-  rating: number
+  rating: number | null
   posterUrl?: string
   isNew?: boolean
+  onClick?: () => void
 }
 
-export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false }: MediaCardProps) {
+export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false, onClick }: MediaCardProps) {
+  const [imageFailed, setImageFailed] = useState(false)
+
   return (
-    <article className="group relative rounded-xl overflow-hidden bg-[#0d1220] border border-white/[0.06] hover:border-[var(--color-denim-700)]/70 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/70 cursor-pointer">
+    <article
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1220] transition-all duration-300 hover:border-[var(--color-denim-700)]/70 hover:shadow-2xl hover:shadow-black/70 ${
+        onClick ? 'cursor-pointer hover:scale-[1.03]' : ''
+      }`}
+    >
       <div className="aspect-video w-full bg-[#0a0f1e] overflow-hidden">
-        {posterUrl ? (
+        {posterUrl && !imageFailed ? (
           <img
             src={posterUrl}
             alt={title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={() => setImageFailed(true)}
           />
         ) : (
           <div
@@ -46,22 +56,22 @@ export function MediaCard({ title, genre, year, rating, posterUrl, isNew = false
             </span>
           </div>
         )}
-
-        <button
-          aria-label="Agregar a mi lista"
-          className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--color-denim-700)] hover:border-[var(--color-denim-600)] transition-all duration-200"
-        >
-          <Plus size={13} className="text-white" />
-        </button>
       </div>
 
       <div className="px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-medium text-white text-sm leading-tight line-clamp-1 flex-1">{title}</h3>
-          <span className="shrink-0 flex items-center gap-0.5 text-[11px] text-[var(--color-warning)] font-semibold">
-            <Star size={10} fill="currentColor" strokeWidth={0} />
-            {rating.toFixed(1)}
-          </span>
+          {rating != null ? (
+            <span className="shrink-0 flex items-center gap-1 text-[11px] text-[var(--color-warning)] font-semibold">
+              <ThumbsUp size={10} fill="currentColor" strokeWidth={0} />
+              {Math.round(rating * 10)}%
+            </span>
+          ) : (
+            <span className="shrink-0 flex items-center gap-0.5 text-[11px] text-[var(--color-denim-500)] font-semibold">
+              <Star size={10} strokeWidth={1.75} />
+              Sin recomendacion
+            </span>
+          )}
         </div>
         <p className="text-[11px] text-[var(--color-denim-500)] mt-0.5">{genre} · {year}</p>
       </div>

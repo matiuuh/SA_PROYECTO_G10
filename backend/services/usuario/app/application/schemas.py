@@ -15,6 +15,16 @@ class LoginRequest(BaseModel):
     contrasena: str = Field(min_length=8, max_length=128)
 
 
+class UpdateAccountRequest(BaseModel):
+    nombre: str = Field(min_length=3, max_length=150)
+    pais: str = Field(min_length=2, max_length=100)
+
+
+class ChangePasswordRequest(BaseModel):
+    contrasena_actual: str = Field(min_length=8, max_length=128)
+    contrasena_nueva: str = Field(min_length=8, max_length=128)
+
+
 class AccountResponse(BaseModel):
     id: str
     nombre: str
@@ -29,6 +39,33 @@ class AuthResponse(BaseModel):
     token_type: str
     expires_at: datetime
     account: AccountResponse
+
+
+class ProfileResponse(BaseModel):
+    id: str
+    cuenta_id: str
+    nombre: str
+    color: str
+    es_principal: bool
+    activo: bool
+    creado_en: datetime
+    actualizado_en: datetime
+
+
+class CreateProfileRequest(BaseModel):
+    nombre: str = Field(min_length=1, max_length=80)
+    color: str = Field(default="#6D28D9", min_length=7, max_length=7)
+    es_principal: bool = False
+
+
+class UpdateProfileRequest(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=80)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    es_principal: bool | None = None
+
+
+class SyncProfilesAvailabilityRequest(BaseModel):
+    max_perfiles_activos: int = Field(ge=1, le=5)
 
 
 class MessageResponse(BaseModel):

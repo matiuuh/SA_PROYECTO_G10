@@ -1,51 +1,52 @@
 name: quetzaltv-local
 
-# ─── Servicios activos en esta fase ───────────────────────────────────────────
-#   postgres       — instancia única con una DB por microservicio (patrón dev)
-#   redis          — caché compartido (TTL requerido por servicio divisas)
-#   catalogo       — Go / gRPC  :5003
-#   streaming      — Go / gRPC  :5004
-#   divisas        — TypeScript / gRPC  :5005
-#   cobros         — TypeScript / gRPC  :5006
-#   notificaciones — TypeScript / gRPC  :5007
+# ─── Stack completo local ──────────────────────────────────────────────────────
 #
-# Levantar todo:          docker compose -f docker-compose.local.yml up --build
-# Solo la DB:             docker compose -f docker-compose.local.yml up postgres
-# Reconstruir un servicio: docker compose -f docker-compose.local.yml up --build catalogo
+#   Entrada única (browser/clientes):
+#     http://localhost:80   → API Gateway → servicios + frontend
+#
+#   Servicios disponibles vía gateway:
+#     /api/usuario/*        → usuario:8001
+#     /api/suscripcion/*    → suscripcion:8002
+#     /api/catalogo/*       → catalogo:8003
+#     /api/streaming/*      → streaming:8004
+#     /api/cobros/*         → cobros:8006
+#     /api/divisas/*        → divisas:8005   (inter-servicio, sin JWT)
+#     /api/notificaciones/* → notificaciones:8007  (inter-servicio, sin JWT)
+#     /*                    → frontend:3000  (React SPA)
+#
+#   Puertos expuestos para debugging / herramientas de BD:
+#     Postgres por servicio:  5437–5439 (ver tabla abajo)
+#     Redis:                  6379
+#     Servicios REST directos: 8001–8007 (para pruebas sin gateway)
+#
+#   Servicio          REST    gRPC   Postgres (host)
+#   ──────────────────────────────────────────────────
+#   usuario           8001    5001   5437
+#   suscripcion       8002    50052  5438
+#   catalogo          8003    5003   5433
+#   streaming         8004    5004   5434
+#   divisas           8005    5005   5435
+#   cobros            8006    5006   5436
+#   notificaciones    8007    5007   5439
+#
+#   Credenciales BD: usuario=quetzal / pass=quetzal
+#   JWT Secret:      quetzal-dev-secret  (solo desarrollo)
+#
+#   Levantar todo:        docker compose -f docker-compose.local.yml up --build -d
+#   Solo backend:         docker compose -f docker-compose.local.yml up --build -d --scale frontend=0
+#   Logs de un servicio:  docker compose -f docker-compose.local.yml logs -f usuario
+#   Reset completo:       docker compose -f docker-compose.local.yml down -v
 
 services:
 
-  # ─── Base de datos ──────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: quetzal
-      POSTGRES_PASSWORD: quetzal
-      POSTGRES_DB: quetzal
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-      # Script de init: crea las DBs y aplica los schemas en orden
-      - ./backend/infra/postgres/init.sh:/docker-entrypoint-initdb.d/00_init.sh:ro
-      - ./backend/services/catalogo/database/sql:/docker-entrypoint-initdb.d/catalogo:ro
-      - ./backend/services/streaming/database/sql:/docker-entrypoint-initdb.d/streaming:ro
-      - ./backend/services/divisas/database/sql:/docker-entrypoint-initdb.d/divisas:ro
-      - ./backend/services/cobros/database/sql:/docker-entrypoint-initdb.d/cobros:ro
-      - ./backend/services/notificaciones/database/sql:/docker-entrypoint-initdb.d/notificaciones:ro
-      - ./backend/services/usuario/database/sql:/docker-entrypoint-initdb.d/usuario:ro
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U quetzal -d catalogo_db && pg_isready -U quetzal -d streaming_db && pg_isready -U quetzal -d divisas_db && pg_isready -U quetzal -d cobros_db && pg_isready -U quetzal -d notificaciones_db
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  # ════════════════════════════════════════════════════════════════════════════
+  # INFRAESTRUCTURA COMPARTIDA
+  # ════════════════════════════════════════════════════════════════════════════
 
-  # ─── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
+    container_name: quetzal-redis-local
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -55,87 +56,388 @@ services:
       timeout: 5s
       retries: 10
 
-  # ─── Catálogo ───────────────────────────────────────────────────────────────
-  catalogo:
-    build:
-      # El context es backend/ para que el Dockerfile pueda copiar proto/ y services/
-      context: ./backend
-      dockerfile: services/catalogo/Dockerfile
+  # ════════════════════════════════════════════════════════════════════════════
+  # USUARIO  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-usuario:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-usuario-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/catalogo_db?sslmode=disable
-      GRPC_PORT: "5003"
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: usuario_db
+    volumes:
+      - pg_usuario_data:/var/lib/postgresql/data
+      - ./backend/services/usuario/database/sql:/docker-entrypoint-initdb.d:ro
     ports:
+      - "5437:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d usuario_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  usuario:
+    build:
+      context: ./backend/services/usuario
+      dockerfile: Dockerfile
+    container_name: quetzal-usuario-local
+    restart: unless-stopped
+    environment:
+      APP_NAME: usuario-service
+      APP_ENV: development
+      APP_PORT: 8001
+      GRPC_PORT: 5001
+      STORAGE_BACKEND: postgres
+      DB_HOST: postgres-usuario
+      DB_PORT: 5432
+      DB_NAME: usuario_db
+      DB_USER: quetzal
+      DB_PASSWORD: quetzal
+      JWT_SECRET: quetzal-dev-secret
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      NOTIFICATIONS_ENABLED: "true"
+      API_GATEWAY_URL: http://api-gateway:80
+      NOTIFICATIONS_TIMEOUT_SECONDS: 3.0
+    ports:
+      - "8001:8001"
+      - "5001:5001"
+    depends_on:
+      postgres-usuario:
+        condition: service_healthy
+      api-gateway:
+        condition: service_started
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SUSCRIPCIÓN  (Python · FastAPI + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-suscripcion:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-suscripcion-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: suscripcion_db
+    volumes:
+      - pg_suscripcion_data:/var/lib/postgresql/data
+      - ./backend/services/suscripcion/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5438:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d suscripcion_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  suscripcion:
+    build:
+      context: ./backend/services/suscripcion
+      dockerfile: Dockerfile
+    container_name: quetzal-suscripcion-local
+    restart: unless-stopped
+    environment:
+      APP_NAME: suscripcion-service
+      APP_ENV: development
+      APP_PORT: 8002
+      GRPC_PORT: 50052
+      DB_HOST: postgres-suscripcion
+      DB_PORT: 5432
+      DB_NAME: suscripcion_db
+      DB_USER: quetzal
+      DB_PASSWORD: quetzal
+      JWT_SECRET: quetzal-dev-secret
+      JWT_ALGORITHM: HS256
+      API_GATEWAY_URL: http://api-gateway:80
+      CONVERSION_TIMEOUT_SECONDS: 3.0
+    ports:
+      - "8002:8002"
+      - "50052:50052"
+    depends_on:
+      postgres-suscripcion:
+        condition: service_healthy
+      api-gateway:
+        condition: service_started
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # CATÁLOGO  (Go · HTTP + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-catalogo:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-catalogo-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: catalogo_db
+    volumes:
+      - pg_catalogo_data:/var/lib/postgresql/data
+      - ./backend/services/catalogo/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d catalogo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  catalogo:
+    build:
+      context: ./backend
+      dockerfile: services/catalogo/Dockerfile
+    container_name: quetzal-catalogo-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-catalogo:5432/catalogo_db?sslmode=disable
+      GRPC_PORT: 5003
+      HTTP_PORT: 8003
+      JWT_SECRET: quetzal-dev-secret
+      SUBSCRIPCION_API_URL: http://api-gateway:80/api/suscripcion
+      USUARIO_API_URL: http://api-gateway:80/api/usuario
+      API_GATEWAY_URL: http://api-gateway:80
+      NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
+    ports:
+      - "8003:8003"
       - "5003:5003"
     depends_on:
-      postgres:
+      postgres-catalogo:
         condition: service_healthy
+      api-gateway:
+        condition: service_started
+      notificaciones:
+        condition: service_started
 
-  # ─── Streaming ──────────────────────────────────────────────────────────────
+  # ════════════════════════════════════════════════════════════════════════════
+  # STREAMING  (Go · HTTP + gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-streaming:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-streaming-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: streaming_db
+    volumes:
+      - pg_streaming_data:/var/lib/postgresql/data
+      - ./backend/services/streaming/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d streaming_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   streaming:
     build:
       context: ./backend
       dockerfile: services/streaming/Dockerfile
+    container_name: quetzal-streaming-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/streaming_db?sslmode=disable
-      GRPC_PORT: "5004"
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
+      GRPC_PORT: 5004
+      HTTP_PORT: 8004
     ports:
+      - "8004:8004"
       - "5004:5004"
     depends_on:
-      postgres:
+      postgres-streaming:
         condition: service_healthy
 
-  # ─── Divisas ────────────────────────────────────────────────────────────────
+  # ════════════════════════════════════════════════════════════════════════════
+  # DIVISAS  (TypeScript · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-divisas:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-divisas-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: divisas_db
+    volumes:
+      - pg_divisas_data:/var/lib/postgresql/data
+      - ./backend/services/divisas/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d divisas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   divisas:
     build:
       context: ./backend
       dockerfile: services/divisas/Dockerfile
+    container_name: quetzal-divisas-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/divisas_db?sslmode=disable
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-divisas:5432/divisas_db?sslmode=disable
       REDIS_URL: redis://redis:6379
-      GRPC_PORT: "5005"
+      GRPC_PORT: 5005
+      HTTP_PORT: 8005
     ports:
+      - "8005:8005"
       - "5005:5005"
     depends_on:
-      postgres:
+      postgres-divisas:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  # ─── Cobros ─────────────────────────────────────────────────────────────────
+  # ════════════════════════════════════════════════════════════════════════════
+  # COBROS  (TypeScript · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-cobros:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-cobros-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: cobros_db
+    volumes:
+      - pg_cobros_data:/var/lib/postgresql/data
+      - ./backend/services/cobros/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d cobros_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   cobros:
     build:
       context: ./backend
       dockerfile: services/cobros/Dockerfile
+    container_name: quetzal-cobros-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/cobros_db?sslmode=disable
-      GRPC_PORT: "5006"
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-cobros:5432/cobros_db?sslmode=disable
+      GRPC_PORT: 5006
+      HTTP_PORT: 8006
+      API_GATEWAY_URL: http://api-gateway:80
+      DEFAULT_NOTIFICATION_USER_NAME: Usuario
+      BASE_CURRENCY: USD
     ports:
+      - "8006:8006"
       - "5006:5006"
     depends_on:
-      postgres:
+      postgres-cobros:
         condition: service_healthy
+      api-gateway:
+        condition: service_started
 
-  # ─── Notificaciones ─────────────────────────────────────────────────────────
+  # ════════════════════════════════════════════════════════════════════════════
+  # NOTIFICACIONES  (TypeScript · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-notificaciones:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-notificaciones-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: notificaciones_db
+    volumes:
+      - pg_notificaciones_data:/var/lib/postgresql/data
+      - ./backend/services/notificaciones/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5439:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d notificaciones_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   notificaciones:
     build:
       context: ./backend
       dockerfile: services/notificaciones/Dockerfile
+    container_name: quetzal-notificaciones-local
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://quetzal:quetzal@postgres:5432/notificaciones_db?sslmode=disable
-      GRPC_PORT: "5007"
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-notificaciones:5432/notificaciones_db?sslmode=disable
+      GRPC_PORT: 5007
+      HTTP_PORT: 8007
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
       EMAIL_FROM: ${EMAIL_FROM}
     ports:
+      - "8007:8007"
       - "5007:5007"
     depends_on:
-      postgres:
+      postgres-notificaciones:
         condition: service_healthy
 
+  # ════════════════════════════════════════════════════════════════════════════
+  # FRONTEND  (React 19 + Vite — build estático servido por nginx)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Rutas relativas — el api-gateway las intercepta en :80
+        VITE_USUARIO_API_URL: /api/usuario
+        VITE_SUSCRIPCION_API_URL: /api/suscripcion
+        VITE_CATALOGO_API_URL: /api/catalogo
+        VITE_STREAMING_API_URL: /api/streaming
+        VITE_COBROS_API_URL: /api/cobros
+    container_name: quetzal-frontend-local
+    restart: unless-stopped
+    # Sin puertos externos — solo el api-gateway le habla en :3000 internamente
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # API GATEWAY  (Node.js/TypeScript — entrada única, proxy + JWT)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: quetzal-api-gateway-local
+    restart: unless-stopped
+    environment:
+      PORT: 80
+      JWT_SECRET: quetzal-dev-secret
+      FRONTEND_URL: http://frontend:80
+      USUARIO_SERVICE_URL:        http://usuario:8001
+      SUSCRIPCION_SERVICE_URL:    http://suscripcion:8002
+      CATALOGO_SERVICE_URL:       http://catalogo:8003
+      STREAMING_SERVICE_URL:      http://streaming:8004
+      COBROS_SERVICE_URL:         http://cobros:8006
+      DIVISAS_SERVICE_URL:        http://divisas:8005
+      NOTIFICACIONES_SERVICE_URL: http://notificaciones:8007
+    ports:
+      - "80:80"
+    depends_on:
+      - divisas
+      - notificaciones
+
+# ════════════════════════════════════════════════════════════════════════════
+# VOLÚMENES — uno por base de datos (aislamiento físico completo)
+# ════════════════════════════════════════════════════════════════════════════
+
 volumes:
-  pg_data:
+  pg_usuario_data:
+  pg_suscripcion_data:
+  pg_catalogo_data:
+  pg_streaming_data:
+  pg_divisas_data:
+  pg_cobros_data:
+  pg_notificaciones_data:

@@ -1,15 +1,17 @@
 import { Check, Sparkles } from 'lucide-react'
 import { Card, Badge } from '@/components/atoms'
-import type { SubscriptionPlan } from '@/types/subscription'
+import type { UiSubscriptionPlan } from '@/types/subscription'
 
-interface PlanCardProps extends SubscriptionPlan {
+interface PlanCardProps extends UiSubscriptionPlan {
   selected?: boolean
   onSelect?: () => void
 }
 
 export function PlanCard({
   name,
+  description,
   price,
+  currency,
   interval,
   features,
   popular,
@@ -30,9 +32,10 @@ export function PlanCard({
           <h3 className="text-lg font-semibold text-white mb-1 transition-colors duration-200 group-hover:text-[var(--color-denim-100)]">
             {name}
           </h3>
+          <p className="mb-3 text-sm text-[var(--color-denim-400)]">{description}</p>
           <div className="flex items-baseline gap-1">
             <span className="text-3xl font-bold text-white transition-all duration-300 group-hover:text-[var(--color-primary)]">
-              ${price}
+              {currency} {price.toFixed(2)}
             </span>
             <span className="text-sm text-[var(--color-denim-400)]">/{interval}</span>
           </div>

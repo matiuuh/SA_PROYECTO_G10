@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { pool } from '../infrastructure/postgres';
+import { convertirMontoDesdeBase } from '../infrastructure/divisas-client';
+import { enviarReciboNotificacion } from '../infrastructure/notificaciones-client';
 import type {
   Transaccion,
   Recibo,
@@ -57,16 +59,17 @@ export async function procesarPago(input: ProcesarPagoInput): Promise<ProcesarPa
   const referencia = `SIM-${randomUUID()}`;
   const estado: EstadoPago = 'aprobado';
   // Fase 1: sin conversión real, monto_local = monto_base
-  const montoLocal = input.monto_base;
+  const montoLocal = await convertirMontoDesdeBase(input.monto_base, input.moneda_local);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     await client.query(
-      `CALL sp_registrar_compra($1, $2, $3::tipo_operacion_pago, $4, $5, $6, $7::estado_pago, $8, $9)`,
+      `CALL sp_registrar_compra($1, $2, $3, $4::tipo_operacion_pago, $5, $6, $7, $8::estado_pago, $9, $10)`,
       [
         input.cuenta_id,
+        input.suscripcion_id,
         input.plan_id,
         input.tipo_operacion,
         input.monto_base,
@@ -101,6 +104,42 @@ export async function procesarPago(input: ProcesarPagoInput): Promise<ProcesarPa
       );
       if (recRes.rowCount && recRes.rowCount > 0) {
         recibo = rowToRecibo(recRes.rows[0]);
+      }
+    }
+
+    if (recibo) {
+      try {
+        await enviarReciboNotificacion({
+          correo_destino: recibo.correo_destino,
+          nombre_usuario: input.nombre_usuario,
+          id_transaccion: transaccion.id,
+          descripcion_plan:
+            input.descripcion_plan?.trim() || `Plan ${transaccion.plan_id}`,
+          monto: transaccion.monto_local,
+          moneda: transaccion.moneda_local,
+          fecha: (transaccion.pagado_en ?? transaccion.creado_en).toISOString(),
+        });
+        await client.query(
+          `UPDATE recibos
+             SET enviado = TRUE,
+                 enviado_en = NOW()
+           WHERE id = $1`,
+          [recibo.id],
+        );
+        recibo.enviado = true;
+        recibo.enviado_en = new Date();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('[cobros] no se pudo enviar notificacion de recibo:', msg);
+        await client.query(
+          `UPDATE recibos
+             SET enviado = FALSE,
+                 enviado_en = NULL
+           WHERE id = $1`,
+          [recibo.id],
+        );
+        recibo.enviado = false;
+        recibo.enviado_en = null;
       }
     }
 

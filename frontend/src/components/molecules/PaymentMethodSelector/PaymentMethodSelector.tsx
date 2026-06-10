@@ -1,4 +1,4 @@
-import { CreditCard, Wallet } from 'lucide-react'
+import { CreditCard } from 'lucide-react'
 import { Radio } from '@/components/atoms'
 
 interface PaymentMethodSelectorProps {
@@ -12,12 +12,6 @@ const PAYMENT_METHODS = [
     label: 'Tarjeta de crédito/débito',
     description: 'Visa, Mastercard, American Express',
     icon: CreditCard,
-  },
-  {
-    id: 'paypal',
-    label: 'PayPal',
-    description: 'Paga de forma segura con tu cuenta PayPal',
-    icon: Wallet,
   },
 ]
 

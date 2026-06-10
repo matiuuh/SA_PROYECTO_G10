@@ -20,12 +20,11 @@ func NewContentRepository(db *pgxpool.Pool) *ContentRepository {
 	return &ContentRepository{db: db}
 }
 
-// ─── List ─────────────────────────────────────────────────────────────────────
-
 func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, idioma,
-		       url_portada, fecha_lanzamiento, porcentaje_recomendacion
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		ORDER BY titulo
 	`)
@@ -36,12 +35,11 @@ func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) 
 	return scanContentRows(rows)
 }
 
-// ─── Search ───────────────────────────────────────────────────────────────────
-
 func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, idioma,
-		       url_portada, fecha_lanzamiento, porcentaje_recomendacion
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		WHERE titulo ILIKE $1
 		ORDER BY titulo
@@ -53,12 +51,11 @@ func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.
 	return scanContentRows(rows)
 }
 
-// ─── FilterByGenres ───────────────────────────────────────────────────────────
-
 func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64) ([]domain.Content, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT v.id, v.titulo, v.tipo::text, v.sinopsis, v.idioma,
-		       v.url_portada, v.fecha_lanzamiento, v.porcentaje_recomendacion
+		       v.url_portada, v.url_trailer,
+		       v.fecha_lanzamiento, v.porcentaje_recomendacion
 		FROM v_cartelera_contenido v
 		JOIN contenido_generos cg ON cg.contenido_id = v.id
 		WHERE cg.genero_id = ANY($1)
@@ -71,26 +68,24 @@ func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64
 	return scanContentRows(rows)
 }
 
-// ─── GetDetail ────────────────────────────────────────────────────────────────
-
 func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.ContentDetail, error) {
-	var d domain.ContentDetail
-	var typeStr string
+	var detail domain.ContentDetail
+	var contentType string
 	var releaseDate pgtype.Date
-	var durationMin pgtype.Int4
+	var durationMinutes pgtype.Int4
 
 	err := r.db.QueryRow(ctx, `
 		SELECT id, titulo, tipo::text, sinopsis, ficha_tecnica,
 		       fecha_lanzamiento, clasificacion_edad, duracion_minutos,
-		       idioma, url_portada, url_video,
+		       idioma, url_portada, url_trailer,
 		       total_likes, total_dislikes, porcentaje_recomendacion
 		FROM v_detalle_contenido
 		WHERE id = $1
 	`, id).Scan(
-		&d.ID, &d.Title, &typeStr, &d.Synopsis, &d.TechnicalSheet,
-		&releaseDate, &d.AgeRating, &durationMin,
-		&d.Language, &d.PosterURL, &d.VideoURL,
-		&d.TotalLikes, &d.TotalDislikes, &d.RecommendationPct,
+		&detail.ID, &detail.Title, &contentType, &detail.Synopsis, &detail.TechnicalSheet,
+		&releaseDate, &detail.AgeRating, &durationMinutes,
+		&detail.Language, &detail.PosterURL, &detail.TrailerURL,
+		&detail.TotalLikes, &detail.TotalDislikes, &detail.RecommendationPct,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrContentNotFound
@@ -99,17 +94,16 @@ func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.C
 		return nil, err
 	}
 
-	d.Type = domain.ContentType(typeStr)
+	detail.Type = domain.ContentType(contentType)
 	if releaseDate.Valid {
 		t := releaseDate.Time
-		d.ReleaseDate = &t
+		detail.ReleaseDate = &t
 	}
-	if durationMin.Valid {
-		v := int(durationMin.Int32)
-		d.DurationMinutes = &v
+	if durationMinutes.Valid {
+		value := int(durationMinutes.Int32)
+		detail.DurationMinutes = &value
 	}
 
-	// Generos
 	genreRows, err := r.db.Query(ctx, `
 		SELECT g.id, g.nombre, COALESCE(g.descripcion, '')
 		FROM generos g
@@ -121,15 +115,15 @@ func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.C
 		return nil, err
 	}
 	defer genreRows.Close()
+
 	for genreRows.Next() {
-		var g domain.Genre
-		if err := genreRows.Scan(&g.ID, &g.Name, &g.Description); err != nil {
+		var genre domain.Genre
+		if err := genreRows.Scan(&genre.ID, &genre.Name, &genre.Description); err != nil {
 			return nil, err
 		}
-		d.Genres = append(d.Genres, g)
+		detail.Genres = append(detail.Genres, genre)
 	}
 
-	// Reparto
 	castRows, err := r.db.Query(ctx, `
 		SELECT reparto_id, nombre_artistico,
 		       COALESCE(nombre_real, ''), COALESCE(nacionalidad, ''), COALESCE(personaje, '')
@@ -141,29 +135,49 @@ func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.C
 		return nil, err
 	}
 	defer castRows.Close()
+
 	for castRows.Next() {
-		var m domain.CastMember
-		if err := castRows.Scan(&m.ID, &m.ArtisticName, &m.RealName, &m.Nationality, &m.Character); err != nil {
+		var member domain.CastMember
+		if err := castRows.Scan(&member.ID, &member.ArtisticName, &member.RealName, &member.Nationality, &member.Character); err != nil {
 			return nil, err
 		}
-		d.Cast = append(d.Cast, m)
+		detail.Cast = append(detail.Cast, member)
 	}
 
-	return &d, nil
+	return &detail, nil
 }
 
-// ─── Create ───────────────────────────────────────────────────────────────────
+func (r *ContentRepository) ExistsByTitleAndType(ctx context.Context, title string, contentType domain.ContentType) (bool, error) {
+	var exists bool
 
-func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error) {
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM contenidos
+			WHERE eliminado_en IS NULL
+			  AND LOWER(TRIM(titulo)) = LOWER(TRIM($1))
+			  AND tipo = $2::tipo_contenido
+		)
+	`, title, string(contentType)).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func (r *ContentRepository) Create(ctx context.Context, content *domain.Content, genreIDs []int64) (string, error) {
 	var newID string
 
 	var releaseDate *time.Time
-	if c.ReleaseDate != nil {
-		releaseDate = c.ReleaseDate
+	if content.ReleaseDate != nil {
+		releaseDate = content.ReleaseDate
 	}
 
-	var createdBy *string
-	// creado_por_cuenta_id puede quedar NULL si no se provee
+	var createdBy any
+	if content.CreatedByAccountID != "" {
+		createdBy = content.CreatedByAccountID
+	}
 
 	row := r.db.QueryRow(ctx, `
 		CALL sp_registrar_contenido_completo(
@@ -172,9 +186,9 @@ func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genre
 			$11, $12, NULL
 		)
 	`,
-		c.Title, string(c.Type), c.Synopsis, c.TechnicalSheet,
-		releaseDate, c.AgeRating, c.DurationMinutes, c.Language,
-		c.PosterURL, c.VideoURL,
+		content.Title, string(content.Type), content.Synopsis, content.TechnicalSheet,
+		releaseDate, content.AgeRating, content.DurationMinutes, content.Language,
+		content.PosterURL, content.TrailerURL,
 		createdBy, genreIDs,
 	)
 	if err := row.Scan(&newID); err != nil {
@@ -183,21 +197,21 @@ func (r *ContentRepository) Create(ctx context.Context, c *domain.Content, genre
 	return newID, nil
 }
 
-// ─── Update ───────────────────────────────────────────────────────────────────
-
-func (r *ContentRepository) Update(ctx context.Context, id string, c *domain.Content) error {
+func (r *ContentRepository) Update(ctx context.Context, id string, content *domain.Content) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE contenidos
 		SET titulo             = $2,
 		    sinopsis           = $3,
 		    ficha_tecnica      = $4,
-		    clasificacion_edad = $5,
-		    duracion_minutos   = $6,
-		    url_portada        = $7,
-		    url_video          = $8
+		    fecha_lanzamiento  = $5,
+		    clasificacion_edad = $6,
+		    duracion_minutos   = $7,
+		    idioma             = $8,
+		    url_portada        = $9,
+		    url_trailer        = $10
 		WHERE id = $1 AND eliminado_en IS NULL
-	`, id, c.Title, c.Synopsis, c.TechnicalSheet,
-		c.AgeRating, c.DurationMinutes, c.PosterURL, c.VideoURL,
+	`, id, content.Title, content.Synopsis, content.TechnicalSheet,
+		content.ReleaseDate, content.AgeRating, content.DurationMinutes, content.Language, content.PosterURL, content.TrailerURL,
 	)
 	if err != nil {
 		return err
@@ -207,8 +221,6 @@ func (r *ContentRepository) Update(ctx context.Context, id string, c *domain.Con
 	}
 	return nil
 }
-
-// ─── Delete ───────────────────────────────────────────────────────────────────
 
 func (r *ContentRepository) Delete(ctx context.Context, id string) error {
 	tag, err := r.db.Exec(ctx, `
@@ -223,8 +235,6 @@ func (r *ContentRepository) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
-
-// ─── Rate ─────────────────────────────────────────────────────────────────────
 
 func (r *ContentRepository) Rate(ctx context.Context, rating *domain.Rating) (float64, error) {
 	_, err := r.db.Exec(ctx,
@@ -242,32 +252,238 @@ func (r *ContentRepository) Rate(ctx context.Context, rating *domain.Rating) (fl
 	return pct, err
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+func (r *ContentRepository) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
+	var contentType string
+	err := r.db.QueryRow(ctx, `
+		SELECT tipo::text
+		FROM contenidos
+		WHERE id = $1 AND eliminado_en IS NULL
+	`, contentID).Scan(&contentType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrContentNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if domain.ContentType(contentType) != domain.ContentTypeSeries {
+		return nil, domain.ErrInvalidSeriesContent
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			t.id,
+			t.contenido_id,
+			t.numero_temporada,
+			COALESCE(t.titulo, ''),
+			COALESCE(t.descripcion, ''),
+			e.id,
+			e.temporada_id,
+			e.numero_episodio,
+			e.titulo,
+			COALESCE(e.sinopsis, ''),
+			e.duracion_minutos,
+			e.url_video
+		FROM temporadas t
+		LEFT JOIN episodios e
+			ON e.temporada_id = t.id
+		   AND e.eliminado_en IS NULL
+		WHERE t.contenido_id = $1
+		  AND t.eliminado_en IS NULL
+		ORDER BY t.numero_temporada, e.numero_episodio
+	`, contentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seasons := make([]domain.Season, 0)
+	seasonIndex := make(map[string]int)
+	for rows.Next() {
+		var (
+			seasonID      string
+			seasonContent string
+			seasonNumber  int16
+			seasonTitle   string
+			seasonDesc    string
+			episodeID     *string
+			episodeSeason *string
+			episodeNumber *int16
+			episodeTitle  *string
+			episodeSyn    *string
+			episodeDur    *int32
+			episodeURL    *string
+		)
+
+		if err := rows.Scan(
+			&seasonID,
+			&seasonContent,
+			&seasonNumber,
+			&seasonTitle,
+			&seasonDesc,
+			&episodeID,
+			&episodeSeason,
+			&episodeNumber,
+			&episodeTitle,
+			&episodeSyn,
+			&episodeDur,
+			&episodeURL,
+		); err != nil {
+			return nil, err
+		}
+
+		idx, exists := seasonIndex[seasonID]
+		if !exists {
+			seasons = append(seasons, domain.Season{
+				ID:          seasonID,
+				ContentID:   seasonContent,
+				Number:      int(seasonNumber),
+				Title:       seasonTitle,
+				Description: seasonDesc,
+				Episodes:    []domain.Episode{},
+			})
+			idx = len(seasons) - 1
+			seasonIndex[seasonID] = idx
+		}
+
+		if episodeID != nil && episodeSeason != nil && episodeNumber != nil && episodeTitle != nil && episodeDur != nil && episodeURL != nil {
+			seasons[idx].Episodes = append(seasons[idx].Episodes, domain.Episode{
+				ID:              *episodeID,
+				SeasonID:        *episodeSeason,
+				Number:          int(*episodeNumber),
+				Title:           *episodeTitle,
+				Synopsis:        valueOrEmpty(episodeSyn),
+				DurationMinutes: int(*episodeDur),
+				VideoURL:        *episodeURL,
+			})
+		}
+	}
+
+	return seasons, rows.Err()
+}
+
+func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch) ([]domain.Episode, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	var contentType string
+	err = tx.QueryRow(ctx, `
+		SELECT tipo::text
+		FROM contenidos
+		WHERE id = $1 AND eliminado_en IS NULL
+	`, contentID).Scan(&contentType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrContentNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if domain.ContentType(contentType) != domain.ContentTypeSeries {
+		return nil, domain.ErrInvalidSeriesContent
+	}
+
+	var seasonID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO temporadas (contenido_id, numero_temporada, titulo, descripcion)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''))
+		ON CONFLICT (contenido_id, numero_temporada)
+		DO UPDATE SET
+			titulo = COALESCE(NULLIF(EXCLUDED.titulo, ''), temporadas.titulo),
+			descripcion = COALESCE(NULLIF(EXCLUDED.descripcion, ''), temporadas.descripcion),
+			actualizado_en = NOW(),
+			eliminado_en = NULL
+		RETURNING id
+	`, contentID, batch.SeasonNumber, batch.SeasonTitle, batch.SeasonDescription).Scan(&seasonID)
+	if err != nil {
+		return nil, err
+	}
+
+	createdEpisodes := make([]domain.Episode, 0, len(batch.Episodes))
+	for _, episode := range batch.Episodes {
+		var created domain.Episode
+		var episodeNumber int16
+
+		err = tx.QueryRow(ctx, `
+			INSERT INTO episodios (
+				temporada_id,
+				numero_episodio,
+				titulo,
+				sinopsis,
+				duracion_minutos,
+				url_video
+			)
+			VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)
+			ON CONFLICT (temporada_id, numero_episodio)
+			DO UPDATE SET
+				titulo = EXCLUDED.titulo,
+				sinopsis = EXCLUDED.sinopsis,
+				duracion_minutos = EXCLUDED.duracion_minutos,
+				url_video = EXCLUDED.url_video,
+				actualizado_en = NOW(),
+				eliminado_en = NULL
+			RETURNING id, temporada_id, numero_episodio, titulo, COALESCE(sinopsis, ''), duracion_minutos, url_video
+		`, seasonID, episode.Number, episode.Title, episode.Synopsis, episode.DurationMinutes, episode.VideoURL).Scan(
+			&created.ID,
+			&created.SeasonID,
+			&episodeNumber,
+			&created.Title,
+			&created.Synopsis,
+			&created.DurationMinutes,
+			&created.VideoURL,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		created.Number = int(episodeNumber)
+		createdEpisodes = append(createdEpisodes, created)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return createdEpisodes, nil
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
 
 func scanContentRows(rows pgx.Rows) ([]domain.Content, error) {
 	var contents []domain.Content
 	for rows.Next() {
-		var c domain.Content
-		var typeStr string
+		var content domain.Content
+		var contentType string
 		var releaseDate pgtype.Date
 		var pct pgtype.Numeric
 
 		if err := rows.Scan(
-			&c.ID, &c.Title, &typeStr, &c.Synopsis,
-			&c.Language, &c.PosterURL, &releaseDate, &pct,
+			&content.ID, &content.Title, &contentType, &content.Synopsis,
+			&content.Language, &content.PosterURL, &content.TrailerURL,
+			&releaseDate, &pct,
 		); err != nil {
 			return nil, err
 		}
-		c.Type = domain.ContentType(typeStr)
+		content.Type = domain.ContentType(contentType)
 		if releaseDate.Valid {
 			t := releaseDate.Time
-			c.ReleaseDate = &t
+			content.ReleaseDate = &t
 		}
 		if pct.Valid {
 			f, _ := pct.Float64Value()
-			c.RecommendationPct = f.Float64
+			content.RecommendationPct = f.Float64
 		}
-		contents = append(contents, c)
+		contents = append(contents, content)
 	}
 	return contents, rows.Err()
 }

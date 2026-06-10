@@ -1,0 +1,5 @@
+# Este archivo ya no se usa en producción.
+# El API Gateway Node.js (api-gateway service) reemplaza el proxy nginx.
+# El frontend usa su propio nginx.conf (frontend/nginx.conf).
+#
+# Se conserva como referencia del enrutamiento anterior.

@@ -84,11 +84,14 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
   try {
     const req = call.request as {
       cuenta_id: string;
+      suscripcion_id?: string;
       plan_id: string;
       tipo_operacion: number;
       monto_base: number;
       moneda_local: string;
       correo_destino: string;
+      nombre_usuario?: string;
+      descripcion_plan?: string;
     };
 
     const tipoOp = TIPO_OP_REVERSE[req.tipo_operacion];
@@ -99,11 +102,14 @@ async function handleProcesarPago(call: AnyCall, callback: AnyCallback): Promise
 
     const result = await procesarPago({
       cuenta_id: req.cuenta_id,
+      suscripcion_id: req.suscripcion_id && req.suscripcion_id.length > 0 ? req.suscripcion_id : null,
       plan_id: req.plan_id,
       tipo_operacion: tipoOp,
       monto_base: req.monto_base,
       moneda_local: req.moneda_local,
       correo_destino: req.correo_destino,
+      nombre_usuario: req.nombre_usuario,
+      descripcion_plan: req.descripcion_plan,
     });
 
     callback(null, {

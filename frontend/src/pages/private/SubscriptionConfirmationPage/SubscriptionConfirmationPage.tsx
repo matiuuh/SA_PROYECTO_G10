@@ -1,25 +1,42 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, ArrowRight } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { PurchaseReceipt } from '@/components/organisms'
-import { SUBSCRIPTION_PLANS } from '@/data/subscriptionPlans'
+import { listActivePlans } from '@/lib/suscripcion-api'
+import { toUiPlan } from '@/lib/subscription-plans'
+import type { UiSubscriptionPlan } from '@/types/subscription'
 
 export function SubscriptionConfirmationPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const orderId = searchParams.get('order')
-  const planId = searchParams.get('plan') || 'standard'
+  const subscriptionId = searchParams.get('subscription')
+  const planId = searchParams.get('plan') ?? ''
+  const transactionId = searchParams.get('transaction') ?? ''
+  const receiptStatus = searchParams.get('receipt') ?? ''
 
-  const selectedPlan = SUBSCRIPTION_PLANS.find((p) => p.id === planId) || SUBSCRIPTION_PLANS[1]
+  const [plans, setPlans] = useState<UiSubscriptionPlan[]>([])
 
   useEffect(() => {
-    if (!orderId) {
-      navigate('/panel')
+    if (!subscriptionId) {
+      navigate('/subscription/plans', { replace: true })
+      return
     }
-  }, [orderId, navigate])
 
-  if (!orderId) return null
+    async function loadPlans() {
+      const data = await listActivePlans()
+      setPlans(data.map(toUiPlan))
+    }
+
+    void loadPlans()
+  }, [subscriptionId, navigate])
+
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.id === planId) ?? null,
+    [plans, planId],
+  )
+
+  if (!subscriptionId) return null
 
   const orderDate = new Date().toLocaleDateString('es-ES', {
     year: 'numeric',
@@ -29,61 +46,74 @@ export function SubscriptionConfirmationPage() {
 
   return (
     <div className="min-h-screen bg-[#080c14] py-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-            ¡Prepárate para Disfrutar!
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-10 text-center">
+          <h1 className="mb-2 text-3xl font-bold text-white md:text-4xl">
+            Tu plan ya esta activo
           </h1>
           <p className="text-[var(--color-denim-300)]">
-            Tu suscripción ha sido activada exitosamente
+            Ahora ya puedes configurar los perfiles de tu cuenta.
           </p>
         </div>
 
-        <PurchaseReceipt
-          plan={selectedPlan}
-          orderId={orderId}
-          orderDate={orderDate}
-          transactionId={`TXN-${orderId.slice(-8)}`}
-        />
-
-        <div className="mt-10 space-y-6 max-w-3xl mx-auto">
-          <div className="bg-[#0d1220] border border-white/[0.07] rounded-2xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-3">
-              Tu plan incluye:
-            </h3>
-            <ul className="space-y-2">
-              {selectedPlan.features.map((feature) => (
-                <li
-                  key={feature}
-                  className="flex items-start gap-2 text-sm text-[var(--color-denim-200)]"
-                >
-                  <CheckCircle2
-                    size={16}
-                    className="text-[var(--color-primary)] mt-0.5 flex-shrink-0"
-                  />
-                  {feature}
-                </li>
-              ))}
-            </ul>
+        {receiptStatus === 'failed' || receiptStatus === 'warning' ? (
+          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3 text-sm text-amber-100">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <p>
+                La suscripcion se activo correctamente, pero el recibo de compra no pudo confirmarse por correo.
+                Puedes continuar usando tu cuenta mientras se revisa el envio.
+              </p>
+            </div>
           </div>
+        ) : receiptStatus === 'sent' ? (
+          <div className="mx-auto mb-8 max-w-3xl rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+            El recibo de compra fue enviado al correo asociado a tu cuenta.
+          </div>
+        ) : null}
 
-          <div className="bg-[var(--color-info)]/10 border border-[var(--color-info)]/20 rounded-2xl p-4">
+        {selectedPlan && (
+          <PurchaseReceipt
+            plan={selectedPlan}
+            orderId={subscriptionId}
+            orderDate={orderDate}
+            transactionId={transactionId || `SUB-${subscriptionId.slice(-8)}`}
+          />
+        )}
+
+        <div className="mx-auto mt-10 max-w-3xl space-y-6">
+          {selectedPlan && (
+            <div className="rounded-2xl border border-white/[0.07] bg-[#0d1220] p-6">
+              <h3 className="mb-3 text-sm font-semibold text-white">Tu plan incluye:</h3>
+              <ul className="space-y-2">
+                {selectedPlan.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="flex items-start gap-2 text-sm text-[var(--color-denim-200)]"
+                  >
+                    <CheckCircle2
+                      size={16}
+                      className="mt-0.5 flex-shrink-0 text-[var(--color-primary)]"
+                    />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-[var(--color-info)]/20 bg-[var(--color-info)]/10 p-4">
             <p className="text-sm text-[var(--color-denim-200)]">
-              📧 Hemos enviado un email de confirmación con todos los detalles de tu
-              suscripción.
+              El siguiente paso es elegir y administrar los perfiles disponibles para tu plan.
             </p>
           </div>
 
           <div className="flex justify-center">
-            <Button onClick={() => navigate('/panel')} className="gap-2">
-              Ir al inicio
+            <Button onClick={() => navigate('/profiles')} className="gap-2">
+              Configurar perfiles
               <ArrowRight size={18} />
             </Button>
           </div>
-
-          <p className="text-center text-xs text-[var(--color-denim-400)]">
-            ¿Necesitas ayuda? Contáctanos en soporte@streaming.com
-          </p>
         </div>
       </div>
     </div>

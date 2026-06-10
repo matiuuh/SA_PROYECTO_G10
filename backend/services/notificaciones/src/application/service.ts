@@ -1,6 +1,11 @@
 import { pool } from '../infrastructure/postgres';
 import { sendMail } from '../infrastructure/mailer';
-import type { Notificacion, TipoNotificacion } from '../domain/notification';
+import type { ResultadoEnvioNotificacion, TipoNotificacion } from '../domain/notification';
+
+const FRONTEND_BASE_URL = (process.env['FRONTEND_BASE_URL'] ?? 'http://localhost:5173').replace(/\/$/, '');
+const FRONTEND_LOGIN_URL = `${FRONTEND_BASE_URL}/login`;
+const FRONTEND_SUBSCRIPTION_URL = `${FRONTEND_BASE_URL}/subscription/plans`;
+const FRONTEND_CATALOG_URL = `${FRONTEND_BASE_URL}/panel`;
 
 // ── Paleta y SVG icons ───────────────────────────────────────────────────────
 
@@ -170,7 +175,7 @@ function tmplConfirmacionRegistro(nombre: string): { asunto: string; html: strin
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
+          <a href="${FRONTEND_LOGIN_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
             Explorar catálogo &rarr;
           </a>
         </td>
@@ -255,7 +260,7 @@ function tmplRecibo(opts: {
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;">
+          <a href="${FRONTEND_SUBSCRIPTION_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;">
             Ver mi suscripción &rarr;
           </a>
         </td>
@@ -331,7 +336,7 @@ function tmplAlertaPublicacion(opts: {
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="center">
-          <a href="#" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
+          <a href="${FRONTEND_CATALOG_URL}" style="display:inline-block;background-color:${C.primary};color:${C.textPrimary};font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
             ${tipoIconBtn}Ver ahora
           </a>
         </td>
@@ -380,7 +385,7 @@ async function registrarNotificacion(opts: {
 export async function enviarConfirmacionRegistro(
   correo: string,
   nombre: string,
-): Promise<Notificacion['id']> {
+): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplConfirmacionRegistro(nombre);
   let estado: 'enviado' | 'fallido' = 'enviado';
   let errorMsg: string | null = null;
@@ -393,13 +398,15 @@ export async function enviarConfirmacionRegistro(
     console.error('[notificaciones] confirmacion_registro send error:', errorMsg);
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'confirmacion_registro',
     correo_destino: correo,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }
 
 export async function enviarRecibo(opts: {
@@ -410,7 +417,7 @@ export async function enviarRecibo(opts: {
   monto: number;
   moneda: string;
   fecha: string;
-}): Promise<Notificacion['id']> {
+}): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplRecibo({
     nombre: opts.nombre_usuario,
     id_transaccion: opts.id_transaccion,
@@ -421,22 +428,30 @@ export async function enviarRecibo(opts: {
   });
   let estado: 'enviado' | 'fallido' = 'enviado';
   let errorMsg: string | null = null;
+  const correoDestino = opts.correo_destino.trim();
 
-  try {
-    await sendMail({ to: opts.correo_destino, subject: asunto, html });
-  } catch (err) {
+  if (!correoDestino) {
     estado = 'fallido';
-    errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('[notificaciones] recibo send error:', errorMsg);
+    errorMsg = 'No existe correo asociado a la cuenta para enviar el recibo.';
+  } else {
+    try {
+      await sendMail({ to: correoDestino, subject: asunto, html });
+    } catch (err) {
+      estado = 'fallido';
+      errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[notificaciones] recibo send error:', errorMsg);
+    }
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'recibo',
-    correo_destino: opts.correo_destino,
+    correo_destino: correoDestino,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }
 
 export async function enviarAlertaPublicacion(opts: {
@@ -444,7 +459,7 @@ export async function enviarAlertaPublicacion(opts: {
   titulo_contenido: string;
   tipo_contenido: string;
   descripcion: string;
-}): Promise<Notificacion['id']> {
+}): Promise<ResultadoEnvioNotificacion> {
   const { asunto, html } = tmplAlertaPublicacion({
     titulo: opts.titulo_contenido,
     tipo: opts.tipo_contenido,
@@ -464,11 +479,13 @@ export async function enviarAlertaPublicacion(opts: {
     console.error('[notificaciones] alerta_publicacion send error:', errorMsg);
   }
 
-  return registrarNotificacion({
+  const id = await registrarNotificacion({
     tipo: 'alerta_publicacion',
     correo_destino: primerCorreo,
     asunto,
     estado,
     error_mensaje: errorMsg,
   });
+
+  return { id, enviado: estado === 'enviado', error_mensaje: errorMsg };
 }

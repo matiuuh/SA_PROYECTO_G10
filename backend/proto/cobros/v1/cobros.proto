@@ -51,11 +51,14 @@ message Recibo {
 
 message ProcesarPagoRequest {
   string        cuenta_id      = 1;
-  string        plan_id        = 2;
-  TipoOperacion tipo_operacion = 3;
-  double        monto_base     = 4;
-  string        moneda_local   = 5;
-  string        correo_destino = 6;
+  string        suscripcion_id = 2;
+  string        plan_id        = 3;
+  TipoOperacion tipo_operacion = 4;
+  double        monto_base     = 5;
+  string        moneda_local   = 6;
+  string        correo_destino = 7;
+  string        nombre_usuario = 8;
+  string        descripcion_plan = 9;
 }
 
 message ProcesarPagoResponse {

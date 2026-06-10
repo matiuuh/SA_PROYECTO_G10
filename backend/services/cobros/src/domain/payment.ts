@@ -31,11 +31,14 @@ export interface Recibo {
 
 export interface ProcesarPagoInput {
   cuenta_id: string;
+  suscripcion_id: string | null;
   plan_id: string;
   tipo_operacion: TipoOperacion;
   monto_base: number;
   moneda_local: string;
   correo_destino: string;
+  nombre_usuario?: string;
+  descripcion_plan?: string;
 }
 
 export interface ProcesarPagoResult {

@@ -1,0 +1,127 @@
+name: quetzaltv-vm2
+
+# ─── VM2: Divisas · Notificaciones · Streaming · Cobros ──────────────────────
+#
+#   Esta VM aloja Redis (usado por divisas y cobros).
+#   Las BDs viven en VM3 y se alcanzan por IP interna de GCP.
+#   Los servicios de esta misma VM se comunican por nombre de contenedor.
+#
+#   Variables de entorno requeridas en .env de esta VM:
+#     DB_VM3_HOST   — IP interna de VM3
+#     DB_PASSWORD   — contraseña compartida de postgres
+#     EMAIL_USER    — cuenta de correo para notificaciones
+#     EMAIL_PASS    — contraseña / app password del correo
+#     EMAIL_FROM    — nombre remitente
+#
+#   Levantar:  docker compose -f docker-compose.cloud-vm2.yml up --build -d
+#   Detener:   docker compose -f docker-compose.cloud-vm2.yml down
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # REDIS (compartido por divisas y cobros en esta VM)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  redis:
+    image: redis:7-alpine
+    container_name: quetzal-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # DIVISAS  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  divisas-service:
+    build:
+      context: ../..
+      dockerfile: services/divisas/Dockerfile
+    container_name: quetzal-divisas-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5435/quetzal_divisas?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      GRPC_PORT: 5005
+      HTTP_PORT: 8005
+    ports:
+      - "5005:5005"
+      - "8005:8005"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NOTIFICACIONES  (TypeScript · gRPC)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  notificaciones-service:
+    build:
+      context: ../..
+      dockerfile: services/notificaciones/Dockerfile
+    container_name: quetzal-notificaciones-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5439/quetzal_notificaciones?sslmode=disable
+      GRPC_PORT: 5007
+      HTTP_PORT: 8007
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      EMAIL_FROM: ${EMAIL_FROM}
+    ports:
+      - "5007:5007"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STREAMING  (Go · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  streaming-service:
+    build:
+      context: ../..
+      dockerfile: services/streaming/Dockerfile
+    container_name: quetzal-streaming-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5434/quetzal_streaming?sslmode=disable
+      GRPC_PORT: 5004
+      HTTP_PORT: 8004
+    ports:
+      - "5004:5004"
+      - "8004:8004"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # COBROS  (TypeScript · gRPC + HTTP)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  cobros-service:
+    build:
+      context: ../..
+      dockerfile: services/cobros/Dockerfile
+    container_name: quetzal-cobros-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5436/quetzal_cobros?sslmode=disable
+      API_GATEWAY_URL: http://${VM4_HOST}:80
+      REDIS_URL: redis://redis:6379
+      DEFAULT_NOTIFICATION_USER_NAME: Usuario
+      BASE_CURRENCY: USD
+      GRPC_PORT: 5006
+      HTTP_PORT: 8006
+    ports:
+      - "5006:5006"
+      - "8006:8006"
+    depends_on:
+      redis:
+        condition: service_healthy
+      divisas-service:
+        condition: service_started
+      notificaciones-service:
+        condition: service_started
+
+volumes:
+  redis_data:

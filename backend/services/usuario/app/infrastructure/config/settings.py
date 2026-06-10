@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     app_name: str = "usuario-service"
     app_env: str = "development"
     app_port: int = 8001
+    grpc_port: int = 5001
+    notifications_enabled: bool = True
+    api_gateway_url: str = "http://localhost:4000"
+    notifications_timeout_seconds: float = 3.0
     storage_backend: str = "inmemory"
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"

@@ -1,418 +1,422 @@
-import { useState, useRef } from 'react'
-import {
-  Tv2,
-  Upload,
-  ImagePlus,
-  X,
-  CheckCircle2,
-  Plus,
-  Trash2,
-  ChevronDown,
-} from 'lucide-react'
-import { Input, Button, ScrollReveal } from '@/components/atoms'
-
-interface Episode {
-  id: string
-  title: string
-  duration: string
-  synopsis: string
-  file: File | null
-}
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Clapperboard, Save, Tv2 } from 'lucide-react'
+import { Button, Input, ScrollReveal } from '@/components/atoms'
+import { getActiveSession } from '@/lib/auth'
+import { createCatalogContent, getCatalogDetail, getCatalogSeasons, updateCatalogContent } from '@/lib/catalogo-api'
+import type { CatalogSeason } from '@/types/catalog'
 
 interface SeriesForm {
-  title: string
-  originalTitle: string
-  synopsis: string
-  genre: string
-  year: string
-  totalSeasons: string
-  language: string
-  subtitles: string
-  ageRating: string
-  director: string
-  cast: string
-  status: string
+  titulo: string
+  sinopsis: string
+  genero: string
+  creador: string
+  reparto: string
+  subtitulos: string
+  temporadas: string
+  notasTecnicas: string
+  fechaLanzamiento: string
+  idioma: string
+  clasificacionEdad: string
+  urlPortada: string
+  urlTrailer: string
 }
+
+type FeedbackState =
+  | { type: 'success'; message: string }
+  | { type: 'error'; message: string }
+  | null
 
 const INITIAL_FORM: SeriesForm = {
-  title: '', originalTitle: '', synopsis: '', genre: '', year: '',
-  totalSeasons: '1', language: '', subtitles: '', ageRating: '',
-  director: '', cast: '', status: 'draft',
+  titulo: '',
+  sinopsis: '',
+  genero: '',
+  creador: '',
+  reparto: '',
+  subtitulos: '',
+  temporadas: '1',
+  notasTecnicas: '',
+  fechaLanzamiento: '',
+  idioma: 'es',
+  clasificacionEdad: 'PG-13',
+  urlPortada: '',
+  urlTrailer: '',
 }
-
-const INITIAL_EPISODE = (): Episode => ({
-  id: crypto.randomUUID(),
-  title: '',
-  duration: '',
-  synopsis: '',
-  file: null,
-})
-
-const GENRE_OPTIONS = [
-  'Acción', 'Aventura', 'Animación', 'Ciencia ficción', 'Comedia',
-  'Drama', 'Fantasía', 'Horror', 'Misterio', 'Romance', 'Thriller',
-]
 
 const AGE_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17']
 
-type FeedbackType = 'success' | 'error' | null
+function parseTechnicalSheet(sheet: string) {
+  const metadata = new Map<string, string>()
+  for (const rawPart of sheet.split(/\n|\|/)) {
+    const part = rawPart.trim()
+    if (!part) continue
+    const separatorIndex = part.indexOf(':')
+    if (separatorIndex <= 0) continue
+    const key = part.slice(0, separatorIndex).trim().toLowerCase()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (value) {
+      metadata.set(key, value)
+    }
+  }
+  return metadata
+}
+
+function buildTechnicalSheet(form: SeriesForm): string {
+  const sections = [
+    form.genero.trim() ? `Genero: ${form.genero.trim()}` : '',
+    form.creador.trim() ? `Creador: ${form.creador.trim()}` : '',
+    form.reparto.trim() ? `Reparto: ${form.reparto.trim()}` : '',
+    form.subtitulos.trim() ? `Subtitulos: ${form.subtitulos.trim()}` : '',
+    form.temporadas.trim() ? `Temporadas: ${form.temporadas.trim()}` : '',
+    form.notasTecnicas.trim() ? `Notas: ${form.notasTecnicas.trim()}` : '',
+  ].filter(Boolean)
+
+  return sections.join(' | ')
+}
 
 export function UploadSeriesPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const session = getActiveSession()
+  const editingId = searchParams.get('edit')?.trim() ?? ''
   const [form, setForm] = useState<SeriesForm>(INITIAL_FORM)
-  const [coverPreview, setCoverPreview] = useState<string | null>(null)
-  const [coverFile, setCoverFile] = useState<File | null>(null)
-  const [episodes, setEpisodes] = useState<Episode[]>([INITIAL_EPISODE()])
-  const [feedback, setFeedback] = useState<FeedbackType>(null)
+  const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [loading, setLoading] = useState(false)
-  const coverRef = useRef<HTMLInputElement>(null)
-  const episodeVideoRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(editingId))
+  const [existingSeasons, setExistingSeasons] = useState<CatalogSeason[]>([])
 
-  const set = (field: keyof SeriesForm) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
-
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCoverFile(file)
-    setCoverPreview(URL.createObjectURL(file))
+  const setField = (field: keyof SeriesForm) => (
+    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }))
   }
 
-  const addEpisode = () => setEpisodes((prev) => [...prev, INITIAL_EPISODE()])
-
-  const removeEpisode = (id: string) =>
-    setEpisodes((prev) => prev.filter((ep) => ep.id !== id))
-
-  const updateEpisode = (id: string, field: keyof Omit<Episode, 'id' | 'file'>, value: string) =>
-    setEpisodes((prev) =>
-      prev.map((ep) => (ep.id === id ? { ...ep, [field]: value } : ep))
-    )
-
-  const handleEpisodeVideo = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setEpisodes((prev) =>
-      prev.map((ep) => (ep.id === id ? { ...ep, file } : ep))
-    )
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.title || !form.genre || !form.year) return
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      setFeedback('success')
-      setTimeout(() => setFeedback(null), 4000)
-    }, 1500)
-  }
-
-  const handleReset = () => {
+  const resetForm = () => {
     setForm(INITIAL_FORM)
-    setCoverPreview(null)
-    setCoverFile(null)
-    setEpisodes([INITIAL_EPISODE()])
     setFeedback(null)
   }
 
-  return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-4xl mx-auto">
+  useEffect(() => {
+    async function loadContentToEdit() {
+      if (!editingId) return
 
+      try {
+        const [detail, seasons] = await Promise.all([
+          getCatalogDetail(editingId),
+          getCatalogSeasons(editingId).catch(() => []),
+        ])
+        const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
+        setExistingSeasons(seasons)
+        setForm({
+          titulo: detail.titulo,
+          sinopsis: detail.sinopsis,
+          genero: technicalSheet.get('genero') ?? '',
+          creador: technicalSheet.get('creador') ?? '',
+          reparto: technicalSheet.get('reparto') ?? '',
+          subtitulos: technicalSheet.get('subtitulos') ?? '',
+          temporadas: technicalSheet.get('temporadas') ?? '1',
+          notasTecnicas: technicalSheet.get('notas') ?? detail.ficha_tecnica ?? '',
+          fechaLanzamiento: detail.fecha_lanzamiento ?? '',
+          idioma: detail.idioma,
+          clasificacionEdad: detail.clasificacion_edad || 'PG-13',
+          urlPortada: detail.url_portada,
+          urlTrailer: detail.url_trailer ?? '',
+        })
+      } catch (error) {
+        setFeedback({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'No se pudo cargar la serie a editar.',
+        })
+      } finally {
+        setIsBootstrapping(false)
+      }
+    }
+
+    void loadContentToEdit()
+  }, [editingId])
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+
+    if (!session?.accessToken) {
+      setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+      return
+    }
+
+    if (!form.titulo.trim() || !form.sinopsis.trim() || !form.urlPortada.trim()) {
+      setFeedback({ type: 'error', message: 'Completa los campos obligatorios antes de guardar.' })
+      return
+    }
+
+    const seasons = Number(form.temporadas)
+    if (!Number.isFinite(seasons) || seasons <= 0) {
+      setFeedback({ type: 'error', message: 'La serie debe indicar al menos una temporada.' })
+      return
+    }
+
+    setLoading(true)
+    setFeedback(null)
+
+    try {
+      const payload = {
+        titulo: form.titulo.trim(),
+        sinopsis: form.sinopsis.trim(),
+        ficha_tecnica: buildTechnicalSheet(form),
+        fecha_lanzamiento: form.fechaLanzamiento || undefined,
+        clasificacion_edad: form.clasificacionEdad || undefined,
+        idioma: form.idioma.trim(),
+        url_portada: form.urlPortada.trim(),
+        url_trailer: form.urlTrailer.trim() || undefined,
+      }
+
+      if (editingId) {
+        await updateCatalogContent(session.accessToken, editingId, payload)
+      } else {
+        const created = await createCatalogContent(session.accessToken, {
+          ...payload,
+          tipo: 'serie',
+        })
+
+        setFeedback({
+          type: 'success',
+          message: 'Ficha general registrada. Ahora agrega las temporadas y episodios de la serie.',
+        })
+        setTimeout(() => navigate(`/admin/series/${created.id}/episodes`), 1200)
+        return
+      }
+
+      setFeedback({
+        type: 'success',
+        message: editingId
+          ? 'Serie actualizada correctamente en el catalogo.'
+          : 'Serie registrada correctamente en el catalogo.',
+      })
+      setTimeout(() => navigate('/admin/catalog'), 1200)
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo registrar la serie.',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (isBootstrapping) {
+    return (
+      <div className="mx-auto flex min-h-[320px] max-w-4xl items-center justify-center px-4 py-8 text-white sm:px-6 lg:px-8">
+        Cargando serie...
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <ScrollReveal variant="fade-up">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/15 border border-[var(--color-primary)]/25 flex items-center justify-center">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/15">
             <Tv2 size={20} className="text-[var(--color-denim-300)]" strokeWidth={1.5} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Subir serie</h2>
-            <p className="text-xs text-[var(--color-denim-500)]">Completa todos los campos para publicar</p>
+            <h2 className="text-xl font-bold text-white">
+              {editingId ? 'Edicion de serie' : 'Registro de serie'}
+            </h2>
+            <p className="text-xs text-[var(--color-denim-500)]">
+              Alta administrativa de la ficha general de una serie para el catalogo.
+            </p>
           </div>
         </div>
       </ScrollReveal>
 
       {feedback && (
         <ScrollReveal variant="fade-up">
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border mb-6 text-sm font-medium ${
-            feedback === 'success'
-              ? 'bg-[var(--color-success)]/10 border-[var(--color-success)]/30 text-[var(--color-success)]'
-              : 'bg-[var(--color-error)]/10 border-[var(--color-error)]/30 text-[var(--color-error)]'
-          }`}>
-            <CheckCircle2 size={16} />
-            {feedback === 'success'
-              ? '¡Serie subida correctamente! Estará disponible tras revisión.'
-              : 'Ocurrió un error al subir la serie. Intenta de nuevo.'
-            }
+          <div
+            className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
+              feedback.type === 'success'
+                ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]'
+                : 'border-[var(--color-error)]/30 bg-[var(--color-error)]/10 text-[var(--color-error)]'
+            }`}
+          >
+            {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {feedback.message}
           </div>
         </ScrollReveal>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <ScrollReveal variant="fade-up" delay={20}>
+          <section className="sticky top-3 z-10 rounded-xl border border-[var(--color-primary)]/20 bg-[#0a0f1c]/95 p-4 backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">Accion principal</p>
+                <p className="text-xs text-[var(--color-denim-400)]">
+                  {editingId
+                    ? 'Actualiza los datos y guarda los cambios para reflejarlos en el catalogo.'
+                    : 'Cuando termines de llenar los datos, usa este boton para subir la serie al catalogo.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="ghost" onClick={resetForm}>
+                  Limpiar
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Subiendo...
+                    </span>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      {editingId ? 'Guardar cambios' : 'Subir serie'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </section>
+        </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={40}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Información básica
+            <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
+              Informacion general
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Título *" placeholder="Título en español" value={form.title} onChange={set('title')} required />
-              <Input label="Título original" placeholder="Original title" value={form.originalTitle} onChange={set('originalTitle')} />
-
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
+              <Input label="Fecha de lanzamiento" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea
                   rows={4}
-                  placeholder="Descripción de la serie..."
-                  value={form.synopsis}
-                  onChange={set('synopsis')}
+                  value={form.sinopsis}
+                  onChange={setField('sinopsis')}
                   required
-                  className="w-full px-4 py-2.5 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white placeholder:text-[var(--color-denim-500)] focus:outline-none focus:border-[var(--color-primary)] transition-colors resize-none text-sm"
+                  className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
                 />
               </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">Género *</label>
-                <div className="relative">
-                  <select
-                    value={form.genre}
-                    onChange={set('genre')}
-                    required
-                    className="w-full px-4 py-2.5 pr-10 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white appearance-none focus:outline-none focus:border-[var(--color-primary)] transition-colors text-sm cursor-pointer"
-                  >
-                    <option value="" disabled>Seleccionar género</option>
-                    {GENRE_OPTIONS.map((g) => (
-                      <option key={g} value={g} className="bg-[#0d1220]">{g}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-denim-500)] pointer-events-none" />
-                </div>
+              <div className="md:col-span-2 flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Genero</label>
+                <input
+                  value={form.genero}
+                  onChange={setField('genero')}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                />
               </div>
-
+              <Input label="Idioma principal *" value={form.idioma} onChange={setField('idioma')} required />
+              <Input
+                label="Temporadas previstas *"
+                type="number"
+                min="1"
+                value={form.temporadas}
+                onChange={setField('temporadas')}
+                required
+              />
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">Clasificación de edad</label>
-                <div className="relative">
-                  <select
-                    value={form.ageRating}
-                    onChange={set('ageRating')}
-                    className="w-full px-4 py-2.5 pr-10 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white appearance-none focus:outline-none focus:border-[var(--color-primary)] transition-colors text-sm cursor-pointer"
-                  >
-                    <option value="" disabled>Seleccionar clasificación</option>
-                    {AGE_OPTIONS.map((a) => (
-                      <option key={a} value={a} className="bg-[#0d1220]">{a}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-denim-500)] pointer-events-none" />
-                </div>
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Clasificacion</label>
+                <select
+                  value={form.clasificacionEdad}
+                  onChange={setField('clasificacionEdad')}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                >
+                  {AGE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-              <Input label="Año de estreno *" type="number" min="1900" max="2099" placeholder="2024" value={form.year} onChange={set('year')} required />
-              <Input label="Número de temporadas" type="number" min="1" placeholder="1" value={form.totalSeasons} onChange={set('totalSeasons')} />
-              <Input label="Idioma" placeholder="Español" value={form.language} onChange={set('language')} />
-              <Input label="Subtítulos disponibles" placeholder="ES, EN, FR" value={form.subtitles} onChange={set('subtitles')} />
             </div>
           </section>
         </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={80}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Equipo y reparto
+            <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
+              Informacion tecnica y recursos
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Creador / Director" placeholder="Nombre del creador" value={form.director} onChange={set('director')} />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input label="Creador o director" value={form.creador} onChange={setField('creador')} />
+              <Input label="Subtitulos" placeholder="ES, EN, FR" value={form.subtitulos} onChange={setField('subtitulos')} />
               <div className="md:col-span-2">
-                <Input label="Reparto principal" placeholder="Actor 1, Actor 2, Actriz 1..." value={form.cast} onChange={set('cast')} />
+                <Input label="Reparto principal" value={form.reparto} onChange={setField('reparto')} />
               </div>
+              <div className="md:col-span-2 flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Notas tecnicas adicionales</label>
+                <textarea
+                  rows={3}
+                  value={form.notasTecnicas}
+                  onChange={setField('notasTecnicas')}
+                  className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                />
+              </div>
+              <Input
+                label="URL de portada *"
+                type="url"
+                placeholder="https://..."
+                value={form.urlPortada}
+                onChange={setField('urlPortada')}
+                required
+              />
+              <Input
+                label="URL de trailer"
+                type="url"
+                placeholder="https://..."
+                value={form.urlTrailer}
+                onChange={setField('urlTrailer')}
+              />
             </div>
           </section>
         </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={110}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Imagen de portada
-            </h3>
-            <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
-            {coverPreview ? (
-              <div className="relative group rounded-xl overflow-hidden border border-white/[0.07] aspect-[2/3] w-40">
-                <img src={coverPreview} alt="cover preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => { setCoverPreview(null); setCoverFile(null) }}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X size={12} className="text-white" />
-                </button>
+            <p className="text-sm font-semibold text-white">Alcance actual del registro</p>
+            <p className="mt-2 text-sm text-[var(--color-denim-400)]">
+              Este formulario registra la ficha general de la serie. Despues podras cargar temporadas y
+              episodios reales desde el administrador de capitulos.
+            </p>
+            {editingId ? (
+              <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#0d1220] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Capitulos registrados</p>
+                    <p className="text-xs text-[var(--color-denim-400)]">
+                      {existingSeasons.length > 0
+                        ? `${existingSeasons.length} temporada${existingSeasons.length === 1 ? '' : 's'} cargada${existingSeasons.length === 1 ? '' : 's'} en esta serie.`
+                        : 'Esta serie aun no tiene temporadas ni episodios cargados.'}
+                    </p>
+                  </div>
+                  <Button type="button" onClick={() => navigate(`/admin/series/${editingId}/episodes`)}>
+                    <Clapperboard size={15} />
+                    Administrar capitulos
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => coverRef.current?.click()}
-                className="w-40 aspect-[2/3] rounded-xl border-2 border-dashed border-white/[0.12] hover:border-[var(--color-denim-500)] bg-[#080c14] hover:bg-[var(--color-denim-900)]/20 flex flex-col items-center justify-center gap-2 transition-all duration-200 text-[var(--color-denim-500)] hover:text-[var(--color-denim-300)]"
-              >
-                <ImagePlus size={24} strokeWidth={1.25} />
-                <span className="text-xs">Subir portada</span>
-              </button>
-            )}
-            {coverFile && (
-              <p className="text-[11px] text-[var(--color-denim-500)] mt-1.5 truncate max-w-[160px]">{coverFile.name}</p>
-            )}
+            ) : null}
           </section>
         </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={140}>
-          <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.06]">
-              <h3 className="text-sm font-semibold text-[var(--color-denim-200)]">
-                Episodios
-                <span className="ml-2 text-xs font-normal text-[var(--color-denim-500)]">({episodes.length})</span>
-              </h3>
-              <Button type="button" size="sm" variant="outline" onClick={addEpisode}>
-                <Plus size={13} />
-                Añadir episodio
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              {episodes.map((ep, idx) => {
-                const videoInputRef = (el: HTMLInputElement | null) => {
-                  episodeVideoRefs.current[ep.id] = el
-                }
-                return (
-                  <div key={ep.id} className="rounded-lg border border-white/[0.06] bg-[#080c14] p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-[var(--color-denim-400)] uppercase tracking-wider">
-                        Episodio {idx + 1}
-                      </span>
-                      {episodes.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeEpisode(ep.id)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-denim-600)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                      <div className="md:col-span-2">
-                        <Input
-                          label="Título del episodio"
-                          placeholder={`Episodio ${idx + 1}`}
-                          value={ep.title}
-                          onChange={(e) => updateEpisode(ep.id, 'title', e.target.value)}
-                        />
-                      </div>
-                      <Input
-                        label="Duración (min)"
-                        type="number"
-                        min="1"
-                        placeholder="45"
-                        value={ep.duration}
-                        onChange={(e) => updateEpisode(ep.id, 'duration', e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 mb-3">
-                      <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis del episodio</label>
-                      <textarea
-                        rows={2}
-                        placeholder="Descripción breve..."
-                        value={ep.synopsis}
-                        onChange={(e) => updateEpisode(ep.id, 'synopsis', e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white placeholder:text-[var(--color-denim-500)] focus:outline-none focus:border-[var(--color-primary)] transition-colors resize-none text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <input
-                        ref={videoInputRef}
-                        type="file"
-                        accept="video/*"
-                        onChange={(e) => handleEpisodeVideo(ep.id, e)}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => episodeVideoRefs.current[ep.id]?.click()}
-                        className={`w-full py-3 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 text-sm transition-all duration-200 ${
-                          ep.file
-                            ? 'border-[var(--color-success)]/40 bg-[var(--color-success)]/5 text-[var(--color-success)]'
-                            : 'border-white/[0.08] hover:border-[var(--color-denim-500)] text-[var(--color-denim-500)] hover:text-[var(--color-denim-300)]'
-                        }`}
-                      >
-                        {ep.file ? (
-                          <>
-                            <CheckCircle2 size={15} strokeWidth={1.75} />
-                            <span className="truncate max-w-xs">{ep.file.name}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload size={15} strokeWidth={1.75} />
-                            Subir archivo de video
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={180}>
-          <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Estado de publicación
-            </h3>
-            <div className="flex flex-wrap gap-3">
-              {(['draft', 'review', 'published'] as const).map((s) => {
-                const labels = { draft: 'Borrador', review: 'En revisión', published: 'Publicado' }
-                return (
-                  <label key={s} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value={s}
-                      checked={form.status === s}
-                      onChange={set('status')}
-                      className="sr-only"
-                    />
-                    <div className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-150 ${
-                      form.status === s
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-white'
-                        : 'border-white/[0.08] text-[var(--color-denim-400)] hover:border-white/20'
-                    }`}>
-                      {labels[s]}
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-          </section>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={220}>
           <div className="flex items-center justify-end gap-3 pb-4">
-            <Button type="button" variant="ghost" onClick={handleReset}>
+            <Button type="button" variant="ghost" onClick={resetForm}>
               Limpiar formulario
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   Subiendo...
                 </span>
               ) : (
                 <>
-                  <Upload size={15} />
-                  Publicar serie
+                  <Save size={15} />
+                  {editingId ? 'Guardar cambios' : 'Subir serie'}
                 </>
               )}
             </Button>
           </div>
         </ScrollReveal>
-
       </form>
     </div>
   )

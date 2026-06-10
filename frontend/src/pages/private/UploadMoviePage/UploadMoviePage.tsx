@@ -1,330 +1,381 @@
-import { useState, useRef } from 'react'
-import {
-  Film,
-  Upload,
-  ImagePlus,
-  X,
-  CheckCircle2,
-  AlertCircle,
-  ChevronDown,
-} from 'lucide-react'
-import { Input, Button, ScrollReveal } from '@/components/atoms'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Film, Save } from 'lucide-react'
+import { Button, Input, ScrollReveal } from '@/components/atoms'
+import { getActiveSession } from '@/lib/auth'
+import { createCatalogContent, getCatalogDetail, updateCatalogContent } from '@/lib/catalogo-api'
 
 interface MovieForm {
-  title: string
-  originalTitle: string
-  synopsis: string
-  genre: string
-  year: string
-  duration: string
-  rating: string
+  titulo: string
+  sinopsis: string
+  genero: string
   director: string
-  cast: string
-  language: string
-  subtitles: string
-  ageRating: string
-  status: string
+  reparto: string
+  subtitulos: string
+  notasTecnicas: string
+  fechaLanzamiento: string
+  duracionMinutos: string
+  idioma: string
+  clasificacionEdad: string
+  urlPortada: string
+  urlTrailer: string
 }
 
-const INITIAL: MovieForm = {
-  title: '', originalTitle: '', synopsis: '', genre: '', year: '',
-  duration: '', rating: '', director: '', cast: '', language: '',
-  subtitles: '', ageRating: '', status: 'draft',
-}
+type FeedbackState =
+  | { type: 'success'; message: string }
+  | { type: 'error'; message: string }
+  | null
 
-const GENRE_OPTIONS = [
-  'Acción', 'Aventura', 'Animación', 'Ciencia ficción', 'Comedia',
-  'Drama', 'Fantasía', 'Horror', 'Misterio', 'Romance', 'Thriller',
-]
+const INITIAL_FORM: MovieForm = {
+  titulo: '',
+  sinopsis: '',
+  genero: '',
+  director: '',
+  reparto: '',
+  subtitulos: '',
+  notasTecnicas: '',
+  fechaLanzamiento: '',
+  duracionMinutos: '',
+  idioma: 'es',
+  clasificacionEdad: 'PG-13',
+  urlPortada: '',
+  urlTrailer: '',
+}
 
 const AGE_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17']
 
-type FeedbackType = 'success' | 'error' | null
+function parseTechnicalSheet(sheet: string) {
+  const metadata = new Map<string, string>()
+  for (const rawPart of sheet.split(/\n|\|/)) {
+    const part = rawPart.trim()
+    if (!part) continue
+    const separatorIndex = part.indexOf(':')
+    if (separatorIndex <= 0) continue
+    const key = part.slice(0, separatorIndex).trim().toLowerCase()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (value) {
+      metadata.set(key, value)
+    }
+  }
+  return metadata
+}
+
+function buildTechnicalSheet(form: MovieForm): string {
+  const sections = [
+    form.genero.trim() ? `Genero: ${form.genero.trim()}` : '',
+    form.director.trim() ? `Director: ${form.director.trim()}` : '',
+    form.reparto.trim() ? `Reparto: ${form.reparto.trim()}` : '',
+    form.subtitulos.trim() ? `Subtitulos: ${form.subtitulos.trim()}` : '',
+    form.notasTecnicas.trim() ? `Notas: ${form.notasTecnicas.trim()}` : '',
+  ].filter(Boolean)
+
+  return sections.join(' | ')
+}
 
 export function UploadMoviePage() {
-  const [form, setForm] = useState<MovieForm>(INITIAL)
-  const [coverPreview, setCoverPreview] = useState<string | null>(null)
-  const [coverFile, setCoverFile] = useState<File | null>(null)
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [feedback, setFeedback] = useState<FeedbackType>(null)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const session = getActiveSession()
+  const editingId = searchParams.get('edit')?.trim() ?? ''
+  const [form, setForm] = useState<MovieForm>(INITIAL_FORM)
+  const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [loading, setLoading] = useState(false)
-  const coverRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLInputElement>(null)
+  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(editingId))
 
-  const set = (field: keyof MovieForm) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
-
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCoverFile(file)
-    setCoverPreview(URL.createObjectURL(file))
+  const setField = (field: keyof MovieForm) => (
+    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }))
   }
 
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) setVideoFile(file)
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.title || !form.genre || !form.year) return
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      setFeedback('success')
-      setTimeout(() => setFeedback(null), 4000)
-    }, 1500)
-  }
-
-  const handleReset = () => {
-    setForm(INITIAL)
-    setCoverPreview(null)
-    setCoverFile(null)
-    setVideoFile(null)
+  const resetForm = () => {
+    setForm(INITIAL_FORM)
     setFeedback(null)
   }
 
-  return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-4xl mx-auto">
+  useEffect(() => {
+    async function loadContentToEdit() {
+      if (!editingId) return
 
+      try {
+        const detail = await getCatalogDetail(editingId)
+        const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
+        setForm({
+          titulo: detail.titulo,
+          sinopsis: detail.sinopsis,
+          genero: technicalSheet.get('genero') ?? '',
+          director: technicalSheet.get('director') ?? '',
+          reparto: technicalSheet.get('reparto') ?? '',
+          subtitulos: technicalSheet.get('subtitulos') ?? '',
+          notasTecnicas: technicalSheet.get('notas') ?? detail.ficha_tecnica ?? '',
+          fechaLanzamiento: detail.fecha_lanzamiento ?? '',
+          duracionMinutos: detail.duracion_minutos ? String(detail.duracion_minutos) : '',
+          idioma: detail.idioma,
+          clasificacionEdad: detail.clasificacion_edad || 'PG-13',
+          urlPortada: detail.url_portada,
+          urlTrailer: detail.url_trailer ?? '',
+        })
+      } catch (error) {
+        setFeedback({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'No se pudo cargar la pelicula a editar.',
+        })
+      } finally {
+        setIsBootstrapping(false)
+      }
+    }
+
+    void loadContentToEdit()
+  }, [editingId])
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+
+    if (!session?.accessToken) {
+      setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+      return
+    }
+
+    if (!form.titulo.trim() || !form.sinopsis.trim() || !form.urlPortada.trim() || !form.duracionMinutos.trim()) {
+      setFeedback({ type: 'error', message: 'Completa los campos obligatorios antes de guardar.' })
+      return
+    }
+
+    const duration = Number(form.duracionMinutos)
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setFeedback({ type: 'error', message: 'La duracion debe ser un numero mayor que cero.' })
+      return
+    }
+
+    setLoading(true)
+    setFeedback(null)
+
+    try {
+      const payload = {
+        titulo: form.titulo.trim(),
+        sinopsis: form.sinopsis.trim(),
+        ficha_tecnica: buildTechnicalSheet(form),
+        fecha_lanzamiento: form.fechaLanzamiento || undefined,
+        clasificacion_edad: form.clasificacionEdad || undefined,
+        duracion_minutos: duration,
+        idioma: form.idioma.trim(),
+        url_portada: form.urlPortada.trim(),
+        url_trailer: form.urlTrailer.trim() || undefined,
+      }
+
+      if (editingId) {
+        await updateCatalogContent(session.accessToken, editingId, payload)
+      } else {
+        await createCatalogContent(session.accessToken, {
+          ...payload,
+          tipo: 'pelicula',
+        })
+      }
+
+      setFeedback({
+        type: 'success',
+        message: editingId
+          ? 'Pelicula actualizada correctamente en el catalogo.'
+          : 'Pelicula registrada correctamente en el catalogo.',
+      })
+      setTimeout(() => navigate('/admin/catalog'), 1200)
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo registrar la pelicula.',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (isBootstrapping) {
+    return (
+      <div className="mx-auto flex min-h-[320px] max-w-4xl items-center justify-center px-4 py-8 text-white sm:px-6 lg:px-8">
+        Cargando pelicula...
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <ScrollReveal variant="fade-up">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/15 border border-[var(--color-primary)]/25 flex items-center justify-center">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/15">
             <Film size={20} className="text-[var(--color-denim-300)]" strokeWidth={1.5} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Subir película</h2>
-            <p className="text-xs text-[var(--color-denim-500)]">Completa todos los campos para publicar</p>
+            <h2 className="text-xl font-bold text-white">
+              {editingId ? 'Edicion de pelicula' : 'Registro de pelicula'}
+            </h2>
+            <p className="text-xs text-[var(--color-denim-500)]">
+              Alta administrativa de contenido para publicarlo en el catalogo.
+            </p>
           </div>
         </div>
       </ScrollReveal>
 
       {feedback && (
         <ScrollReveal variant="fade-up">
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border mb-6 text-sm font-medium ${
-            feedback === 'success'
-              ? 'bg-[var(--color-success)]/10 border-[var(--color-success)]/30 text-[var(--color-success)]'
-              : 'bg-[var(--color-error)]/10 border-[var(--color-error)]/30 text-[var(--color-error)]'
-          }`}>
-            {feedback === 'success'
-              ? <CheckCircle2 size={16} />
-              : <AlertCircle size={16} />
-            }
-            {feedback === 'success'
-              ? '¡Película subida correctamente! Estará disponible tras revisión.'
-              : 'Ocurrió un error al subir la película. Intenta de nuevo.'
-            }
+          <div
+            className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
+              feedback.type === 'success'
+                ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]'
+                : 'border-[var(--color-error)]/30 bg-[var(--color-error)]/10 text-[var(--color-error)]'
+            }`}
+          >
+            {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {feedback.message}
           </div>
         </ScrollReveal>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <ScrollReveal variant="fade-up" delay={20}>
+          <section className="sticky top-3 z-10 rounded-xl border border-[var(--color-primary)]/20 bg-[#0a0f1c]/95 p-4 backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">Accion principal</p>
+                <p className="text-xs text-[var(--color-denim-400)]">
+                  {editingId
+                    ? 'Actualiza los datos y guarda los cambios para reflejarlos en el catalogo.'
+                    : 'Cuando termines de llenar los datos, usa este boton para subir la pelicula al catalogo.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="ghost" onClick={resetForm}>
+                  Limpiar
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Subiendo...
+                    </span>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      {editingId ? 'Guardar cambios' : 'Subir pelicula'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </section>
+        </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={40}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Información básica
+            <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
+              Informacion general
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Título *" placeholder="Título en español" value={form.title} onChange={set('title')} required />
-              <Input label="Título original" placeholder="Original title" value={form.originalTitle} onChange={set('originalTitle')} />
-
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
+              <Input label="Fecha de lanzamiento" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea
                   rows={4}
-                  placeholder="Descripción de la película..."
-                  value={form.synopsis}
-                  onChange={set('synopsis')}
+                  value={form.sinopsis}
+                  onChange={setField('sinopsis')}
                   required
-                  className="w-full px-4 py-2.5 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white placeholder:text-[var(--color-denim-500)] focus:outline-none focus:border-[var(--color-primary)] transition-colors resize-none text-sm"
+                  className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
                 />
               </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">Género *</label>
-                <div className="relative">
-                  <select
-                    value={form.genre}
-                    onChange={set('genre')}
-                    required
-                    className="w-full px-4 py-2.5 pr-10 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white appearance-none focus:outline-none focus:border-[var(--color-primary)] transition-colors text-sm cursor-pointer"
-                  >
-                    <option value="" disabled>Seleccionar género</option>
-                    {GENRE_OPTIONS.map((g) => (
-                      <option key={g} value={g} className="bg-[#0d1220]">{g}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-denim-500)] pointer-events-none" />
-                </div>
+              <div className="md:col-span-2 flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Genero</label>
+                <input
+                  value={form.genero}
+                  onChange={setField('genero')}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                />
               </div>
-
+              <Input
+                label="Duracion (minutos) *"
+                type="number"
+                min="1"
+                value={form.duracionMinutos}
+                onChange={setField('duracionMinutos')}
+                required
+              />
+              <Input label="Idioma principal *" value={form.idioma} onChange={setField('idioma')} required />
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">Clasificación de edad</label>
-                <div className="relative">
-                  <select
-                    value={form.ageRating}
-                    onChange={set('ageRating')}
-                    className="w-full px-4 py-2.5 pr-10 bg-[#0d1220] border border-white/[0.07] rounded-lg text-white appearance-none focus:outline-none focus:border-[var(--color-primary)] transition-colors text-sm cursor-pointer"
-                  >
-                    <option value="" disabled>Seleccionar clasificación</option>
-                    {AGE_OPTIONS.map((a) => (
-                      <option key={a} value={a} className="bg-[#0d1220]">{a}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-denim-500)] pointer-events-none" />
-                </div>
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Clasificacion</label>
+                <select
+                  value={form.clasificacionEdad}
+                  onChange={setField('clasificacionEdad')}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                >
+                  {AGE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-              <Input label="Año de estreno *" type="number" min="1900" max="2099" placeholder="2024" value={form.year} onChange={set('year')} required />
-              <Input label="Duración (min)" type="number" min="1" placeholder="120" value={form.duration} onChange={set('duration')} />
-              <Input label="Puntuación (0-10)" type="number" min="0" max="10" step="0.1" placeholder="7.5" value={form.rating} onChange={set('rating')} />
-              <Input label="Idioma" placeholder="Español" value={form.language} onChange={set('language')} />
             </div>
           </section>
         </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={80}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Equipo y reparto
+            <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
+              Informacion tecnica y recursos
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Director" placeholder="Nombre del director" value={form.director} onChange={set('director')} />
-              <Input label="Subtítulos disponibles" placeholder="ES, EN, FR" value={form.subtitles} onChange={set('subtitles')} />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input label="Director" value={form.director} onChange={setField('director')} />
+              <Input label="Subtitulos" placeholder="ES, EN, FR" value={form.subtitulos} onChange={setField('subtitulos')} />
               <div className="md:col-span-2">
-                <Input label="Reparto principal" placeholder="Actor 1, Actor 2, Actriz 1..." value={form.cast} onChange={set('cast')} />
+                <Input label="Reparto principal" value={form.reparto} onChange={setField('reparto')} />
               </div>
+              <div className="md:col-span-2 flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Notas tecnicas adicionales</label>
+                <textarea
+                  rows={3}
+                  value={form.notasTecnicas}
+                  onChange={setField('notasTecnicas')}
+                  className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                />
+              </div>
+              <Input
+                label="URL de portada *"
+                type="url"
+                placeholder="https://..."
+                value={form.urlPortada}
+                onChange={setField('urlPortada')}
+                required
+              />
+              <Input
+                label="URL de trailer"
+                type="url"
+                placeholder="https://..."
+                value={form.urlTrailer}
+                onChange={setField('urlTrailer')}
+              />
             </div>
           </section>
         </ScrollReveal>
 
         <ScrollReveal variant="fade-up" delay={120}>
-          <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Archivos multimedia
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-              <div>
-                <p className="text-sm font-medium text-[var(--color-denim-200)] mb-2">Imagen de portada</p>
-                <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
-                {coverPreview ? (
-                  <div className="relative group rounded-xl overflow-hidden border border-white/[0.07] aspect-[2/3] w-40">
-                    <img src={coverPreview} alt="cover preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => { setCoverPreview(null); setCoverFile(null) }}
-                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={12} className="text-white" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => coverRef.current?.click()}
-                    className="w-40 aspect-[2/3] rounded-xl border-2 border-dashed border-white/[0.12] hover:border-[var(--color-denim-500)] bg-[#080c14] hover:bg-[var(--color-denim-900)]/20 flex flex-col items-center justify-center gap-2 transition-all duration-200 text-[var(--color-denim-500)] hover:text-[var(--color-denim-300)]"
-                  >
-                    <ImagePlus size={24} strokeWidth={1.25} />
-                    <span className="text-xs">Subir portada</span>
-                  </button>
-                )}
-                {coverFile && (
-                  <p className="text-[11px] text-[var(--color-denim-500)] mt-1.5 truncate max-w-[160px]">{coverFile.name}</p>
-                )}
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-[var(--color-denim-200)] mb-2">Archivo de video</p>
-                <input ref={videoRef} type="file" accept="video/*" onChange={handleVideoChange} className="hidden" />
-                <button
-                  type="button"
-                  onClick={() => videoRef.current?.click()}
-                  className={`w-full rounded-xl border-2 border-dashed py-8 flex flex-col items-center justify-center gap-3 transition-all duration-200 ${
-                    videoFile
-                      ? 'border-[var(--color-success)]/40 bg-[var(--color-success)]/5 text-[var(--color-success)]'
-                      : 'border-white/[0.12] hover:border-[var(--color-denim-500)] bg-[#080c14] hover:bg-[var(--color-denim-900)]/20 text-[var(--color-denim-500)] hover:text-[var(--color-denim-300)]'
-                  }`}
-                >
-                  {videoFile ? (
-                    <>
-                      <CheckCircle2 size={28} strokeWidth={1.25} />
-                      <div className="text-center">
-                        <p className="text-sm font-medium">Archivo seleccionado</p>
-                        <p className="text-xs opacity-70 truncate max-w-[200px]">{videoFile.name}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={28} strokeWidth={1.25} />
-                      <div className="text-center">
-                        <p className="text-sm font-medium">Subir video</p>
-                        <p className="text-xs opacity-60">MP4, MKV, AVI — hasta 20 GB</p>
-                      </div>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </section>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={160}>
-          <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
-            <h3 className="text-sm font-semibold text-[var(--color-denim-200)] mb-4 pb-2 border-b border-white/[0.06]">
-              Estado de publicación
-            </h3>
-            <div className="flex flex-wrap gap-3">
-              {(['draft', 'review', 'published'] as const).map((s) => {
-                const labels = { draft: 'Borrador', review: 'En revisión', published: 'Publicado' }
-                return (
-                  <label key={s} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value={s}
-                      checked={form.status === s}
-                      onChange={set('status')}
-                      className="sr-only"
-                    />
-                    <div className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-150 ${
-                      form.status === s
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-white'
-                        : 'border-white/[0.08] text-[var(--color-denim-400)] hover:border-white/20'
-                    }`}>
-                      {labels[s]}
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-          </section>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={200}>
           <div className="flex items-center justify-end gap-3 pb-4">
-            <Button type="button" variant="ghost" onClick={handleReset}>
+            <Button type="button" variant="ghost" onClick={resetForm}>
               Limpiar formulario
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   Subiendo...
                 </span>
               ) : (
                 <>
-                  <Upload size={15} />
-                  Publicar película
+                  <Save size={15} />
+                  {editingId ? 'Guardar cambios' : 'Subir pelicula'}
                 </>
               )}
             </Button>
           </div>
         </ScrollReveal>
-
       </form>
     </div>
   )

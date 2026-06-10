@@ -22,26 +22,26 @@ export function AccountSettings({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold text-white mb-4">Cuenta</h3>
-        <Card className="p-4 space-y-3">
+        <h3 className="mb-4 text-xl font-semibold text-white">Cuenta</h3>
+        <Card className="space-y-3 p-4">
           <SettingItem
-            icon={<User className="w-5 h-5" />}
-            title="Editar perfil"
-            description="Actualiza tu nombre y foto de perfil"
+            icon={<User className="h-5 w-5" />}
+            title="Gestionar perfiles"
+            description="Crea, edita o elimina los perfiles de tu cuenta"
             onClick={onEditProfile}
             showArrow
           />
           <SettingItem
-            icon={<Mail className="w-5 h-5" />}
-            title="Cambiar correo electrónico"
-            description="Actualiza tu dirección de correo"
+            icon={<Mail className="h-5 w-5" />}
+            title="Cambiar correo electronico"
+            description="Actualiza la direccion principal de acceso"
             onClick={onChangeEmail}
             showArrow
           />
           <SettingItem
-            icon={<Lock className="w-5 h-5" />}
-            title="Cambiar contraseña"
-            description="Actualiza tu contraseña de acceso"
+            icon={<Lock className="h-5 w-5" />}
+            title="Cambiar contrasena"
+            description="Actualiza tu contrasena de acceso"
             onClick={onChangePassword}
             showArrow
           />
@@ -49,12 +49,12 @@ export function AccountSettings({
       </div>
 
       <div>
-        <h3 className="text-xl font-semibold text-white mb-4">Suscripción y pagos</h3>
-        <Card className="p-4 space-y-3">
+        <h3 className="mb-4 text-xl font-semibold text-white">Suscripcion y pagos</h3>
+        <Card className="space-y-3 p-4">
           <SettingItem
-            icon={<CreditCard className="w-5 h-5" />}
-            title="Métodos de pago"
-            description="Administra tus tarjetas y métodos de pago"
+            icon={<CreditCard className="h-5 w-5" />}
+            title="Planes y suscripcion"
+            description="Visualiza tu plan activo y las opciones disponibles"
             onClick={onManagePayment}
             showArrow
           />
@@ -62,12 +62,12 @@ export function AccountSettings({
       </div>
 
       <div>
-        <h3 className="text-xl font-semibold text-white mb-4">Privacidad y seguridad</h3>
-        <Card className="p-4 space-y-3">
+        <h3 className="mb-4 text-xl font-semibold text-white">Privacidad y seguridad</h3>
+        <Card className="space-y-3 p-4">
           <SettingItem
-            icon={<Shield className="w-5 h-5" />}
-            title="Configuración de privacidad"
-            description="Controla quién puede ver tu actividad"
+            icon={<Shield className="h-5 w-5" />}
+            title="Configuracion de privacidad"
+            description="Controla quien puede ver tu actividad"
             onClick={onPrivacySettings}
             showArrow
           />
@@ -75,10 +75,10 @@ export function AccountSettings({
       </div>
 
       <div>
-        <h3 className="text-xl font-semibold text-white mb-4">Zona de peligro</h3>
-        <Card className="p-4 border-[var(--color-error)]/20">
+        <h3 className="mb-4 text-xl font-semibold text-white">Zona de peligro</h3>
+        <Card className="border-[var(--color-error)]/20 p-4">
           <SettingItem
-            icon={<Trash2 className="w-5 h-5 text-[var(--color-error)]" />}
+            icon={<Trash2 className="h-5 w-5 text-[var(--color-error)]" />}
             title="Eliminar cuenta"
             description="Elimina permanentemente tu cuenta y todos tus datos"
             action={
