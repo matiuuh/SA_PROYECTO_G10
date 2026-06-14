@@ -184,7 +184,8 @@ SELECT
     c.fecha_lanzamiento,
     fn_porcentaje_recomendacion(c.id) AS porcentaje_recomendacion
 FROM contenidos c
-WHERE c.eliminado_en IS NULL;
+WHERE c.eliminado_en IS NULL
+  AND (c.fecha_lanzamiento IS NULL OR c.fecha_lanzamiento <= CURRENT_DATE);
 
 CREATE VIEW v_detalle_contenido AS
 SELECT

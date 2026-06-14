@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Clapperboard, Save, Tv2 } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createCatalogContent, getCatalogDetail, getCatalogSeasons, updateCatalogContent } from '@/lib/catalogo-api'
+import { createCatalogContent, getAdminCatalogDetail, getCatalogSeasons, updateCatalogContent } from '@/lib/catalogo-api'
 import type { CatalogSeason } from '@/types/catalog'
 
 interface SeriesForm {
@@ -101,8 +101,12 @@ export function UploadSeriesPage() {
       if (!editingId) return
 
       try {
+        if (!session?.accessToken) {
+          setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+          return
+        }
         const [detail, seasons] = await Promise.all([
-          getCatalogDetail(editingId),
+          getAdminCatalogDetail(session.accessToken, editingId),
           getCatalogSeasons(editingId).catch(() => []),
         ])
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
@@ -133,7 +137,7 @@ export function UploadSeriesPage() {
     }
 
     void loadContentToEdit()
-  }, [editingId])
+  }, [editingId, session?.accessToken])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -284,7 +288,7 @@ export function UploadSeriesPage() {
             </h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
-              <Input label="Fecha de lanzamiento" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
+              <Input label="Fecha de estreno / publicacion" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea

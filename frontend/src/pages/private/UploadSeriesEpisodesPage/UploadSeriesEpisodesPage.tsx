@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Clapperboard, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createSeriesEpisodeBatch, getCatalogDetail, getCatalogSeasons } from '@/lib/catalogo-api'
+import { createSeriesEpisodeBatch, getAdminCatalogDetail, getCatalogSeasons } from '@/lib/catalogo-api'
 import type { CatalogSeason, CreateSeriesEpisodePayload } from '@/types/catalog'
 
 interface EpisodeDraft {
@@ -65,8 +65,13 @@ export function UploadSeriesEpisodesPage() {
       }
 
       try {
+        if (!session?.accessToken) {
+          setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+          setIsLoading(false)
+          return
+        }
         const [detail, seasons] = await Promise.all([
-          getCatalogDetail(id),
+          getAdminCatalogDetail(session.accessToken, id),
           getCatalogSeasons(id),
         ])
         setSeriesTitle(detail.titulo)
@@ -84,7 +89,7 @@ export function UploadSeriesEpisodesPage() {
     }
 
     void bootstrap()
-  }, [id])
+  }, [id, session?.accessToken])
 
   const existingSeasonNumbers = useMemo(
     () => new Set(existingSeasons.map((season) => season.numero)),

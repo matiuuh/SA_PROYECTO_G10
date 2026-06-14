@@ -22,6 +22,10 @@ func (s *CatalogoService) List(ctx context.Context) ([]domain.Content, error) {
 	return s.repo.List(ctx)
 }
 
+func (s *CatalogoService) ListAll(ctx context.Context) ([]domain.Content, error) {
+	return s.repo.ListAll(ctx)
+}
+
 func (s *CatalogoService) Search(ctx context.Context, query string) ([]domain.Content, error) {
 	if query == "" {
 		return s.repo.List(ctx)

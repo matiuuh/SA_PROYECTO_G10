@@ -289,6 +289,10 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "No se pudo obtener el detalle del contenido.")
 		return
 	}
+	if !isReleased(detail.ReleaseDate) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"detalle": toDetailResponse(detail),
@@ -422,14 +426,18 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 		writePreflight(w)
 		return
 	}
-	if r.Method != http.MethodPost {
-		writeMethodNotAllowed(w)
-		return
-	}
-
 	accountID, err := h.requireAdmin(r)
 	if err != nil {
 		writeAuthError(w, err)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		h.handleAdminListContent(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
 		return
 	}
 
@@ -464,6 +472,18 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleAdminListContent(w http.ResponseWriter, r *http.Request) {
+	contents, err := h.svc.ListAll(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo cargar el catalogo administrativo.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"contenidos": toContentResponseList(contents),
+	})
+}
+
 func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		writePreflight(w)
@@ -483,6 +503,8 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 	}
 
 	switch r.Method {
+	case http.MethodGet:
+		h.handleAdminGetContent(w, r, contentID)
 	case http.MethodPut:
 		h.handleUpdateContent(w, r, contentID)
 	case http.MethodDelete:
@@ -490,6 +512,22 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 	default:
 		writeMethodNotAllowed(w)
 	}
+}
+
+func (h *Handler) handleAdminGetContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	detail, err := h.svc.GetDetail(r.Context(), contentID)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo obtener el detalle del contenido.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"detalle": toDetailResponse(detail),
+	})
 }
 
 func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
@@ -632,6 +670,20 @@ func (h *Handler) requireAdmin(r *http.Request) (string, error) {
 	}
 
 	return accountID, nil
+}
+
+func isReleased(releaseDate *time.Time) bool {
+	if releaseDate == nil {
+		return true
+	}
+
+	now := time.Now()
+	releaseYear, releaseMonth, releaseDay := releaseDate.Date()
+	todayYear, todayMonth, todayDay := now.Date()
+	releaseOnlyDate := time.Date(releaseYear, releaseMonth, releaseDay, 0, 0, 0, 0, now.Location())
+	todayOnlyDate := time.Date(todayYear, todayMonth, todayDay, 0, 0, 0, 0, now.Location())
+
+	return !releaseOnlyDate.After(todayOnlyDate)
 }
 
 func parseCreateContentRequest(req createContentRequest, createdByAccountID string) (*domain.Content, error) {

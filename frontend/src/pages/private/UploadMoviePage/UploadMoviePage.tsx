@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Film, Save } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createCatalogContent, getCatalogDetail, updateCatalogContent } from '@/lib/catalogo-api'
+import { createCatalogContent, getAdminCatalogDetail, updateCatalogContent } from '@/lib/catalogo-api'
 
 interface MovieForm {
   titulo: string
@@ -98,7 +98,11 @@ export function UploadMoviePage() {
       if (!editingId) return
 
       try {
-        const detail = await getCatalogDetail(editingId)
+        if (!session?.accessToken) {
+          setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+          return
+        }
+        const detail = await getAdminCatalogDetail(session.accessToken, editingId)
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
         setForm({
           titulo: detail.titulo,
@@ -126,7 +130,7 @@ export function UploadMoviePage() {
     }
 
     void loadContentToEdit()
-  }, [editingId])
+  }, [editingId, session?.accessToken])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -271,7 +275,7 @@ export function UploadMoviePage() {
             </h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
-              <Input label="Fecha de lanzamiento" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
+              <Input label="Fecha de estreno / publicacion" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea

@@ -110,6 +110,7 @@ type EpisodeBatch struct {
 
 type ContentRepository interface {
 	List(ctx context.Context) ([]Content, error)
+	ListAll(ctx context.Context) ([]Content, error)
 	Search(ctx context.Context, query string) ([]Content, error)
 	FilterByGenres(ctx context.Context, genreIDs []int64) ([]Content, error)
 	GetDetail(ctx context.Context, id string) (*ContentDetail, error)

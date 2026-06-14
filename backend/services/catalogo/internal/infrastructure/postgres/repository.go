@@ -26,7 +26,24 @@ func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) 
 		       url_portada, url_trailer,
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
+		WHERE fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE
 		ORDER BY titulo
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanContentRows(rows)
+}
+
+func (r *ContentRepository) ListAll(ctx context.Context) ([]domain.Content, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, titulo, tipo::text, sinopsis, idioma,
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, fn_porcentaje_recomendacion(id) AS porcentaje_recomendacion
+		FROM contenidos
+		WHERE eliminado_en IS NULL
+		ORDER BY fecha_lanzamiento NULLS FIRST, titulo
 	`)
 	if err != nil {
 		return nil, err
@@ -42,6 +59,7 @@ func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		WHERE titulo ILIKE $1
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
 		ORDER BY titulo
 	`, "%"+query+"%")
 	if err != nil {
@@ -59,6 +77,7 @@ func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64
 		FROM v_cartelera_contenido v
 		JOIN contenido_generos cg ON cg.contenido_id = v.id
 		WHERE cg.genero_id = ANY($1)
+		  AND (v.fecha_lanzamiento IS NULL OR v.fecha_lanzamiento <= CURRENT_DATE)
 		ORDER BY v.titulo
 	`, genreIDs)
 	if err != nil {

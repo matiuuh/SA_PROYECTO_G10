@@ -22,7 +22,7 @@ import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
-import { dislikeCatalogContent, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
+import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getPlaybackProgress, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
@@ -287,8 +287,12 @@ export function MovieDetailPage() {
       }
 
       try {
+        const detailRequest =
+          isAdminView && isAdmin && accessToken
+            ? getAdminCatalogDetail(accessToken, id)
+            : getCatalogDetail(id)
         const [detailData, catalog] = await Promise.all([
-          getCatalogDetail(id),
+          detailRequest,
           listCatalogContent(),
         ])
         setDetail(detailData)
@@ -322,7 +326,7 @@ export function MovieDetailPage() {
     }
 
     void loadDetail()
-  }, [id, requestedEpisodeId])
+  }, [accessToken, id, isAdmin, isAdminView, requestedEpisodeId])
 
   const rating = useMemo(() => {
     if (!detail) return 0
