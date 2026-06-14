@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -116,6 +117,17 @@ type createContentResponse struct {
 	Message string `json:"message"`
 }
 
+type auditEntryResponse struct {
+	ID             string          `json:"id"`
+	TablaOrigen    string          `json:"tabla_origen"`
+	EntidadID      string          `json:"entidad_id"`
+	Evento         string          `json:"evento"`
+	EstadoAnterior json.RawMessage `json:"estado_anterior"`
+	EstadoNuevo    json.RawMessage `json:"estado_nuevo"`
+	UsuarioAccion  string          `json:"usuario_accion,omitempty"`
+	FechaEvento    string          `json:"fecha_evento"`
+}
+
 type rateContentRequest struct {
 	PerfilID string `json:"perfil_id"`
 }
@@ -158,6 +170,7 @@ func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher)
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
+	mux.HandleFunc("/api/v1/admin/catalog/audit", h.handleAdminAudit)
 	mux.HandleFunc("/api/v1/admin/catalog/series/", h.handleAdminSeries)
 	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
@@ -484,6 +497,41 @@ func (h *Handler) handleAdminListContent(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (h *Handler) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	limit := 100
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil || parsedLimit <= 0 {
+			writeError(w, http.StatusBadRequest, "El parametro limit no es valido.")
+			return
+		}
+		limit = parsedLimit
+	}
+
+	entries, err := h.svc.ListAudit(r.Context(), limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo consultar la auditoria del catalogo.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"eventos": toAuditEntryResponseList(entries),
+	})
+}
+
 func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		writePreflight(w)
@@ -497,7 +545,8 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, err := h.requireAdmin(r); err != nil {
+	accountID, err := h.requireAdmin(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -506,9 +555,9 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		h.handleAdminGetContent(w, r, contentID)
 	case http.MethodPut:
-		h.handleUpdateContent(w, r, contentID)
+		h.handleUpdateContent(w, r, contentID, accountID)
 	case http.MethodDelete:
-		h.handleDeleteContent(w, r, contentID)
+		h.handleDeleteContent(w, r, contentID, accountID)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -536,7 +585,8 @@ func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.requireAdmin(r); err != nil {
+	accountID, err := h.requireAdmin(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -565,10 +615,10 @@ func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.handleCreateEpisodeBatch(w, r, contentID)
+	h.handleCreateEpisodeBatch(w, r, contentID, accountID)
 }
 
-func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string) {
+func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
 	var req updateContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
@@ -581,7 +631,7 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 		return
 	}
 
-	if err := h.svc.Update(r.Context(), contentID, content); err != nil {
+	if err := h.svc.Update(r.Context(), contentID, content, accountID); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
 			return
@@ -606,8 +656,8 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 	})
 }
 
-func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, contentID string) {
-	if err := h.svc.Delete(r.Context(), contentID); err != nil {
+func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
+	if err := h.svc.Delete(r.Context(), contentID, accountID); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
 			return
@@ -621,7 +671,7 @@ func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, co
 	})
 }
 
-func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Request, contentID string) {
+func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
 	var req createEpisodeBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
@@ -634,7 +684,7 @@ func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	episodes, err := h.svc.CreateEpisodeBatch(r.Context(), contentID, batch)
+	episodes, err := h.svc.CreateEpisodeBatch(r.Context(), contentID, batch, accountID)
 	if errors.Is(err, domain.ErrContentNotFound) {
 		writeError(w, http.StatusNotFound, "Serie no encontrada.")
 		return
@@ -871,6 +921,23 @@ func toContentResponse(content domain.Content) contentResponse {
 		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02")
 	}
 	return response
+}
+
+func toAuditEntryResponseList(entries []domain.AuditEntry) []auditEntryResponse {
+	out := make([]auditEntryResponse, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, auditEntryResponse{
+			ID:             entry.ID,
+			TablaOrigen:    entry.TableName,
+			EntidadID:      entry.EntityID,
+			Evento:         entry.Event,
+			EstadoAnterior: entry.PreviousState,
+			EstadoNuevo:    entry.NewState,
+			UsuarioAccion:  entry.UserID,
+			FechaEvento:    entry.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return out
 }
 
 func toDetailResponse(detail *domain.ContentDetail) detailResponse {

@@ -105,6 +105,7 @@ CREATE TABLE instantaneas (
     tabla_origen  VARCHAR(100) NOT NULL,
     entidad_id    UUID NOT NULL,
     evento        evento_instantanea NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo  JSONB,
     usuario_accion UUID,
     fecha_evento  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -126,16 +127,37 @@ CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD));
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            OLD.id,
+            'eliminacion',
+            to_jsonb(OLD),
+            NULL,
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+        );
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW));
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            NEW.id,
+            'actualizacion',
+            to_jsonb(OLD),
+            to_jsonb(NEW),
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+        );
         RETURN NEW;
     ELSE
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW));
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            NEW.id,
+            'insercion',
+            NULL,
+            to_jsonb(NEW),
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+        );
         RETURN NEW;
     END IF;
 END;
@@ -282,3 +304,4 @@ CREATE INDEX idx_episodios_temporada   ON episodios(temporada_id);
 CREATE INDEX idx_calif_contenido       ON calificaciones(contenido_id);
 CREATE INDEX idx_calif_perfil          ON calificaciones(perfil_id);
 CREATE INDEX idx_snap_tabla            ON instantaneas(tabla_origen, entidad_id);
+CREATE INDEX idx_snap_fecha            ON instantaneas(fecha_evento DESC);

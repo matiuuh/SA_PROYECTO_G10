@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -106,6 +107,17 @@ type EpisodeBatch struct {
 	Episodes          []Episode
 }
 
+type AuditEntry struct {
+	ID            string
+	TableName     string
+	EntityID      string
+	Event         string
+	PreviousState json.RawMessage
+	NewState      json.RawMessage
+	UserID        string
+	CreatedAt     time.Time
+}
+
 // ─── Repositorio (puerto) ─────────────────────────────────────────────────────
 
 type ContentRepository interface {
@@ -116,9 +128,10 @@ type ContentRepository interface {
 	GetDetail(ctx context.Context, id string) (*ContentDetail, error)
 	ExistsByTitleAndType(ctx context.Context, title string, contentType ContentType) (bool, error)
 	Create(ctx context.Context, c *Content, genreIDs []int64) (string, error)
-	Update(ctx context.Context, id string, c *Content) error
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, id string, c *Content, actorAccountID string) error
+	Delete(ctx context.Context, id string, actorAccountID string) error
 	Rate(ctx context.Context, r *Rating) (float64, error)
 	ListSeasonsByContent(ctx context.Context, contentID string) ([]Season, error)
-	CreateEpisodeBatch(ctx context.Context, contentID string, batch EpisodeBatch) ([]Episode, error)
+	CreateEpisodeBatch(ctx context.Context, contentID string, batch EpisodeBatch, actorAccountID string) ([]Episode, error)
+	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 }

@@ -1,6 +1,8 @@
 import type {
   CatalogContent,
   CatalogDetail,
+  CatalogAuditResponse,
+  CatalogAuditEntry,
   CatalogDetailResponse,
   CatalogSeasonsResponse,
   CatalogListResponse,
@@ -50,6 +52,24 @@ export async function listAdminCatalogContent(accessToken: string): Promise<Cata
 
   const data = (await response.json()) as CatalogListResponse
   return data.contenidos
+}
+
+export async function listCatalogAudit(
+  accessToken: string,
+  limit = 100,
+): Promise<CatalogAuditEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/audit?limit=${limit}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogAuditResponse
+  return data.eventos ?? []
 }
 
 export async function searchCatalogContent(query: string): Promise<CatalogContent[]> {

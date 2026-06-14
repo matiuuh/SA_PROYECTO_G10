@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -186,6 +187,16 @@ func (r *ContentRepository) ExistsByTitleAndType(ctx context.Context, title stri
 }
 
 func (r *ContentRepository) Create(ctx context.Context, content *domain.Content, genreIDs []int64) (string, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err = setAuditUser(ctx, tx, content.CreatedByAccountID); err != nil {
+		return "", err
+	}
+
 	var newID string
 
 	var releaseDate *time.Time
@@ -198,7 +209,7 @@ func (r *ContentRepository) Create(ctx context.Context, content *domain.Content,
 		createdBy = content.CreatedByAccountID
 	}
 
-	row := r.db.QueryRow(ctx, `
+	row := tx.QueryRow(ctx, `
 		CALL sp_registrar_contenido_completo(
 			$1, $2::tipo_contenido, $3, $4,
 			$5, $6, $7, $8, $9, $10,
@@ -213,11 +224,24 @@ func (r *ContentRepository) Create(ctx context.Context, content *domain.Content,
 	if err := row.Scan(&newID); err != nil {
 		return "", err
 	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", err
+	}
 	return newID, nil
 }
 
-func (r *ContentRepository) Update(ctx context.Context, id string, content *domain.Content) error {
-	tag, err := r.db.Exec(ctx, `
+func (r *ContentRepository) Update(ctx context.Context, id string, content *domain.Content, actorAccountID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err = setAuditUser(ctx, tx, actorAccountID); err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, `
 		UPDATE contenidos
 		SET titulo             = $2,
 		    sinopsis           = $3,
@@ -238,11 +262,21 @@ func (r *ContentRepository) Update(ctx context.Context, id string, content *doma
 	if tag.RowsAffected() == 0 {
 		return domain.ErrContentNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
-func (r *ContentRepository) Delete(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, `
+func (r *ContentRepository) Delete(ctx context.Context, id string, actorAccountID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err = setAuditUser(ctx, tx, actorAccountID); err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, `
 		UPDATE contenidos SET eliminado_en = NOW()
 		WHERE id = $1 AND eliminado_en IS NULL
 	`, id)
@@ -252,7 +286,7 @@ func (r *ContentRepository) Delete(ctx context.Context, id string) error {
 	if tag.RowsAffected() == 0 {
 		return domain.ErrContentNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *ContentRepository) Rate(ctx context.Context, rating *domain.Rating) (float64, error) {
@@ -380,7 +414,7 @@ func (r *ContentRepository) ListSeasonsByContent(ctx context.Context, contentID 
 	return seasons, rows.Err()
 }
 
-func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch) ([]domain.Episode, error) {
+func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch, actorAccountID string) ([]domain.Episode, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -390,6 +424,10 @@ func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID st
 			_ = tx.Rollback(ctx)
 		}
 	}()
+
+	if err = setAuditUser(ctx, tx, actorAccountID); err != nil {
+		return nil, err
+	}
 
 	var contentType string
 	err = tx.QueryRow(ctx, `
@@ -469,6 +507,66 @@ func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID st
 	}
 
 	return createdEpisodes, nil
+}
+
+func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			id,
+			tabla_origen,
+			entidad_id,
+			evento::text,
+			estado_anterior,
+			estado_nuevo,
+			COALESCE(usuario_accion::text, ''),
+			fecha_evento
+		FROM instantaneas
+		ORDER BY fecha_evento DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]domain.AuditEntry, 0)
+	for rows.Next() {
+		var entry domain.AuditEntry
+		var previousState []byte
+		var newState []byte
+		if err := rows.Scan(
+			&entry.ID,
+			&entry.TableName,
+			&entry.EntityID,
+			&entry.Event,
+			&previousState,
+			&newState,
+			&entry.UserID,
+			&entry.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		entry.PreviousState = normalizeJSON(previousState)
+		entry.NewState = normalizeJSON(newState)
+		entries = append(entries, entry)
+	}
+
+	return entries, rows.Err()
+}
+
+func setAuditUser(ctx context.Context, tx pgx.Tx, actorAccountID string) error {
+	if actorAccountID == "" {
+		return nil
+	}
+	_, err := tx.Exec(ctx, "SELECT set_config('app.usuario_accion', $1, true)", actorAccountID)
+	return err
+}
+
+func normalizeJSON(raw []byte) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.RawMessage(raw)
 }
 
 func valueOrEmpty(value *string) string {

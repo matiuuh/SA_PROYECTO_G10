@@ -66,12 +66,12 @@ func (s *CatalogoService) Create(ctx context.Context, c *domain.Content, genreID
 	return s.repo.Create(ctx, c, genreIDs)
 }
 
-func (s *CatalogoService) Update(ctx context.Context, id string, c *domain.Content) error {
-	return s.repo.Update(ctx, id, c)
+func (s *CatalogoService) Update(ctx context.Context, id string, c *domain.Content, actorAccountID string) error {
+	return s.repo.Update(ctx, id, c, strings.TrimSpace(actorAccountID))
 }
 
-func (s *CatalogoService) Delete(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+func (s *CatalogoService) Delete(ctx context.Context, id string, actorAccountID string) error {
+	return s.repo.Delete(ctx, id, strings.TrimSpace(actorAccountID))
 }
 
 // ─── Calificacion ─────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ func (s *CatalogoService) ListSeasonsByContent(ctx context.Context, contentID st
 	return s.repo.ListSeasonsByContent(ctx, strings.TrimSpace(contentID))
 }
 
-func (s *CatalogoService) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch) ([]domain.Episode, error) {
+func (s *CatalogoService) CreateEpisodeBatch(ctx context.Context, contentID string, batch domain.EpisodeBatch, actorAccountID string) ([]domain.Episode, error) {
 	contentID = strings.TrimSpace(contentID)
 	batch.SeasonTitle = strings.TrimSpace(batch.SeasonTitle)
 	batch.SeasonDescription = strings.TrimSpace(batch.SeasonDescription)
@@ -95,5 +95,12 @@ func (s *CatalogoService) CreateEpisodeBatch(ctx context.Context, contentID stri
 		batch.Episodes[index].VideoURL = strings.TrimSpace(batch.Episodes[index].VideoURL)
 	}
 
-	return s.repo.CreateEpisodeBatch(ctx, contentID, batch)
+	return s.repo.CreateEpisodeBatch(ctx, contentID, batch, strings.TrimSpace(actorAccountID))
+}
+
+func (s *CatalogoService) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	return s.repo.ListAudit(ctx, limit)
 }

@@ -14,6 +14,7 @@ import {
   HistoryPage,
   AdminDashboardPage,
   AdminCatalogPage,
+  AdminAuditPage,
   UploadMoviePage,
   UploadSeriesPage,
   UploadSeriesEpisodesPage,
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/admin',               element: <AdminDashboardPage /> },
       { path: '/admin/catalog',       element: <AdminCatalogPage /> },
+      { path: '/admin/audit',         element: <AdminAuditPage /> },
       { path: '/admin/upload/movie',  element: <UploadMoviePage /> },
       { path: '/admin/upload/series', element: <UploadSeriesPage /> },
       { path: '/admin/series/:id/episodes', element: <UploadSeriesEpisodesPage /> },

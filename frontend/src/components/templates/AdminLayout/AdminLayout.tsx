@@ -7,6 +7,7 @@ import {
   List,
   LogOut,
   Menu,
+  FileClock,
   Tv2,
   X,
 } from 'lucide-react'
@@ -25,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Subir pelicula', to: '/admin/upload/movie', icon: <Film size={18} strokeWidth={1.75} /> },
   { label: 'Subir serie', to: '/admin/upload/series', icon: <Tv2 size={18} strokeWidth={1.75} /> },
   { label: 'Catalogo', to: '/admin/catalog', icon: <List size={18} strokeWidth={1.75} /> },
+  { label: 'Auditoria', to: '/admin/audit', icon: <FileClock size={18} strokeWidth={1.75} /> },
 ]
 
 export function AdminLayout() {
