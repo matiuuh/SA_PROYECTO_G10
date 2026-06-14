@@ -64,6 +64,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-usuario-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -119,6 +120,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-suscripcion-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -171,6 +173,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-catalogo-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -220,6 +223,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-streaming-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -260,6 +264,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-divisas-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -303,6 +308,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-cobros-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -348,6 +354,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-notificaciones-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal

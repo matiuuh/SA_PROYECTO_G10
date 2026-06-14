@@ -1,6 +1,8 @@
 import type {
   CatalogContent,
   CatalogDetail,
+  CatalogAuditResponse,
+  CatalogAuditEntry,
   CatalogDetailResponse,
   CatalogSeasonsResponse,
   CatalogListResponse,
@@ -37,6 +39,39 @@ export async function listCatalogContent(): Promise<CatalogContent[]> {
   return data.contenidos
 }
 
+export async function listAdminCatalogContent(accessToken: string): Promise<CatalogContent[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/content`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogListResponse
+  return data.contenidos
+}
+
+export async function listCatalogAudit(
+  accessToken: string,
+  limit = 100,
+): Promise<CatalogAuditEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/audit?limit=${limit}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogAuditResponse
+  return data.eventos ?? []
+}
+
 export async function searchCatalogContent(query: string): Promise<CatalogContent[]> {
   const response = await fetch(`${API_BASE_URL}/api/v1/catalog/search?q=${encodeURIComponent(query)}`)
 
@@ -50,6 +85,36 @@ export async function searchCatalogContent(query: string): Promise<CatalogConten
 
 export async function getCatalogDetail(contentId: string): Promise<CatalogDetail> {
   const response = await fetch(`${API_BASE_URL}/api/v1/catalog/${contentId}`)
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as CatalogDetailResponse
+  return {
+    ...data.detalle,
+    ficha_tecnica: data.detalle.ficha_tecnica ?? '',
+    clasificacion_edad: data.detalle.clasificacion_edad ?? '',
+    idioma: data.detalle.idioma ?? '',
+    url_portada: data.detalle.url_portada ?? '',
+    url_trailer: data.detalle.url_trailer ?? '',
+    total_likes: data.detalle.total_likes ?? 0,
+    total_dislikes: data.detalle.total_dislikes ?? 0,
+    porcentaje_recomendacion: data.detalle.porcentaje_recomendacion ?? 0,
+    generos: data.detalle.generos ?? [],
+    reparto: data.detalle.reparto ?? [],
+  }
+}
+
+export async function getAdminCatalogDetail(
+  accessToken: string,
+  contentId: string,
+): Promise<CatalogDetail> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/content/${contentId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
 
   if (!response.ok) {
     throw new Error(await parseError(response))

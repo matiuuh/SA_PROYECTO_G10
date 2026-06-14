@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { Film, Info, List, Tv2, Upload } from 'lucide-react'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard } from '@/components/molecules'
-import { listCatalogContent } from '@/lib/catalogo-api'
+import { getActiveSession } from '@/lib/auth'
+import { listAdminCatalogContent } from '@/lib/catalogo-api'
 import type { CatalogContent } from '@/types/catalog'
 import dashboardSvg from '@/assets/Admin/dashboard.svg'
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
+  const session = getActiveSession()
   const [catalog, setCatalog] = useState<CatalogContent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -16,7 +18,11 @@ export function AdminDashboardPage() {
   useEffect(() => {
     async function loadCatalog() {
       try {
-        const contents = await listCatalogContent()
+        if (!session?.accessToken) {
+          setErrorMessage('Tu sesion ya no esta activa. Inicia sesion nuevamente.')
+          return
+        }
+        const contents = await listAdminCatalogContent(session.accessToken)
         setCatalog(contents)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'No se pudo cargar el catalogo administrativo.')
@@ -26,16 +32,21 @@ export function AdminDashboardPage() {
     }
 
     void loadCatalog()
-  }, [])
+  }, [session?.accessToken])
 
   const stats = useMemo(() => {
     const movies = catalog.filter((item) => item.tipo === 'pelicula')
     const series = catalog.filter((item) => item.tipo === 'serie')
+    const scheduled = catalog.filter((item) => {
+      if (!item.fecha_lanzamiento) return false
+      return new Date(`${item.fecha_lanzamiento}T00:00:00`).getTime() > Date.now()
+    })
 
     return {
       total: catalog.length,
       movies: movies.length,
       series: series.length,
+      scheduled: scheduled.length,
       latest: [...catalog]
         .sort((a, b) => {
           const left = a.fecha_lanzamiento ? new Date(a.fecha_lanzamiento).getTime() : 0
@@ -85,7 +96,7 @@ export function AdminDashboardPage() {
       </ScrollReveal>
 
       <ScrollReveal variant="fade-up" delay={80}>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
           <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
             <p className="text-sm text-[var(--color-denim-400)]">Contenido total</p>
             <p className="mt-2 text-3xl font-bold text-white">{stats.total}</p>
@@ -97,6 +108,10 @@ export function AdminDashboardPage() {
           <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
             <p className="text-sm text-[var(--color-denim-400)]">Series</p>
             <p className="mt-2 text-3xl font-bold text-white">{stats.series}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+            <p className="text-sm text-[var(--color-denim-400)]">Programados</p>
+            <p className="mt-2 text-3xl font-bold text-white">{stats.scheduled}</p>
           </div>
         </div>
       </ScrollReveal>

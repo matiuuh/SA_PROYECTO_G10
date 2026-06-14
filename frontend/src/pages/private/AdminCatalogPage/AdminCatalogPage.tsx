@@ -3,12 +3,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard, SearchBar } from '@/components/molecules'
-import { deleteCatalogContent, getCatalogDetail, listCatalogContent, searchCatalogContent } from '@/lib/catalogo-api'
+import { deleteCatalogContent, getAdminCatalogDetail, listAdminCatalogContent } from '@/lib/catalogo-api'
 import { getActiveSession } from '@/lib/auth'
 import type { CatalogContent } from '@/types/catalog'
 
 type AdminCatalogFilter = 'all' | 'pelicula' | 'serie'
 type AdminGenreFilter = 'all' | string
+
+function isScheduledRelease(item: CatalogContent): boolean {
+  if (!item.fecha_lanzamiento) return false
+  return new Date(`${item.fecha_lanzamiento}T00:00:00`).getTime() > Date.now()
+}
 
 function parseTechnicalSheetGenres(sheet?: string): string[] {
   const source = sheet?.trim() ?? ''
@@ -74,13 +79,17 @@ export function AdminCatalogPage() {
   useEffect(() => {
     async function loadCatalog() {
       try {
-        const contents = await listCatalogContent()
+        if (!session?.accessToken) {
+          setErrorMessage('Tu sesion ya no esta activa. Inicia sesion nuevamente.')
+          return
+        }
+        const contents = await listAdminCatalogContent(session.accessToken)
         setCatalog(contents)
 
         const details = await Promise.all(
           contents.map(async (content) => {
             try {
-              const detail = await getCatalogDetail(content.id)
+              const detail = await getAdminCatalogDetail(session.accessToken, content.id)
               const genresFromRelations = detail.generos.map((genre) => genre.nombre.trim()).filter(Boolean)
               const genresFromSheet = parseTechnicalSheetGenres(detail.ficha_tecnica)
               return {
@@ -110,17 +119,21 @@ export function AdminCatalogPage() {
     }
 
     void loadCatalog()
-  }, [])
+  }, [session?.accessToken])
 
   async function refreshCatalog() {
     try {
-      const contents = await listCatalogContent()
+      if (!session?.accessToken) {
+        setErrorMessage('Tu sesion ya no esta activa. Inicia sesion nuevamente.')
+        return
+      }
+      const contents = await listAdminCatalogContent(session.accessToken)
       setCatalog(contents)
 
       const details = await Promise.all(
         contents.map(async (content) => {
           try {
-            const detail = await getCatalogDetail(content.id)
+            const detail = await getAdminCatalogDetail(session.accessToken, content.id)
             const genresFromRelations = detail.generos.map((genre) => genre.nombre.trim()).filter(Boolean)
             const genresFromSheet = parseTechnicalSheetGenres(detail.ficha_tecnica)
             return {
@@ -171,10 +184,12 @@ export function AdminCatalogPage() {
   const stats = useMemo(() => {
     const movies = catalog.filter((item) => item.tipo === 'pelicula').length
     const series = catalog.filter((item) => item.tipo === 'serie').length
+    const scheduled = catalog.filter(isScheduledRelease).length
     return {
       total: catalog.length,
       movies,
       series,
+      scheduled,
     }
   }, [catalog])
 
@@ -188,16 +203,15 @@ export function AdminCatalogPage() {
 
     setIsSearching(true)
     const timer = setTimeout(() => {
-      void searchCatalogContent(trimmed).then((contents) => {
-        setSearchResults(contents)
-        setIsSearching(false)
-      }).catch(() => {
-        setIsSearching(false)
-      })
+      const normalizedQuery = trimmed.toLowerCase()
+      setSearchResults(
+        catalog.filter((item) => item.titulo.toLowerCase().includes(normalizedQuery)),
+      )
+      setIsSearching(false)
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [query])
+  }, [catalog, query])
 
   const baseList = query.trim() ? searchResults : catalog
 
@@ -245,7 +259,7 @@ export function AdminCatalogPage() {
         </div>
       </ScrollReveal>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="rounded-2xl border border-white/[0.07] bg-[#0a0f1c] p-5">
           <p className="text-sm text-[var(--color-denim-400)]">Contenido total</p>
           <p className="mt-2 text-3xl font-bold text-white">{stats.total}</p>
@@ -257,6 +271,10 @@ export function AdminCatalogPage() {
         <div className="rounded-2xl border border-white/[0.07] bg-[#0a0f1c] p-5">
           <p className="text-sm text-[var(--color-denim-400)]">Series</p>
           <p className="mt-2 text-3xl font-bold text-white">{stats.series}</p>
+        </div>
+        <div className="rounded-2xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+          <p className="text-sm text-[var(--color-denim-400)]">Programados</p>
+          <p className="mt-2 text-3xl font-bold text-white">{stats.scheduled}</p>
         </div>
       </div>
 
@@ -362,6 +380,17 @@ export function AdminCatalogPage() {
                     onClick={() => navigate(`/movie/${item.id}?admin=1`)}
                   />
                   <div className={`grid gap-2 ${item.tipo === 'serie' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                    <div className="col-span-full">
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                          isScheduledRelease(item)
+                            ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+                            : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+                        }`}
+                      >
+                        {isScheduledRelease(item) ? 'Programado' : 'Publicado'}
+                      </span>
+                    </div>
                     <Button variant="ghost" onClick={() => navigate(`/movie/${item.id}?admin=1`)}>
                       <Eye size={14} />
                       Ver

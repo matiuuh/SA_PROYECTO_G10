@@ -163,7 +163,7 @@ func (h *Handler) ActualizarContenido(
 		c.DurationMinutes = &v
 	}
 
-	if err := h.svc.Update(ctx, req.ContenidoId, c); err != nil {
+	if err := h.svc.Update(ctx, req.ContenidoId, c, ""); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			return nil, status.Error(codes.NotFound, "contenido no encontrado")
 		}
@@ -177,7 +177,7 @@ func (h *Handler) EliminarContenido(
 	ctx context.Context,
 	req *catalogov1.EliminarContenidoRequest,
 ) (*catalogov1.EliminarContenidoResponse, error) {
-	if err := h.svc.Delete(ctx, req.ContenidoId); err != nil {
+	if err := h.svc.Delete(ctx, req.ContenidoId, ""); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			return nil, status.Error(codes.NotFound, "contenido no encontrado")
 		}
