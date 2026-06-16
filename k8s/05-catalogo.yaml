@@ -18,6 +18,7 @@ spec:
       labels:
         app: catalogo-service
     spec:
+      serviceAccountName: quetzal-tv-storage-ksa
       containers:
         - name: catalogo-service
           image: $AR_REGISTRY/catalogo:$VERSION
@@ -49,6 +50,11 @@ spec:
                 configMapKeyRef:
                   name: quetzaltv-config
                   key: NOTIFICACIONES_GRPC_TARGET
+            - name: GCS_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: quetzaltv-config
+                  key: GCS_BUCKET
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

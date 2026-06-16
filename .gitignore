@@ -26,6 +26,7 @@ env/
 .env
 .env.*
 !.env.example
+!.env.vm*.example
 
 # Credenciales de servicios cloud (nunca commitear)
 backend/secrets/

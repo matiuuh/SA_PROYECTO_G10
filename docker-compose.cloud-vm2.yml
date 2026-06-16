@@ -14,6 +14,11 @@ name: quetzaltv-vm2
 #     EMAIL_PASS    — contraseña / app password del correo
 #     EMAIL_FROM    — nombre remitente
 #
+#   Requiere además /opt/quetzaltv/secrets/gcs-key.json (key de la SA
+#   quetzal-tv-storage@sa-proyecto-g10.iam.gserviceaccount.com) montada por
+#   cd-develop.yml antes del up, para que streaming-service pueda firmar
+#   URLs V4 de GCS.
+#
 #   Levantar:  docker compose -f docker-compose.cloud-vm2.yml up --build -d
 #   Detener:   docker compose -f docker-compose.cloud-vm2.yml down
 
@@ -91,6 +96,10 @@ services:
       DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5434/quetzal_streaming?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      GCS_BUCKET: quetzal-tv-streaming
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - /opt/quetzaltv/secrets/gcs-key.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5004:5004"
       - "8004:8004"

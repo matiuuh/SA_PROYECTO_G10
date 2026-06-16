@@ -24,6 +24,8 @@ name: CD — develop → GCE
 #   VM_USER             — Usuario SSH en las VMs (ej. sa_deploy)
 #   VM_SSH_KEY          — Clave privada SSH (RSA/ED25519)
 #   DB_PASSWORD         — Contraseña de PostgreSQL (para pg_dump)
+#   GCS_SA_KEY          — JSON de la SA quetzal-tv-storage (firma URLs V4 en
+#                         catalogo-service/streaming-service en VM1/VM2)
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -265,11 +267,12 @@ jobs:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
+          GCS_SA_KEY: ${{ secrets.GCS_SA_KEY }}
         with:
           host: ${{ secrets.VM1_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION
+          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCS_SA_KEY
           script: |
             set -e
 
@@ -285,6 +288,11 @@ jobs:
               backend/deploy/compose/.env
             sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
               backend/deploy/compose/.env
+
+            # Key de quetzal-tv-storage para que catalogo-service firme URLs V4 de GCS
+            mkdir -p secrets
+            echo "${GCS_SA_KEY}" > secrets/gcs-key.json
+            chmod 600 secrets/gcs-key.json
 
             # Pull de nuevas imágenes y reinicio de servicios
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml pull
@@ -304,11 +312,12 @@ jobs:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
+          GCS_SA_KEY: ${{ secrets.GCS_SA_KEY }}
         with:
           host: ${{ secrets.VM2_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION
+          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCS_SA_KEY
           script: |
             set -e
 
@@ -322,6 +331,11 @@ jobs:
               backend/deploy/compose/.env
             sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
               backend/deploy/compose/.env
+
+            # Key de quetzal-tv-storage para que streaming-service firme URLs V4 de GCS
+            mkdir -p secrets
+            echo "${GCS_SA_KEY}" > secrets/gcs-key.json
+            chmod 600 secrets/gcs-key.json
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml pull
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml up -d
