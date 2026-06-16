@@ -27,6 +27,9 @@ env/
 .env.*
 !.env.example
 
+# Credenciales de servicios cloud (nunca commitear)
+backend/secrets/
+
 # Logs
 *.log
 logs/

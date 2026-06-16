@@ -163,6 +163,11 @@ services:
       SUBSCRIPCION_API_URL: http://api-gateway:4000/api/suscripcion
       USUARIO_API_URL: http://api-gateway:4000/api/usuario
       API_GATEWAY_URL: http://api-gateway:4000
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ../../secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5003:5003"
       - "8003:8003"
@@ -184,6 +189,11 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ../../secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5004:5004"
       - "8004:8004"

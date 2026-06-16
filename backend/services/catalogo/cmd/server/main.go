@@ -7,13 +7,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 	"quetzaltv/services/catalogo/internal/application"
+	gcsstorage "quetzaltv/services/catalogo/internal/infrastructure/gcs"
 	grpchandler "quetzaltv/services/catalogo/internal/interfaces/grpc"
 	httphandler "quetzaltv/services/catalogo/internal/interfaces/http"
 	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
@@ -38,11 +41,28 @@ func main() {
 	}
 	log.Println("conexion a postgres establecida")
 
+	gcsBucket := getEnv("GCS_BUCKET", "")
+	gcsFolder := getEnv("GCS_TRAILERS_FOLDER", "trailers")
+
+	var uploader *gcsstorage.Uploader
+	if gcsBucket != "" {
+		gcsClient, err := storage.NewClient(ctx)
+		if err != nil {
+			log.Printf("[catalogo] advertencia: no se pudo crear el cliente GCS, subida de trailers deshabilitada: %v", err)
+		} else {
+			defer gcsClient.Close()
+			uploader = gcsstorage.NewUploader(gcsClient, gcsBucket, gcsFolder, 15*time.Minute)
+			log.Printf("[catalogo] GCS habilitado: bucket=%s folder=%s", gcsBucket, gcsFolder)
+		}
+	} else {
+		log.Println("[catalogo] GCS_BUCKET no configurado, subida de trailers deshabilitada")
+	}
+
 	repo := postgres.NewContentRepository(pool)
 	svc := application.New(repo)
 	alertDispatcher := alerts.NewDispatcherFromEnv()
 	handler := grpchandler.NewHandler(svc, alertDispatcher)
-	httpHandler := httphandler.NewHandler(svc, alertDispatcher)
+	httpHandler := httphandler.NewHandler(svc, alertDispatcher, uploader)
 
 	grpcServer := grpc.NewServer()
 	catalogov1.RegisterCatalogoServiceServer(grpcServer, handler)

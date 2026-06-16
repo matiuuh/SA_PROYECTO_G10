@@ -265,6 +265,46 @@ export async function getCatalogSeasons(contentId: string): Promise<CatalogSeaso
   return data.temporadas ?? []
 }
 
+export async function getUploadTrailerUrl(
+  accessToken: string,
+  contenidoId: string,
+): Promise<{ upload_url: string; object_name: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/upload-trailer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ contenido_id: contenidoId }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as { upload_url: string; object_name: string }
+}
+
+export async function getUploadEpisodeVideoUrl(
+  accessToken: string,
+  episodeKey: string,
+): Promise<{ upload_url: string; object_name: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/upload-episode-video`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ episode_key: episodeKey }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as { upload_url: string; object_name: string }
+}
+
 export async function createSeriesEpisodeBatch(
   accessToken: string,
   contentId: string,

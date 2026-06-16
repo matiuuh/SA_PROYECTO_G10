@@ -24,7 +24,7 @@ import { MediaCard } from '@/components/molecules'
 import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
-import { getPlaybackProgress, updatePlaybackProgress } from '@/lib/streaming-api'
+import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent, CatalogDetail, CatalogEpisode, CatalogSeason } from '@/types/catalog'
@@ -192,6 +192,8 @@ export function MovieDetailPage() {
   const [related, setRelated] = useState<ContentItem[]>([])
   const [savedProgress, setSavedProgress] = useState<PlaybackProgress | null>(null)
   const [resumeFromSeconds, setResumeFromSeconds] = useState(0)
+  const [trailerSignedUrl, setTrailerSignedUrl] = useState<string | null>(null)
+  const [episodeSignedUrl, setEpisodeSignedUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [playbackError, setPlaybackError] = useState('')
@@ -357,11 +359,28 @@ export function MovieDetailPage() {
   const fallbackSubtitles = technicalSheetMetadata.get('subtitulos') ?? ''
   const fallbackSeasons = technicalSheetMetadata.get('temporadas') ?? ''
   const fallbackNotes = technicalSheetMetadata.get('notas') ?? ''
-  const currentPlaybackUrl = selectedEpisode?.url_video || detail?.url_trailer
+  const currentPlaybackUrl = (selectedEpisode ? episodeSignedUrl : null) || trailerSignedUrl || detail?.url_trailer
   const trailerSource = useMemo(
     () => resolveTrailerSource(currentPlaybackUrl, muted, resumeFromSeconds),
     [currentPlaybackUrl, muted, resumeFromSeconds],
   )
+
+  useEffect(() => {
+    if (!id || !hasSubscription) return
+    void getTrailerSignedUrl(id).then((url) => {
+      if (url) setTrailerSignedUrl(url)
+    })
+  }, [id, hasSubscription])
+
+  useEffect(() => {
+    if (!selectedEpisode?.url_video || !hasSubscription) {
+      setEpisodeSignedUrl(null)
+      return
+    }
+    void getEpisodeSignedUrl(selectedEpisode.url_video).then((url) => {
+      setEpisodeSignedUrl(url)
+    })
+  }, [selectedEpisode?.url_video, hasSubscription])
 
   useEffect(() => {
     if (!playing) return
