@@ -31,7 +31,8 @@ app.include_router(build_subscription_router(container), prefix="/api/v1")
 
 @app.on_event("startup")
 def startup() -> None:
-    container.database.ping()
+    if container.database is not None:
+        container.database.ping()
     grpc_server.start(container.settings.grpc_port)
 
 

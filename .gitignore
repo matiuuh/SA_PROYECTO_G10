@@ -26,6 +26,7 @@ env/
 .env
 .env.*
 !.env.example
+!.env.vm*.example
 
 # Credenciales de servicios cloud (nunca commitear)
 backend/secrets/
@@ -61,3 +62,6 @@ test-usuario.ps1
 test-notificaciones.ps1
 req.json
 grpc_tmp.json
+
+# enunciado proyecto
+SA_PROYECTO2.md
