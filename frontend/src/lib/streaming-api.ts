@@ -70,6 +70,31 @@ export async function updatePlaybackProgress(
   }
 }
 
+export async function getTrailerSignedUrl(contenidoId: string): Promise<string | null> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/trailer/${encodeURIComponent(contenidoId)}`, {
+    headers: { ...authHeaders() },
+  })
+
+  if (response.status === 404) return null
+  if (!response.ok) return null
+
+  const data = (await response.json()) as { url?: string }
+  return data.url ?? null
+}
+
+export async function getEpisodeSignedUrl(objectName: string): Promise<string | null> {
+  const encoded = objectName.split('/').map(encodeURIComponent).join('/')
+  const response = await fetch(`${API_BASE_URL}/api/v1/episode/${encoded}`, {
+    headers: { ...authHeaders() },
+  })
+
+  if (response.status === 404) return null
+  if (!response.ok) return null
+
+  const data = (await response.json()) as { url?: string }
+  return data.url ?? null
+}
+
 export async function getPlaybackHistory(
   perfilId: string,
   limit = 10,

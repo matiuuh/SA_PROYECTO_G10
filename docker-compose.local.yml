@@ -204,6 +204,11 @@ services:
       USUARIO_API_URL: http://api-gateway:80/api/usuario
       API_GATEWAY_URL: http://api-gateway:80
       NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ./backend/secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "8003:8003"
       - "5003:5003"
@@ -249,6 +254,11 @@ services:
       DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ./backend/secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "8004:8004"
       - "5004:5004"
