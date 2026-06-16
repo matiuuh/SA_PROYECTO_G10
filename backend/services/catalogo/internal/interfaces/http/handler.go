@@ -15,12 +15,14 @@ import (
 	"quetzaltv/services/catalogo/internal/application"
 	"quetzaltv/services/catalogo/internal/domain"
 	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
+	"quetzaltv/services/catalogo/internal/infrastructure/gcs"
 )
 
 type Handler struct {
 	svc       *application.CatalogoService
 	jwtSecret []byte
 	alerts    *alerts.Dispatcher
+	uploader  *gcs.Uploader
 }
 
 type contentResponse struct {
@@ -160,11 +162,12 @@ type jwtClaims struct {
 	jwt.RegisteredClaims
 }
 
-func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher) *Handler {
+func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher, uploader *gcs.Uploader) *Handler {
 	return &Handler{
 		svc:       svc,
 		jwtSecret: []byte(strings.TrimSpace(os.Getenv("JWT_SECRET"))),
 		alerts:    dispatcher,
+		uploader:  uploader,
 	}
 }
 
@@ -174,6 +177,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/catalog/series/", h.handleAdminSeries)
 	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-trailer", h.handleUploadTrailer)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-episode-video", h.handleUploadEpisodeVideo)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
 	mux.HandleFunc("/api/v1/catalog/", h.handleDetail)
 	mux.HandleFunc("/api/v1/catalog", h.handleList)
@@ -880,6 +885,104 @@ func parseEpisodeBatchRequest(req createEpisodeBatchRequest) (domain.EpisodeBatc
 	}
 
 	return batch, nil
+}
+
+func (h *Handler) handleUploadTrailer(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		ContenidoID string `json:"contenido_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.ContenidoID = strings.TrimSpace(req.ContenidoID)
+	if req.ContenidoID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el contenido_id.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.UploadSignedURL(r.Context(), req.ContenidoID)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida para %q: %v", req.ContenidoID, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":  uploadURL,
+		"object_name": objectName,
+		"method":      "PUT",
+		"content_type": "video/mp4",
+	})
+}
+
+func (h *Handler) handleUploadEpisodeVideo(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		EpisodeKey string `json:"episode_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.EpisodeKey = strings.TrimSpace(req.EpisodeKey)
+	if req.EpisodeKey == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el episode_key.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.EpisodeSignedURL(r.Context(), req.EpisodeKey)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida de episodio para %q: %v", req.EpisodeKey, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":   uploadURL,
+		"object_name": objectName,
+		"method":      "PUT",
+		"content_type": "video/mp4",
+	})
 }
 
 func (h *Handler) dispatchNewContentAlert(content *domain.Content) {

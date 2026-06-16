@@ -8,11 +8,13 @@ import (
 
 // StreamingService orquesta los casos de uso del dominio de streaming.
 type StreamingService struct {
-	repo domain.PlaybackRepository
+	repo        domain.PlaybackRepository
+	trailerRepo domain.TrailerRepository
+	episodeRepo domain.EpisodeRepository
 }
 
-func New(repo domain.PlaybackRepository) *StreamingService {
-	return &StreamingService{repo: repo}
+func New(repo domain.PlaybackRepository, trailerRepo domain.TrailerRepository, episodeRepo domain.EpisodeRepository) *StreamingService {
+	return &StreamingService{repo: repo, trailerRepo: trailerRepo, episodeRepo: episodeRepo}
 }
 
 // UpdateProgress guarda o actualiza el progreso de reproduccion.
@@ -41,4 +43,14 @@ func (s *StreamingService) GetHistory(
 	limit int,
 ) ([]domain.PlaybackHistory, error) {
 	return s.repo.GetHistory(ctx, profileID, limit)
+}
+
+// GetTrailerURL devuelve una URL firmada de GCS para reproducir el trailer del contenido.
+func (s *StreamingService) GetTrailerURL(ctx context.Context, contentID string) (string, error) {
+	return s.trailerRepo.GetSignedURL(ctx, contentID)
+}
+
+// GetEpisodeVideoURL devuelve una URL firmada de GCS para reproducir el video de un episodio.
+func (s *StreamingService) GetEpisodeVideoURL(ctx context.Context, objectName string) (string, error) {
+	return s.episodeRepo.GetEpisodeSignedURL(ctx, objectName)
 }

@@ -33,6 +33,12 @@ RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /streaming-service /usr/local/bin/streaming-service
 
+# Variables requeridas en tiempo de ejecución:
+#   DATABASE_URL           - conexión a PostgreSQL
+#   GCS_BUCKET             - nombre del bucket, ej: quetzal-tv-streaming
+#   GCS_TRAILERS_FOLDER    - carpeta dentro del bucket (default: trailers)
+#   GOOGLE_APPLICATION_CREDENTIALS - ruta al JSON de la cuenta de servicio (montado como volumen)
+
 EXPOSE 5004
 
 ENTRYPOINT ["streaming-service"]
