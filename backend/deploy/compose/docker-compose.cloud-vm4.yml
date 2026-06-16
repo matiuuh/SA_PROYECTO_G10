@@ -45,6 +45,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   frontend:
+    image: ${AR_REGISTRY:-quetzaltv}/frontend:${IMAGE_TAG:-latest}
     build:
       context: ../../../../frontend
       dockerfile: Dockerfile
@@ -64,6 +65,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   api-gateway:
+    image: ${AR_REGISTRY:-quetzaltv}/api-gateway:${IMAGE_TAG:-latest}
     build:
       context: ../../../api-gateway
       dockerfile: Dockerfile

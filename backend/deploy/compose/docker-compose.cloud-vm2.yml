@@ -40,6 +40,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   divisas-service:
+    image: ${AR_REGISTRY:-quetzaltv}/divisas:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: services/divisas/Dockerfile
@@ -62,6 +63,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   notificaciones-service:
+    image: ${AR_REGISTRY:-quetzaltv}/notificaciones:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: services/notificaciones/Dockerfile
@@ -82,6 +84,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   streaming-service:
+    image: ${AR_REGISTRY:-quetzaltv}/streaming:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: services/streaming/Dockerfile
@@ -100,6 +103,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   cobros-service:
+    image: ${AR_REGISTRY:-quetzaltv}/cobros:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: services/cobros/Dockerfile

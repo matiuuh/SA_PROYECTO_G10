@@ -58,3 +58,6 @@ test-usuario.ps1
 test-notificaciones.ps1
 req.json
 grpc_tmp.json
+
+# enunciado proyecto
+SA_PROYECTO2.md

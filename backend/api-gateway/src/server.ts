@@ -1,7 +1,8 @@
 import http from 'http';
+import net from 'net';
 import { config } from './config';
 import { isPublic, verifyToken } from './auth';
-import { proxyTo, rewriteUrl } from './proxy';
+import { proxyTo, proxyUpgrade, rewriteUrl } from './proxy';
 
 // ── Tabla de rutas: prefijo → servicio destino ─────────────────────────────
 const ROUTES: Array<{ prefix: string; target: keyof typeof config.services }> = [
@@ -79,6 +80,27 @@ function main(): void {
   }
 
   const server = http.createServer(handleRequest);
+
+  // Manejo de upgrades WebSocket.
+  // Node.js emite 'upgrade' en lugar de 'request' cuando llega
+  // Connection: Upgrade + Upgrade: websocket — si no se escucha este
+  // evento, el socket se cierra y el WebSocket falla silenciosamente.
+  server.on('upgrade', (req: http.IncomingMessage, socket: net.Socket, head: Buffer) => {
+    const url = req.url ?? '/';
+    console.log(`[${new Date().toISOString()}] WS UPGRADE ${url}`);
+
+    const route = ROUTES.find(r => url.startsWith(r.prefix));
+    if (route) {
+      const target     = config.services[route.target];
+      const rewrittenUrl = rewriteUrl(url, route.prefix);
+      proxyUpgrade(req, socket, head, target, rewrittenUrl);
+      return;
+    }
+
+    // WebSocket sin ruta conocida → cerrar conexión limpiamente
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+  });
 
   server.listen(config.PORT, '0.0.0.0', () => {
     console.log(`[gateway] escuchando en puerto ${config.PORT}`);

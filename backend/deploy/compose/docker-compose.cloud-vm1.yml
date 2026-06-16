@@ -23,6 +23,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   usuario-service:
+    image: ${AR_REGISTRY:-quetzaltv}/usuario:${IMAGE_TAG:-latest}
     build:
       context: ../../services/usuario
       dockerfile: Dockerfile
@@ -54,6 +55,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   suscripcion-service:
+    image: ${AR_REGISTRY:-quetzaltv}/suscripcion:${IMAGE_TAG:-latest}
     build:
       context: ../../services/suscripcion
       dockerfile: Dockerfile
@@ -66,6 +68,7 @@ services:
       GRPC_PORT: 5002
       API_GATEWAY_URL: http://${VM4_HOST}:80
       CONVERSION_TIMEOUT_SECONDS: 3.0
+      STORAGE_BACKEND: postgres
       JWT_SECRET: ${JWT_SECRET}
       DB_HOST: ${DB_VM3_HOST}
       DB_PORT: 5438
@@ -81,6 +84,7 @@ services:
   # ════════════════════════════════════════════════════════════════════════════
 
   catalogo-service:
+    image: ${AR_REGISTRY:-quetzaltv}/catalogo:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: services/catalogo/Dockerfile
