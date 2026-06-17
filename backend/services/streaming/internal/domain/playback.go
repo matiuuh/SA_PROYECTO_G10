@@ -18,6 +18,8 @@ const (
 // ─── Errores de dominio ───────────────────────────────────────────────────────
 
 var ErrHistoryNotFound = errors.New("historial no encontrado")
+var ErrTrailerNotFound = errors.New("trailer no encontrado")
+var ErrEpisodeNotFound = errors.New("video de episodio no encontrado")
 
 // ─── Entidades ────────────────────────────────────────────────────────────────
 
@@ -37,4 +39,12 @@ type PlaybackRepository interface {
 	Upsert(ctx context.Context, h *PlaybackHistory, totalDuration int) (PlaybackState, error)
 	GetProgress(ctx context.Context, profileID, contentID, episodeID string) (*PlaybackHistory, error)
 	GetHistory(ctx context.Context, profileID string, limit int) ([]PlaybackHistory, error)
+}
+
+type TrailerRepository interface {
+	GetSignedURL(ctx context.Context, contentID string) (string, error)
+}
+
+type EpisodeRepository interface {
+	GetEpisodeSignedURL(ctx context.Context, objectName string) (string, error)
 }

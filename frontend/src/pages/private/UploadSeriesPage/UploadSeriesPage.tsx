@@ -1,9 +1,9 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Clapperboard, Save, Tv2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clapperboard, Film, Save, Tv2, Upload, X } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createCatalogContent, getAdminCatalogDetail, getCatalogSeasons, updateCatalogContent } from '@/lib/catalogo-api'
+import { createCatalogContent, getAdminCatalogDetail, getCatalogSeasons, getUploadTrailerUrl, updateCatalogContent } from '@/lib/catalogo-api'
 import type { CatalogSeason } from '@/types/catalog'
 
 interface SeriesForm {
@@ -19,8 +19,13 @@ interface SeriesForm {
   idioma: string
   clasificacionEdad: string
   urlPortada: string
-  urlTrailer: string
 }
+
+type UploadState =
+  | { phase: 'idle' }
+  | { phase: 'uploading'; progress: number }
+  | { phase: 'done'; objectName: string }
+  | { phase: 'error'; message: string }
 
 type FeedbackState =
   | { type: 'success'; message: string }
@@ -40,7 +45,6 @@ const INITIAL_FORM: SeriesForm = {
   idioma: 'es',
   clasificacionEdad: 'PG-13',
   urlPortada: '',
-  urlTrailer: '',
 }
 
 const AGE_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17']
@@ -84,6 +88,11 @@ export function UploadSeriesPage() {
   const [loading, setLoading] = useState(false)
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(editingId))
   const [existingSeasons, setExistingSeasons] = useState<CatalogSeason[]>([])
+  const [trailerFile, setTrailerFile] = useState<File | null>(null)
+  const [uploadState, setUploadState] = useState<UploadState>({ phase: 'idle' })
+  const [savedContentId, setSavedContentId] = useState(editingId)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isUploading = uploadState.phase === 'uploading'
 
   const setField = (field: keyof SeriesForm) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
@@ -94,6 +103,74 @@ export function UploadSeriesPage() {
   const resetForm = () => {
     setForm(INITIAL_FORM)
     setFeedback(null)
+    setTrailerFile(null)
+    setUploadState({ phase: 'idle' })
+  }
+
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      setUploadState({ phase: 'error', message: 'Solo se aceptan archivos de video (mp4, webm, etc.).' })
+      return
+    }
+    setTrailerFile(file)
+    setUploadState({ phase: 'idle' })
+  }
+
+  const uploadTrailerToGCS = async (token: string, contentId: string, file: File): Promise<string> => {
+    setUploadState({ phase: 'uploading', progress: 0 })
+    try {
+      const { upload_url, object_name } = await getUploadTrailerUrl(token, contentId)
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', upload_url)
+        xhr.setRequestHeader('Content-Type', 'video/mp4')
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setUploadState({ phase: 'uploading', progress: Math.round((event.loaded / event.total) * 100) })
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve()
+          } else {
+            reject(new Error(`Error al subir el archivo: HTTP ${xhr.status}`))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Error de red al subir el trailer.'))
+        xhr.send(file)
+      })
+
+      setUploadState({ phase: 'done', objectName: object_name })
+      return object_name
+    } catch (error) {
+      setUploadState({
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo subir el trailer.',
+      })
+      throw error
+    }
+  }
+
+  const handleManualUpload = async () => {
+    if (!trailerFile) return
+    const token = session?.accessToken
+    if (!token) {
+      setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa.' })
+      return
+    }
+    const targetId = savedContentId || editingId
+    if (!targetId) {
+      setFeedback({ type: 'error', message: 'Primero guarda la serie para habilitar la subida del trailer.' })
+      return
+    }
+    try {
+      await uploadTrailerToGCS(token, targetId, trailerFile)
+    } catch {
+      // Error already set in uploadTrailerToGCS
+    }
   }
 
   useEffect(() => {
@@ -124,8 +201,10 @@ export function UploadSeriesPage() {
           idioma: detail.idioma,
           clasificacionEdad: detail.clasificacion_edad || 'PG-13',
           urlPortada: detail.url_portada,
-          urlTrailer: detail.url_trailer ?? '',
         })
+        if (detail.url_trailer) {
+          setUploadState({ phase: 'done', objectName: detail.url_trailer })
+        }
       } catch (error) {
         setFeedback({
           type: 'error',
@@ -162,6 +241,8 @@ export function UploadSeriesPage() {
     setFeedback(null)
 
     try {
+      const trailerObjectName = uploadState.phase === 'done' ? uploadState.objectName : undefined
+
       const payload = {
         titulo: form.titulo.trim(),
         sinopsis: form.sinopsis.trim(),
@@ -170,9 +251,10 @@ export function UploadSeriesPage() {
         clasificacion_edad: form.clasificacionEdad || undefined,
         idioma: form.idioma.trim(),
         url_portada: form.urlPortada.trim(),
-        url_trailer: form.urlTrailer.trim() || undefined,
+        url_trailer: trailerObjectName,
       }
 
+      let targetId = editingId
       if (editingId) {
         await updateCatalogContent(session.accessToken, editingId, payload)
       } else {
@@ -180,12 +262,21 @@ export function UploadSeriesPage() {
           ...payload,
           tipo: 'serie',
         })
+        targetId = created.id
+        setSavedContentId(created.id)
+      }
 
+      if (trailerFile && targetId) {
+        const objectName = await uploadTrailerToGCS(session.accessToken, targetId, trailerFile)
+        await updateCatalogContent(session.accessToken, targetId, { ...payload, url_trailer: objectName })
+      }
+
+      if (!editingId && !trailerFile) {
         setFeedback({
           type: 'success',
           message: 'Ficha general registrada. Ahora agrega las temporadas y episodios de la serie.',
         })
-        setTimeout(() => navigate(`/admin/series/${created.id}/episodes`), 1200)
+        setTimeout(() => navigate(`/admin/series/${targetId}/episodes`), 1200)
         return
       }
 
@@ -195,7 +286,7 @@ export function UploadSeriesPage() {
           ? 'Serie actualizada correctamente en el catalogo.'
           : 'Serie registrada correctamente en el catalogo.',
       })
-      setTimeout(() => navigate('/admin/catalog'), 1200)
+      setTimeout(() => navigate(editingId ? '/admin/catalog' : `/admin/series/${targetId}/episodes`), 1500)
     } catch (error) {
       setFeedback({
         type: 'error',
@@ -263,11 +354,11 @@ export function UploadSeriesPage() {
                 <Button type="button" variant="ghost" onClick={resetForm}>
                   Limpiar
                 </Button>
-                <Button type="submit" disabled={loading}>
-                  {loading ? (
+                <Button type="submit" disabled={loading || isUploading}>
+                  {loading || isUploading ? (
                     <span className="flex items-center gap-2">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Subiendo...
+                      {isUploading ? 'Subiendo trailer...' : 'Guardando...'}
                     </span>
                   ) : (
                     <>
@@ -362,13 +453,91 @@ export function UploadSeriesPage() {
                 onChange={setField('urlPortada')}
                 required
               />
-              <Input
-                label="URL de trailer"
-                type="url"
-                placeholder="https://..."
-                value={form.urlTrailer}
-                onChange={setField('urlTrailer')}
-              />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                  Trailer (video mp4)
+                </label>
+                <div className="flex flex-col gap-2 rounded-lg border border-white/[0.07] bg-[#0d1220] p-3">
+                  {uploadState.phase === 'done' ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 size={15} className="shrink-0 text-[var(--color-success)]" />
+                      <span className="truncate text-[var(--color-denim-300)]">{uploadState.objectName}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setUploadState({ phase: 'idle' }); setTrailerFile(null) }}
+                        className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : uploadState.phase === 'uploading' ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-[var(--color-primary)]" />
+                        Subiendo al bucket... {uploadState.progress}%
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-[var(--color-primary)] transition-all duration-200"
+                          style={{ width: `${uploadState.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {trailerFile ? (
+                        <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                          <Film size={14} className="shrink-0" />
+                          <span className="truncate">{trailerFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setTrailerFile(null)}
+                            className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--color-denim-500)]">
+                          Selecciona un archivo .mp4 para subir al bucket de GCS.
+                        </p>
+                      )}
+                      {uploadState.phase === 'error' && (
+                        <p className="text-xs text-[var(--color-error)]">{uploadState.message}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[var(--color-denim-300)] transition-colors hover:bg-white/[0.10] hover:text-white">
+                          <Upload size={12} />
+                          Elegir archivo
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="video/mp4,video/webm,video/*"
+                            className="sr-only"
+                            onChange={handleFileSelect}
+                          />
+                        </label>
+                        {trailerFile && (savedContentId || editingId) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => { void handleManualUpload() }}
+                            disabled={isUploading}
+                          >
+                            <Upload size={12} />
+                            Subir ahora
+                          </Button>
+                        )}
+                      </div>
+                      {trailerFile && !savedContentId && !editingId && (
+                        <p className="text-xs text-[var(--color-denim-400)]">
+                          El trailer se subira automaticamente al guardar la serie.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
         </ScrollReveal>
@@ -406,11 +575,11 @@ export function UploadSeriesPage() {
             <Button type="button" variant="ghost" onClick={resetForm}>
               Limpiar formulario
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? (
+            <Button type="submit" disabled={loading || isUploading}>
+              {loading || isUploading ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Subiendo...
+                  {isUploading ? 'Subiendo trailer...' : 'Guardando...'}
                 </span>
               ) : (
                 <>

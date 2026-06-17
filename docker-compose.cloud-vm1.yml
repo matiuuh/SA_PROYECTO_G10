@@ -13,6 +13,11 @@ name: quetzaltv-vm1
 #     DB_PASSWORD   — contraseña compartida de postgres
 #     JWT_SECRET    — clave de firma JWT
 #
+#   Requiere además /opt/quetzaltv/secrets/gcs-key.json (key de la SA
+#   quetzal-tv-storage@sa-proyecto-g10.iam.gserviceaccount.com) montada por
+#   cd-develop.yml antes del up, para que catalogo-service pueda firmar
+#   URLs V4 de GCS.
+#
 #   Levantar:  docker compose -f docker-compose.cloud-vm1.yml up --build -d
 #   Detener:   docker compose -f docker-compose.cloud-vm1.yml down
 
@@ -95,6 +100,10 @@ services:
       USUARIO_API_URL: http://${VM4_HOST}:80/api/usuario
       API_GATEWAY_URL: http://${VM4_HOST}:80
       NOTIFICACIONES_GRPC_TARGET: ${VM2_HOST}:5007
+      GCS_BUCKET: quetzal-tv-streaming
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - /opt/quetzaltv/secrets/gcs-key.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5003:5003"
       - "8003:8003"

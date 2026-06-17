@@ -46,6 +46,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/progress", h.handleProgress)
 	mux.HandleFunc("/api/v1/history/", h.handleHistory)
+	mux.HandleFunc("/api/v1/trailer/", h.handleTrailer)
+	mux.HandleFunc("/api/v1/episode/", h.handleEpisode)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +178,64 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"historial": response,
 	})
+}
+
+func (h *Handler) handleEpisode(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	objectName := strings.TrimPrefix(r.URL.Path, "/api/v1/episode/")
+	if objectName == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el object_name del episodio.")
+		return
+	}
+
+	url, err := h.svc.GetEpisodeVideoURL(r.Context(), objectName)
+	if errors.Is(err, domain.ErrEpisodeNotFound) {
+		writeError(w, http.StatusNotFound, "Video del episodio no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL del video.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
+func (h *Handler) handleTrailer(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	contentID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/trailer/"))
+	if contentID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el contenido_id.")
+		return
+	}
+
+	url, err := h.svc.GetTrailerURL(r.Context(), contentID)
+	if errors.Is(err, domain.ErrTrailerNotFound) {
+		writeError(w, http.StatusNotFound, "Trailer no encontrado para ese contenido.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL del trailer.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
 func toProgressResponse(progress *domain.PlaybackHistory) progressResponse {

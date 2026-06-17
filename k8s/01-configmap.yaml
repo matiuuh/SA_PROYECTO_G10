@@ -1,0 +1,23 @@
+# Configuración no sensible, compartida entre los Deployments de quetzaltv-prod.
+# $VM3_HOST se sustituye en cd-release.yml (mismo mecanismo de envsubst que $AR_REGISTRY/$VERSION).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quetzaltv-config
+  namespace: quetzaltv-prod
+data:
+  DB_HOST: "$VM3_HOST"
+  API_GATEWAY_URL: "http://api-gateway"
+  FRONTEND_URL: "http://frontend:80"
+  USUARIO_SERVICE_URL: "http://usuario-service:8001"
+  SUSCRIPCION_SERVICE_URL: "http://suscripcion-service:8002"
+  CATALOGO_SERVICE_URL: "http://catalogo-service:8003"
+  STREAMING_SERVICE_URL: "http://streaming-service:8004"
+  DIVISAS_SERVICE_URL: "http://divisas-service:8005"
+  COBROS_SERVICE_URL: "http://cobros-service:8006"
+  NOTIFICACIONES_SERVICE_URL: "http://notificaciones-service:8007"
+  NOTIFICACIONES_GRPC_TARGET: "notificaciones-service:5007"
+  SUBSCRIPCION_API_URL: "http://api-gateway/api/suscripcion"
+  USUARIO_API_URL: "http://api-gateway/api/usuario"
+  REDIS_URL: "redis://redis:6379"
+  GCS_BUCKET: "quetzal-tv-streaming"

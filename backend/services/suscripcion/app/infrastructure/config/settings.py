@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     grpc_port: int = 50052
     api_gateway_url: str = "http://localhost:4000"
     conversion_timeout_seconds: float = 3.0
+    storage_backend: str = "inmemory"
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "quetzal_suscripcion"
