@@ -14,11 +14,16 @@ import (
 )
 
 type ContentRepository struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	userDB *pgxpool.Pool
 }
 
 func NewContentRepository(db *pgxpool.Pool) *ContentRepository {
 	return &ContentRepository{db: db}
+}
+
+func NewContentRepositoryWithUserDB(db *pgxpool.Pool, userDB *pgxpool.Pool) *ContentRepository {
+	return &ContentRepository{db: db, userDB: userDB}
 }
 
 func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) {
@@ -512,12 +517,24 @@ func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID st
 func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			id,
+			id::text,
 			tabla_origen,
-			entidad_id,
-			evento::text,
+			entidad_id::text,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN 'eliminacion'
+				ELSE evento::text
+			END AS evento,
 			estado_anterior,
-			estado_nuevo,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN NULL
+				ELSE estado_nuevo
+			END AS estado_nuevo,
 			COALESCE(usuario_accion::text, ''),
 			fecha_evento
 		FROM instantaneas
@@ -551,7 +568,63 @@ func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.
 		entries = append(entries, entry)
 	}
 
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	r.resolveAuditUserEmails(ctx, entries)
+	return entries, nil
+}
+
+func (r *ContentRepository) resolveAuditUserEmails(ctx context.Context, entries []domain.AuditEntry) {
+	if r.userDB == nil || len(entries) == 0 {
+		return
+	}
+
+	userIDs := make([]string, 0, len(entries))
+	seen := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.UserID == "" {
+			continue
+		}
+		if _, ok := seen[entry.UserID]; ok {
+			continue
+		}
+		seen[entry.UserID] = struct{}{}
+		userIDs = append(userIDs, entry.UserID)
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	rows, err := r.userDB.Query(ctx, `
+		SELECT id::text, correo
+		FROM usuarios.cuentas
+		WHERE id::text = ANY($1)
+	`, userIDs)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	emailsByID := make(map[string]string)
+	for rows.Next() {
+		var id string
+		var email string
+		if err := rows.Scan(&id, &email); err != nil {
+			return
+		}
+		emailsByID[id] = email
+	}
+	if rows.Err() != nil {
+		return
+	}
+
+	for i := range entries {
+		if email := emailsByID[entries[i].UserID]; email != "" {
+			entries[i].UserID = email
+		}
+	}
 }
 
 func setAuditUser(ctx context.Context, tx pgx.Tx, actorAccountID string) error {

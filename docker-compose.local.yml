@@ -198,6 +198,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://quetzal:quetzal@postgres-catalogo:5432/catalogo_db?sslmode=disable
+      USUARIO_DATABASE_URL: postgres://quetzal:quetzal@postgres-usuario:5432/usuario_db?sslmode=disable
       GRPC_PORT: 5003
       HTTP_PORT: 8003
       JWT_SECRET: quetzal-dev-secret
@@ -215,6 +216,8 @@ services:
       - "5003:5003"
     depends_on:
       postgres-catalogo:
+        condition: service_healthy
+      postgres-usuario:
         condition: service_healthy
       api-gateway:
         condition: service_started
