@@ -1,0 +1,421 @@
+name: CD — release → GKE
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Se dispara ÚNICAMENTE cuando el workflow de CI completa con éxito en la
+# rama release. Orden de ejecución:
+#
+#   1. version           — Calcula el próximo tag semántico v2.X.0 y lo publica
+#                         en el repositorio.
+#   2. build-and-push   — (espera a version) Construye las 9 imágenes con el
+#                         tag semántico y las sube a Artifact Registry.
+#   3. backup-databases — (paralelo con build-and-push)
+#                         SSH a VM3, vuelca las 7 BDs a GCS.
+#   4. deploy-gke       — (espera a build-and-push y backup-databases)
+#                         Aplica los manifiestos Kubernetes con la nueva imagen,
+#                         espera el rollout. Si falla → kubectl rollout undo.
+#
+# Secrets requeridos (además de los de cd-develop.yml):
+#   GKE_CLUSTER         — Nombre del clúster GKE (ej. quetzaltv-cluster)
+#   GKE_ZONE            — Zona del clúster        (ej. us-central1-a)
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [release]
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # GUARDIA
+  # ════════════════════════════════════════════════════════════════════════════
+
+  ci-passed:
+    name: "Verificar rama"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Push a release detectado — iniciando despliegue a GKE"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 1. VERSIONAMIENTO SEMÁNTICO
+  # Lee el último tag v2.X.0 del repo y crea el siguiente (v2.X+1.0).
+  # ════════════════════════════════════════════════════════════════════════════
+
+  version:
+    name: "Generar tag semántico v2.X.0"
+    runs-on: ubuntu-latest
+    needs: ci-passed
+    permissions:
+      contents: write
+
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Calcular próxima versión
+        id: semver
+        run: |
+          # Busca el último tag v2.X.0
+          LATEST=$(git tag -l "v2.*.0" | sort -V | tail -1)
+
+          if [ -z "${LATEST}" ]; then
+            NEXT="v2.0.0"
+          else
+            MINOR=$(echo "${LATEST}" | cut -d. -f2)
+            NEXT="v2.$((MINOR + 1)).0"
+          fi
+
+          echo "Último tag: ${LATEST:-ninguno}"
+          echo "Próximo tag: ${NEXT}"
+          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar tag en el repositorio
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.semver.outputs.version }}"
+          git push origin "${{ steps.semver.outputs.version }}"
+          echo "✓ Tag ${{ steps.semver.outputs.version }} publicado"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 2. BUILD & PUSH con tag semántico
+  # ════════════════════════════════════════════════════════════════════════════
+
+  build-and-push:
+    name: "Build & Push → AR (${{ needs.version.outputs.version }})"
+    runs-on: ubuntu-latest
+    needs: version
+
+    outputs:
+      ar_registry: ${{ steps.meta.outputs.registry }}
+      version: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Definir registry
+        id: meta
+        run: |
+          REGISTRY="${{ secrets.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/quetzaltv"
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
+
+      - name: Autenticar con GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.AR_REGION }}-docker.pkg.dev --quiet
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: "Build & Push · usuario"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/services/usuario
+          file: ./backend/services/usuario/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/usuario:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/usuario:latest
+          cache-from: type=gha,scope=usuario
+          cache-to: type=gha,mode=max,scope=usuario
+
+      - name: "Build & Push · suscripcion"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/services/suscripcion
+          file: ./backend/services/suscripcion/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/suscripcion:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/suscripcion:latest
+          cache-from: type=gha,scope=suscripcion
+          cache-to: type=gha,mode=max,scope=suscripcion
+
+      - name: "Build & Push · catalogo"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/services/catalogo/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/catalogo:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/catalogo:latest
+          cache-from: type=gha,scope=catalogo
+          cache-to: type=gha,mode=max,scope=catalogo
+
+      - name: "Build & Push · streaming"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/services/streaming/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/streaming:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/streaming:latest
+          cache-from: type=gha,scope=streaming
+          cache-to: type=gha,mode=max,scope=streaming
+
+      - name: "Build & Push · cobros"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/services/cobros/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/cobros:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/cobros:latest
+          cache-from: type=gha,scope=cobros
+          cache-to: type=gha,mode=max,scope=cobros
+
+      - name: "Build & Push · divisas"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/services/divisas/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/divisas:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/divisas:latest
+          cache-from: type=gha,scope=divisas
+          cache-to: type=gha,mode=max,scope=divisas
+
+      - name: "Build & Push · notificaciones"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/services/notificaciones/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/notificaciones:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/notificaciones:latest
+          cache-from: type=gha,scope=notificaciones
+          cache-to: type=gha,mode=max,scope=notificaciones
+
+      - name: "Build & Push · api-gateway"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/api-gateway
+          file: ./backend/api-gateway/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/api-gateway:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/api-gateway:latest
+          cache-from: type=gha,scope=api-gateway
+          cache-to: type=gha,mode=max,scope=api-gateway
+
+      - name: "Build & Push · frontend"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/frontend:${{ needs.version.outputs.version }}
+            ${{ steps.meta.outputs.registry }}/frontend:latest
+          build-args: |
+            VITE_USUARIO_API_URL=/api/usuario
+            VITE_SUSCRIPCION_API_URL=/api/suscripcion
+            VITE_CATALOGO_API_URL=/api/catalogo
+            VITE_STREAMING_API_URL=/api/streaming
+            VITE_COBROS_API_URL=/api/cobros
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 3. BACKUP DE BASES DE DATOS (paralelo con build-and-push)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  backup-databases:
+    name: "Backup de BDs → GCS (pre-release)"
+    runs-on: ubuntu-latest
+    needs: ci-passed
+    steps:
+      - name: Autenticar con GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Preparar clave SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh-keyscan -H ${{ secrets.VM3_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ejecutar backup en VM3 vía SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BACKUP_BUCKET }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        with:
+          host: ${{ secrets.VM3_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key_path: /tmp/deploy_key
+          envs: GCP_SA_KEY,GCS_BUCKET,DB_PASSWORD
+          script: |
+            set -e
+            DATE=$(date +%Y%m%d_%H%M%S)
+
+            echo "${GCP_SA_KEY}" > /tmp/sa-key.json
+            gcloud auth activate-service-account --key-file=/tmp/sa-key.json --quiet
+            rm /tmp/sa-key.json
+
+            echo "=== Backup pre-release: ${DATE} ==="
+
+            backup_db() {
+              local DB_NAME=$1 CONTAINER=$2 DUMP_FILE="/tmp/backup_${1}_${DATE}.sql.gz"
+              echo "→ ${DB_NAME}..."
+              docker exec "${CONTAINER}" pg_dump -U postgres "${DB_NAME}" | gzip > "${DUMP_FILE}"
+              gsutil cp "${DUMP_FILE}" "gs://${GCS_BUCKET}/pre-release/${DATE}/${DB_NAME}.sql.gz"
+              rm "${DUMP_FILE}"
+              echo "  ✓ ${DB_NAME}"
+            }
+
+            backup_db "quetzal_usuario"        "quetzal-postgres-usuario"
+            backup_db "quetzal_suscripcion"    "quetzal-postgres-suscripcion"
+            backup_db "quetzal_catalogo"       "quetzal-postgres-catalogo"
+            backup_db "quetzal_streaming"      "quetzal-postgres-streaming"
+            backup_db "quetzal_divisas"        "quetzal-postgres-divisas"
+            backup_db "quetzal_cobros"         "quetzal-postgres-cobros"
+            backup_db "quetzal_notificaciones" "quetzal-postgres-notificaciones"
+
+            echo "=== Backup pre-release completado ==="
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 4. DESPLIEGUE A GKE — RollingUpdate + Rollback automático
+  #
+  # Requisitos:
+  #   - Los manifiestos YAML están en k8s/ en la raíz del repo
+  #   - Cada Deployment usa la variable IMAGE_TAG que se sustituye con envsubst
+  #   - El namespace quetzaltv-prod debe existir en el clúster
+  # ════════════════════════════════════════════════════════════════════════════
+
+  deploy-gke:
+    name: "Deploy → GKE (${{ needs.build-and-push.outputs.version }})"
+    runs-on: ubuntu-latest
+    needs: [build-and-push, backup-databases]
+    env:
+      AR_REGISTRY: ${{ needs.build-and-push.outputs.ar_registry }}
+      VERSION: ${{ needs.build-and-push.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar con GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Obtener credenciales del clúster GKE
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_ZONE }}
+
+      - name: Verificar conexión al clúster
+        run: kubectl cluster-info
+
+      - name: Sustituir variables en los manifiestos
+        run: |
+          export AR_REGISTRY="${{ env.AR_REGISTRY }}"
+          export VERSION="${{ env.VERSION }}"
+          export VM3_HOST="${{ secrets.VM3_HOST }}"
+          for f in k8s/*.yaml; do
+            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST}' < "$f" > "$f.rendered"
+            mv "$f.rendered" "$f"
+          done
+          echo "Variables sustituidas: AR_REGISTRY=${AR_REGISTRY} VERSION=${VERSION}"
+
+      - name: Crear namespace (si no existe)
+        run: kubectl apply -f k8s/00-namespace.yaml
+
+      - name: Crear/actualizar Secret de Kubernetes desde GitHub Secrets
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VM3_HOST: ${{ secrets.VM3_HOST }}
+        run: |
+          kubectl create secret generic quetzaltv-secrets \
+            --namespace=quetzaltv-prod \
+            --from-literal=JWT_SECRET="${JWT_SECRET}" \
+            --from-literal=DB_PASSWORD="${DB_PASSWORD}" \
+            --from-literal=EMAIL_USER="${EMAIL_USER}" \
+            --from-literal=EMAIL_PASS="${EMAIL_PASS}" \
+            --from-literal=EMAIL_FROM="${EMAIL_FROM}" \
+            --from-literal=DATABASE_URL_CATALOGO="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5433/quetzal_catalogo?sslmode=disable" \
+            --from-literal=DATABASE_URL_STREAMING="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5434/quetzal_streaming?sslmode=disable" \
+            --from-literal=DATABASE_URL_DIVISAS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5435/quetzal_divisas?sslmode=disable" \
+            --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5436/quetzal_cobros?sslmode=disable" \
+            --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5439/quetzal_notificaciones?sslmode=disable" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Secret quetzaltv-secrets actualizado"
+
+      - name: Aplicar manifiestos al clúster
+        run: |
+          kubectl apply -f k8s/ --namespace=quetzaltv-prod
+          echo "✓ Manifiestos aplicados"
+
+      - name: Esperar rollout y verificar salud
+        id: rollout
+        run: |
+          NAMESPACE="quetzaltv-prod"
+          FAILED=0
+
+          # Espera a que cada Deployment complete su rollout (máx. 5 minutos c/u)
+          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
+            echo "→ Esperando rollout de ${DEPLOY}..."
+            if ! kubectl rollout status "${DEPLOY}" \
+                -n "${NAMESPACE}" \
+                --timeout=5m; then
+              echo "::error::Rollout fallido en ${DEPLOY}"
+              FAILED=1
+            else
+              echo "  ✓ ${DEPLOY} saludable"
+            fi
+          done
+
+          echo "rollout_failed=${FAILED}" >> "$GITHUB_OUTPUT"
+          exit ${FAILED}
+
+      - name: Rollback automático si el rollout falló
+        if: failure() && steps.rollout.outputs.rollout_failed == '1'
+        run: |
+          NAMESPACE="quetzaltv-prod"
+          echo "::warning::Iniciando rollback automático a la versión estable anterior..."
+
+          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
+            echo "→ Revirtiendo ${DEPLOY}..."
+            kubectl rollout undo "${DEPLOY}" -n "${NAMESPACE}"
+          done
+
+          echo "Esperando que la versión anterior sea saludable..."
+          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
+            kubectl rollout status "${DEPLOY}" -n "${NAMESPACE}" --timeout=5m
+          done
+
+          echo "::error::Despliegue de ${{ env.VERSION }} fallido. Se restauró la versión anterior."
+          exit 1
+
+      - name: Resumen del despliegue
+        if: success()
+        run: |
+          echo "╔══════════════════════════════════════════════════════╗"
+          echo "║  Despliegue exitoso en GKE                          ║"
+          echo "║  Versión : ${{ env.VERSION }}                            ║"
+          echo "║  Clúster : ${{ secrets.GKE_CLUSTER }}                     ║"
+          echo "║  Namespace: quetzaltv-prod                          ║"
+          echo "╚══════════════════════════════════════════════════════╝"
+          kubectl get pods -n quetzaltv-prod

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package divisas.v1;
+
+option go_package = "quetzaltv/services/divisas/pkg/pb/divisas/v1;divisasv1";
+
+// ─── Mensajes ────────────────────────────────────────────────────────────────
+
+message TipoCambioRequest {
+  string moneda_origen  = 1;
+  string moneda_destino = 2;
+}
+
+message TipoCambioResponse {
+  string moneda_origen  = 1;
+  string moneda_destino = 2;
+  double tasa           = 3;
+  string actualizado_en = 4; // ISO 8601
+}
+
+message ConvertirMontoRequest {
+  double monto          = 1;
+  string moneda_origen  = 2;
+  string moneda_destino = 3;
+}
+
+message ConvertirMontoResponse {
+  double monto_original  = 1;
+  double monto_convertido = 2;
+  string moneda_origen   = 3;
+  string moneda_destino  = 4;
+  double tasa            = 5;
+}
+
+message ListarMonedasRequest {}
+
+message ListarMonedasResponse {
+  repeated string monedas = 1;
+}
+
+// ─── Servicio ────────────────────────────────────────────────────────────────
+
+service DivisasService {
+  // Devuelve la tasa de cambio entre dos monedas.
+  rpc ObtenerTipoCambio(TipoCambioRequest) returns (TipoCambioResponse);
+
+  // Convierte un monto de una moneda a otra.
+  rpc ConvertirMonto(ConvertirMontoRequest) returns (ConvertirMontoResponse);
+
+  // Lista todas las monedas disponibles.
+  rpc ListarMonedas(ListarMonedasRequest) returns (ListarMonedasResponse);
+}

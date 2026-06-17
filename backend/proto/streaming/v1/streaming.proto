@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package streaming.v1;
+
+// El codigo Go generado se deposita en pkg/pb/streaming/v1/ dentro del modulo del servicio.
+option go_package = "quetzaltv/services/streaming/pkg/pb/streaming/v1;streamingv1";
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum EstadoHistorial {
+  ESTADO_HISTORIAL_UNSPECIFIED = 0;
+  ESTADO_HISTORIAL_EN_PROGRESO = 1;
+  ESTADO_HISTORIAL_FINALIZADO  = 2;
+}
+
+// ─── Mensajes ─────────────────────────────────────────────────────────────────
+
+message HistorialReproduccion {
+  string          id                = 1;
+  string          perfil_id         = 2;
+  string          contenido_id      = 3;
+  string          episodio_id       = 4;
+  EstadoHistorial estado            = 5;
+  int32           progreso_segundos = 6;
+  string          actualizado_en    = 7;
+}
+
+// ─── Requests / Responses ─────────────────────────────────────────────────────
+
+message ActualizarProgresoRequest {
+  string perfil_id                = 1;
+  string contenido_id             = 2;
+  string episodio_id              = 3; // vacio para peliculas
+  int32  progreso_segundos        = 4;
+  int32  duracion_total_segundos  = 5;
+}
+
+message ActualizarProgresoResponse {
+  bool            ok     = 1;
+  EstadoHistorial estado = 2;
+}
+
+message ObtenerProgresoRequest {
+  string perfil_id    = 1;
+  string contenido_id = 2;
+  string episodio_id  = 3; // vacio para peliculas
+}
+
+message ObtenerHistorialRequest {
+  string perfil_id = 1;
+  int32  limite    = 2; // 0 = sin limite
+}
+
+message ObtenerHistorialResponse {
+  repeated HistorialReproduccion historial = 1;
+}
+
+// ─── Servicio ─────────────────────────────────────────────────────────────────
+
+service StreamingService {
+  // Guarda o actualiza el progreso de reproduccion
+  rpc ActualizarProgreso (ActualizarProgresoRequest) returns (ActualizarProgresoResponse);
+
+  // Devuelve el progreso guardado para reanudar reproduccion
+  rpc ObtenerProgreso    (ObtenerProgresoRequest)    returns (HistorialReproduccion);
+
+  // Devuelve el historial reciente de un perfil
+  rpc ObtenerHistorial   (ObtenerHistorialRequest)   returns (ObtenerHistorialResponse);
+}

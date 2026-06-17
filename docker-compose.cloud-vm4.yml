@@ -1,0 +1,86 @@
+name: quetzaltv-vm4
+
+# ─── VM4: API Gateway (Node.js/TS) + Frontend (React SPA) ────────────────────
+#
+#   Único punto de entrada público. El API Gateway:
+#     • Verifica JWT en todas las rutas protegidas
+#     • Reenvía /api/<servicio>/* al microservicio correspondiente en VM1/VM2
+#     • Sirve el frontend React (SPA) en /*
+#
+#   Tabla de rutas del gateway:
+#     /api/usuario/*        → VM1_HOST:8001  (usuario-service)
+#     /api/suscripcion/*    → VM1_HOST:8002  (suscripcion-service)
+#     /api/catalogo/*       → VM1_HOST:8003  (catalogo-service)
+#     /api/streaming/*      → VM2_HOST:8004  (streaming-service)
+#     /api/cobros/*         → VM2_HOST:8006  (cobros-service)
+#     /api/divisas/*        → VM2_HOST:8005  (divisas-service)
+#     /api/notificaciones/* → VM2_HOST:8007  (notificaciones-service)
+#     /*                    → frontend:80    (React SPA — nginx)
+#
+#   Rutas públicas (sin JWT):
+#     POST /api/usuario/api/v1/auth/login
+#     POST /api/usuario/api/v1/auth/register
+#     GET  /api/usuario/api/v1/internal/*   (inter-servicio: catálogo resuelve emails)
+#     GET  /api/catalogo/*
+#     GET|POST|PUT /api/suscripcion/*
+#     GET|POST /api/divisas/*
+#     POST /api/notificaciones/*
+#     GET  /health
+#
+#   Variables de entorno requeridas en .env de esta VM:
+#     VM1_HOST    — IP interna de VM1 (ej. 10.128.0.2)
+#     VM2_HOST    — IP interna de VM2 (ej. 10.128.0.3)
+#     JWT_SECRET  — debe coincidir con el de usuario-service
+#
+#   Puertos expuestos públicamente:
+#     :80  — todo el tráfico (frontend + API)
+#
+#   Levantar:  docker compose -f docker-compose.cloud-vm4.yml up --build -d
+#   Detener:   docker compose -f docker-compose.cloud-vm4.yml down
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # FRONTEND  (React 19 + Vite — build estático servido por nginx)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        # URLs relativas → el api-gateway las intercepta sin exponer IPs de VM1/VM2
+        VITE_USUARIO_API_URL: /api/usuario
+        VITE_SUSCRIPCION_API_URL: /api/suscripcion
+        VITE_CATALOGO_API_URL: /api/catalogo
+        VITE_STREAMING_API_URL: /api/streaming
+        VITE_COBROS_API_URL: /api/cobros
+    container_name: quetzal-frontend
+    restart: unless-stopped
+    # Sin puertos externos — solo el api-gateway le habla internamente
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # API GATEWAY  (Node.js/TypeScript — punto de entrada único)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  api-gateway:
+    build:
+      context: backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: quetzal-api-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 80
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: http://frontend:80
+      USUARIO_SERVICE_URL:        http://${VM1_HOST}:8001
+      SUSCRIPCION_SERVICE_URL:    http://${VM1_HOST}:8002
+      CATALOGO_SERVICE_URL:       http://${VM1_HOST}:8003
+      STREAMING_SERVICE_URL:      http://${VM2_HOST}:8004
+      COBROS_SERVICE_URL:         http://${VM2_HOST}:8006
+      DIVISAS_SERVICE_URL:        http://${VM2_HOST}:8005
+      NOTIFICACIONES_SERVICE_URL: http://${VM2_HOST}:8007
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend

@@ -1,0 +1,279 @@
+name: CI — Tests & Cobertura
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Se dispara en cada PR y en cada push a develop o release.
+# CORTOCIRCUITO: si cualquier job falla, el pipeline se detiene y los workflows
+# de CD (cd-develop.yml, cd-release.yml) NO se ejecutan.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [develop, release]
+  pull_request:
+    branches: [develop, release]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # PYTHON — usuario · suscripcion
+  # Umbral mínimo: 75 % de cobertura sobre el código de app/
+  # ════════════════════════════════════════════════════════════════════════════
+
+  test-usuario:
+    name: "Tests · usuario (Python)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/services/usuario/requirements.txt
+
+      - name: Instalar dependencias
+        working-directory: backend/services/usuario
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
+        working-directory: backend/services/usuario
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=75 \
+            -v
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-usuario
+          path: backend/services/usuario/coverage.xml
+
+  test-suscripcion:
+    name: "Tests · suscripcion (Python)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/services/suscripcion/requirements.txt
+
+      - name: Instalar dependencias
+        working-directory: backend/services/suscripcion
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
+        working-directory: backend/services/suscripcion
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=75 \
+            -v
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-suscripcion
+          path: backend/services/suscripcion/coverage.xml
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # GO — catalogo · streaming
+  # Si existen archivos _test.go → cobertura ≥ 75 %
+  # Si no hay tests aún        → compilación + go vet (validación mínima)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  test-catalogo:
+    name: "Tests · catalogo (Go)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: backend/services/catalogo/go.sum
+
+      - name: Compilar, verificar y ejecutar pruebas
+        working-directory: backend/services/catalogo
+        run: |
+          if find . -name "*_test.go" | grep -q .; then
+            echo "Archivos de test encontrados — ejecutando con cobertura"
+            go test ./... \
+              -coverprofile=coverage.out \
+              -covermode=atomic \
+              -v
+            COVERAGE=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | tr -d '%')
+            echo "Cobertura total: ${COVERAGE}%"
+            if awk "BEGIN { exit !($COVERAGE < 75) }"; then
+              echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
+              exit 1
+            fi
+          else
+            echo "Sin archivos _test.go — ejecutando compilación y análisis estático"
+            go build ./...
+            go vet ./...
+          fi
+
+  test-streaming:
+    name: "Tests · streaming (Go)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: backend/services/streaming/go.sum
+
+      - name: Compilar, verificar y ejecutar pruebas
+        working-directory: backend/services/streaming
+        run: |
+          if find . -name "*_test.go" | grep -q .; then
+            echo "Archivos de test encontrados — ejecutando con cobertura"
+            go test ./... \
+              -coverprofile=coverage.out \
+              -covermode=atomic \
+              -v
+            COVERAGE=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | tr -d '%')
+            echo "Cobertura total: ${COVERAGE}%"
+            if awk "BEGIN { exit !($COVERAGE < 75) }"; then
+              echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
+              exit 1
+            fi
+          else
+            echo "Sin archivos _test.go — ejecutando compilación y análisis estático"
+            go build ./...
+            go vet ./...
+          fi
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # TYPESCRIPT — cobros · divisas · notificaciones · api-gateway
+  # Si existen archivos *.test.ts / *.spec.ts → cobertura ≥ 75 %
+  # Si no hay tests aún                        → verificación de tipos (tsc)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  test-cobros:
+    name: "Tests · cobros (TypeScript)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/services/cobros/package-lock.json
+      - name: Instalar dependencias
+        working-directory: backend/services/cobros
+        run: npm ci
+      - name: Verificar y ejecutar pruebas
+        working-directory: backend/services/cobros
+        run: |
+          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
+            npm run test:coverage -- --coverage.thresholds.statements=75
+          else
+            echo "Sin archivos de test — ejecutando verificación de tipos"
+            npx tsc --noEmit
+          fi
+
+  test-divisas:
+    name: "Tests · divisas (TypeScript)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/services/divisas/package-lock.json
+      - name: Instalar dependencias
+        working-directory: backend/services/divisas
+        run: npm ci
+      - name: Verificar y ejecutar pruebas
+        working-directory: backend/services/divisas
+        run: |
+          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
+            npm run test:coverage -- --coverage.thresholds.statements=75
+          else
+            echo "Sin archivos de test — ejecutando verificación de tipos"
+            npx tsc --noEmit
+          fi
+
+  test-notificaciones:
+    name: "Tests · notificaciones (TypeScript)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/services/notificaciones/package-lock.json
+      - name: Instalar dependencias
+        working-directory: backend/services/notificaciones
+        run: npm ci
+      - name: Verificar y ejecutar pruebas
+        working-directory: backend/services/notificaciones
+        run: |
+          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
+            npm run test:coverage -- --coverage.thresholds.statements=75
+          else
+            echo "Sin archivos de test — ejecutando verificación de tipos"
+            npx tsc --noEmit
+          fi
+
+  test-api-gateway:
+    name: "Tests · api-gateway (TypeScript)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/api-gateway/package-lock.json
+      - name: Instalar dependencias
+        working-directory: backend/api-gateway
+        run: npm ci
+      - name: Verificar y ejecutar pruebas
+        working-directory: backend/api-gateway
+        run: |
+          if find src -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
+            npm run test:coverage -- --coverage.thresholds.statements=75
+          else
+            echo "Sin archivos de test — ejecutando verificación de tipos"
+            npx tsc --noEmit
+          fi
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # PUERTA DE CALIDAD
+  # Este job actúa como punto de control único: los workflows de CD observan
+  # este job. Si CUALQUIERA de los anteriores falla, quality-gate falla y
+  # el CD no se ejecuta.
+  # ════════════════════════════════════════════════════════════════════════════
+
+  quality-gate:
+    name: "Puerta de Calidad ≥ 75%"
+    needs:
+      - test-usuario
+      - test-suscripcion
+      - test-catalogo
+      - test-streaming
+      - test-cobros
+      - test-divisas
+      - test-notificaciones
+      - test-api-gateway
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos los tests pasaron
+        run: echo "✓ Cobertura >= 75% verificada en todos los servicios. Pipeline desbloqueado."

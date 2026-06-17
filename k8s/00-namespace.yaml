@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quetzaltv-prod
+---
+# ServiceAccount vinculado vía Workload Identity a quetzal-tv-storage@sa-proyecto-g10.iam.gserviceaccount.com
+# Permite a los pods de catalogo y streaming generar URLs firmadas de GCS sin montar una key JSON.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quetzal-tv-storage-ksa
+  namespace: quetzaltv-prod
+  annotations:
+    iam.gke.io/gcp-service-account: quetzal-tv-storage@sa-proyecto-g10.iam.gserviceaccount.com

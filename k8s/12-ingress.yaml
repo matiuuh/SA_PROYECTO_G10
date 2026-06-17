@@ -1,0 +1,16 @@
+# Único punto de entrada externo del clúster. Todo el tráfico pasa por
+# api-gateway (que enruta /api/* a los microservicios y sirve el frontend
+# en /*). No se exponen Services tipo LoadBalancer individuales.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quetzaltv-ingress
+  namespace: quetzaltv-prod
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+spec:
+  defaultBackend:
+    service:
+      name: api-gateway
+      port:
+        number: 80

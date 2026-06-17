@@ -2,9 +2,9 @@
 
 | ID | Prioridad | Módulo | Requerimiento | Descripción |
 |----|-----------|--------|---------------|-------------|
-| RF-01 | Alta | Autenticación | Registro de usuario | El sistema debe permitir a un nuevo usuario registrarse proporcionando nombre, correo electrónico y contraseña. Al completar el registro, se debe crear automáticamente un perfil principal asociado a la cuenta. |
-| RF-02 | Alta | Autenticación | Inicio de sesión | El sistema debe autenticar al usuario mediante correo electrónico y contraseña, generando una sesión válida mediante JWT y Session Cookie segura. |
-| RF-03 | Media | Autenticación | Cierre de sesión | El sistema debe permitir al usuario cerrar su sesión activa, invalidando el token y la cookie de sesión correspondientes. |
+| RF-01 | Alta | Autenticación | Registro de usuario | El sistema debe permitir a un nuevo usuario registrarse proporcionando nombre, correo electrónico y contraseña. |
+| RF-02 | Alta | Autenticación | Inicio de sesión | El sistema debe autenticar al usuario mediante correo electrónico y contraseña, generando una sesión válida mediante JWT. |
+| RF-03 | Media | Autenticación | Cierre de sesión | El sistema debe permitir al usuario cerrar su sesión activa, invalidando el token. |
 | RF-04 | Alta | Multiperfil | Gestión de perfiles | El sistema debe permitir a un usuario crear, editar y eliminar perfiles dentro de su cuenta, con un máximo de 5 perfiles por cuenta. Cada perfil tendrá nombre e imagen opcional. |
 | RF-05 | Alta | Multiperfil | Selección de perfil | Al iniciar sesión, el sistema debe presentar al usuario la lista de perfiles disponibles en su cuenta para que seleccione con cuál desea navegar. |
 | RF-06 | Media | Autenticación | Actualización de credenciales | El sistema debe permitir al usuario actualizar su contraseña y correo electrónico desde el panel de administración de su cuenta. |
