@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package notificaciones.v1;
 
-option go_package = "quetzaltv/notificaciones/v1;notificacionesv1";
+option go_package = "quetzaltv/services/catalogo/pkg/pb/notificaciones/v1;notificacionesv1";
 
 service NotificacionesService {
   rpc EnviarConfirmacionRegistro (ConfirmacionRegistroRequest) returns (NotificacionResponse);
