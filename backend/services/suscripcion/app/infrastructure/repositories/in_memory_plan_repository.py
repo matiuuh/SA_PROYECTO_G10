@@ -5,7 +5,7 @@ class InMemoryPlanRepository:
     def __init__(self) -> None:
         self._plans_by_id: dict[str, Plan] = {}
 
-    def create(self, plan: Plan) -> Plan:
+    def create(self, plan: Plan, actor_account_id: str = "") -> Plan:
         self._plans_by_id[plan.id] = plan
         return plan
 
