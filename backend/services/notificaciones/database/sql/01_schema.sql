@@ -29,7 +29,9 @@ CREATE TABLE auditoria_notificaciones (
     tabla       VARCHAR(100)    NOT NULL,
     entidad_id  UUID            NOT NULL,
     evento      evento_auditoria NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo JSONB,
+    usuario_accion UUID,
     fecha_evento TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
@@ -39,18 +41,22 @@ CREATE TABLE auditoria_notificaciones (
 
 CREATE OR REPLACE FUNCTION fn_registrar_auditoria_notificaciones()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
 BEGIN
+    v_actor := NULLIF(current_setting('app.usuario_accion', true), '')::UUID;
+
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NOW());
+        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NULL, v_actor, NOW());
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW), NOW());
+        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(OLD), to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     ELSE
-        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW), NOW());
+        INSERT INTO auditoria_notificaciones(tabla, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', NULL, to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     END IF;
 END;

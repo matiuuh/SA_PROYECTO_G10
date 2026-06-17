@@ -314,7 +314,6 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := h.toDetailResponse(r.Context(), detail)
-	response.UrlPortada = detail.PosterURL
 	writeJSON(w, http.StatusOK, map[string]any{
 		"detalle": response,
 	})
@@ -582,8 +581,10 @@ func (h *Handler) handleAdminGetContent(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	response := h.toDetailResponse(r.Context(), detail)
+	response.UrlPortada = detail.PosterURL
 	writeJSON(w, http.StatusOK, map[string]any{
-		"detalle": h.toDetailResponse(r.Context(), detail),
+		"detalle": response,
 	})
 }
 

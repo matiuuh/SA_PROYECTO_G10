@@ -43,6 +43,104 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#039;')
 }
 
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+function normalizePosterAuditValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  if (trimmed.startsWith('posters/')) return trimmed
+
+  try {
+    const parsed = new URL(trimmed)
+    const objectPath = parsed.pathname.split('/').filter(Boolean).slice(1).join('/')
+    return objectPath.startsWith('posters/') ? objectPath : value
+  } catch {
+    return value
+  }
+}
+
+function normalizeAuditValue(key: string, value: unknown): unknown {
+  if (key === 'url_portada') return normalizePosterAuditValue(value)
+  return value
+}
+
+function getAuditState(entry: CatalogAuditEntry): Record<string, unknown> {
+  const state = entry.estado_nuevo || entry.estado_anterior || {}
+  return state && typeof state === 'object' ? state as Record<string, unknown> : {}
+}
+
+function getAuditChangesSummary(entry: CatalogAuditEntry, maxFields = 8, maxLength = 80): string {
+  const changedKeys = getVisibleChangedKeys(entry)
+  if (entry.estado_anterior && entry.estado_nuevo && changedKeys.length > 0) {
+    const lines = changedKeys.slice(0, maxFields).map((key) => {
+      const beforeValue = truncateText(formatChangeValue(normalizeAuditValue(key, entry.estado_anterior?.[key])), maxLength)
+      const afterValue = truncateText(formatChangeValue(normalizeAuditValue(key, entry.estado_nuevo?.[key])), maxLength)
+      return `${key}: ${beforeValue} -> ${afterValue}`
+    })
+    if (changedKeys.length > maxFields) {
+      lines.push(`+ ${changedKeys.length - maxFields} campos mas`)
+    }
+    return lines.join('\n')
+  }
+
+  const state = getAuditState(entry)
+  const importantKeys = ['id', 'tipo', 'idioma', 'titulo', 'fecha_lanzamiento', 'duracion_minutos', 'clasificacion_edad']
+  return Object.entries(state)
+    .filter(([key]) => importantKeys.includes(key))
+    .map(([key, value]) => `${key}: ${truncateText(formatChangeValue(normalizeAuditValue(key, value)), maxLength)}`)
+    .join('\n')
+}
+
+function downloadCsv(entries: CatalogAuditEntry[]) {
+  const headers = [
+    'Fecha',
+    'Evento',
+    'Usuario responsable',
+    'Tabla afectada',
+    'Entidad',
+    'Titulo',
+    'Tipo',
+    'Estado anterior',
+    'Estado nuevo',
+    'Cambios',
+  ]
+
+  const rows = entries.map((entry) => {
+    const state = getAuditState(entry)
+    return [
+      formatDate(entry.fecha_evento),
+      formatEvent(entry.evento),
+      entry.usuario_accion || 'Sistema',
+      entry.tabla_origen,
+      entry.entidad_id,
+      String(state.titulo ?? ''),
+      String(state.tipo ?? ''),
+      entry.estado_anterior ? JSON.stringify(entry.estado_anterior) : '',
+      entry.estado_nuevo ? JSON.stringify(entry.estado_nuevo) : '',
+      getAuditChangesSummary(entry, 12, 120),
+    ]
+  })
+
+  const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
+  const csv = [headers, ...rows]
+    .map((row) => row.map(escapeCsv).join(','))
+    .join('\r\n')
+
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `auditoria-catalogo-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function downloadExcel(entries: CatalogAuditEntry[]) {
   let html = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" 
@@ -101,6 +199,7 @@ function downloadExcel(entries: CatalogAuditEntry[]) {
           <tr>
             <th>Fecha</th>
             <th>Evento</th>
+            <th>Usuario Responsable</th>
             <th>Tabla</th>
             <th>Título</th>
             <th>Tipo</th>
@@ -144,6 +243,7 @@ function downloadExcel(entries: CatalogAuditEntry[]) {
       <tr>
         <td>${escapeHtml(fecha)}</td>
         <td class="${eventoClass}">${escapeHtml(evento)}</td>
+        <td style="font-family: monospace; font-size: 10px;">${escapeHtml(entry.usuario_accion || 'Sistema')}</td>
         <td>${escapeHtml(tabla)}</td>
         <td><strong>${escapeHtml(titulo)}</strong></td>
         <td>${escapeHtml(tipo)}</td>
@@ -186,6 +286,135 @@ function downloadExcel(entries: CatalogAuditEntry[]) {
   URL.revokeObjectURL(url)
 }
 
+function escapePdfText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+}
+
+function wrapPdfText(value: string, maxLength: number): string[] {
+  const words = value.replace(/\s+/g, ' ').trim().split(' ')
+  const lines: string[] = []
+  let current = ''
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word
+    if (next.length > maxLength && current) {
+      lines.push(current)
+      current = word
+    } else {
+      current = next
+    }
+  })
+
+  if (current) lines.push(current)
+  return lines.length > 0 ? lines : ['']
+}
+
+function downloadTextPdf(filename: string, lines: string[]) {
+  const pageWidth = 792
+  const pageHeight = 612
+  const margin = 36
+  const lineHeight = 12
+  const maxY = pageHeight - margin
+  const pages: string[][] = [[]]
+  let y = maxY
+
+  lines.forEach((line) => {
+    if (y < margin + lineHeight) {
+      pages.push([])
+      y = maxY
+    }
+    pages[pages.length - 1].push(line)
+    y -= lineHeight
+  })
+
+  const objects: string[] = []
+  const addObject = (body: string) => {
+    objects.push(body)
+    return objects.length
+  }
+
+  const catalogID = addObject('<< /Type /Catalog /Pages 2 0 R >>')
+  const pagesID = addObject('')
+  const fontID = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  const contentIDs: number[] = []
+  const pageIDs: number[] = []
+
+  pages.forEach((pageLines, pageIndex) => {
+    const streamLines = pageLines.map((line, lineIndex) => {
+      const fontSize = pageIndex === 0 && lineIndex === 0 ? 16 : 8
+      const lineY = maxY - lineIndex * lineHeight
+      return `BT /F1 ${fontSize} Tf ${margin} ${lineY} Td (${escapePdfText(line)}) Tj ET`
+    })
+    const stream = streamLines.join('\n')
+    const contentID = addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)
+    const pageID = addObject(`<< /Type /Page /Parent ${pagesID} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontID} 0 R >> >> /Contents ${contentID} 0 R >>`)
+    contentIDs.push(contentID)
+    pageIDs.push(pageID)
+  })
+
+  objects[pagesID - 1] = `<< /Type /Pages /Kids [${pageIDs.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIDs.length} >>`
+
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`
+  })
+
+  const xrefOffset = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  })
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogID} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+
+  const blob = new Blob([pdf], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadPlainPdf(entries: CatalogAuditEntry[]) {
+  const generatedAt = new Intl.DateTimeFormat('es-GT', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+  }).format(new Date())
+
+  const lines = [
+    'Auditoria de catalogo',
+    `Generado: ${generatedAt}`,
+    'Registro transaccional generado por triggers de base de datos.',
+    '',
+    `Eventos: ${entries.length} | Inserciones: ${entries.filter((entry) => entry.evento === 'insercion').length} | Actualizaciones: ${entries.filter((entry) => entry.evento === 'actualizacion').length} | Eliminaciones: ${entries.filter((entry) => entry.evento === 'eliminacion').length}`,
+    '',
+  ]
+
+  entries.forEach((entry, index) => {
+    const state = getAuditState(entry)
+    lines.push(`${index + 1}. ${formatEvent(entry.evento)} | ${formatDate(entry.fecha_evento)} | ${entry.tabla_origen}`)
+    lines.push(`Usuario responsable: ${entry.usuario_accion || 'Sistema'}`)
+    lines.push(`Entidad: ${String(state.titulo ?? 'Sin titulo')} (${entry.entidad_id})`)
+    lines.push('Estado anterior / Estado nuevo:')
+    getAuditChangesSummary(entry, 12, 110).split('\n').forEach((line) => {
+      wrapPdfText(`  ${line}`, 135).forEach((wrapped) => lines.push(wrapped))
+    })
+    lines.push('')
+  })
+
+  downloadTextPdf(`auditoria-catalogo-${new Date().toISOString().slice(0, 10)}.pdf`, lines)
+}
+
 function printPdf(entries: CatalogAuditEntry[]) {
   const generatedAt = new Intl.DateTimeFormat('es-GT', {
     dateStyle: 'full',
@@ -199,35 +428,39 @@ function printPdf(entries: CatalogAuditEntry[]) {
       ? String((estado as any).titulo) 
       : entry.entidad_id.substring(0, 8) + '...'
 
+    const changedKeys = getVisibleChangedKeys(entry)
     let cambiosHtml = ''
-    if (estado && typeof estado === 'object') {
-      const camposImportantes = ['titulo', 'sinopsis', 'duracion_minutos', 'fecha_lanzamiento', 'idioma', 'tipo']
-      const camposMostrados = Object.entries(estado)
-        .filter(([key]) => camposImportantes.includes(key))
-        .slice(0, 5)
-      
-      if (camposMostrados.length > 0) {
-        cambiosHtml = camposMostrados.map(([key, value]) => {
-          let displayValue = value
-          if (typeof value === 'string' && value.length > 50) {
-            displayValue = value.substring(0, 50) + '...'
-          }
-          if (key === 'duracion_minutos' && value) {
-            displayValue = `${value} min`
-          }
-          return `<div style="display:flex; gap:4px; font-size:10px; padding:2px 0;">
-            <span style="color:#6b7280; min-width:80px;">${escapeHtml(key)}:</span>
-            <span style="color:#111827;">${escapeHtml(String(displayValue))}</span>
-          </div>`
-        }).join('')
-      } else {
-        cambiosHtml = `<div style="font-size:10px; color:#6b7280;">${Object.keys(estado).length} campos</div>`
+
+    if (entry.estado_anterior && entry.estado_nuevo && changedKeys.length > 0) {
+      cambiosHtml = changedKeys.slice(0, 8).map((key) => {
+        const beforeValue = truncateText(formatChangeValue(normalizeAuditValue(key, entry.estado_anterior?.[key])), 75)
+        const afterValue = truncateText(formatChangeValue(normalizeAuditValue(key, entry.estado_nuevo?.[key])), 75)
+        return `<div style="font-size:10px; padding:3px 0;">
+          <div style="color:#374151; font-weight:600;">${escapeHtml(key)}</div>
+          <div><span style="color:#6b7280;">Anterior:</span> ${escapeHtml(beforeValue)}</div>
+          <div><span style="color:#6b7280;">Nuevo:</span> ${escapeHtml(afterValue)}</div>
+        </div>`
+      }).join('')
+
+      if (changedKeys.length > 8) {
+        cambiosHtml += `<div style="font-size:10px; color:#6b7280;">+ ${changedKeys.length - 8} campos mas</div>`
       }
+    } else if (estado && typeof estado === 'object') {
+      const camposImportantes = ['id', 'tipo', 'idioma', 'titulo', 'fecha_lanzamiento', 'duracion_minutos', 'clasificacion_edad']
+      cambiosHtml = Object.entries(estado)
+        .filter(([key]) => camposImportantes.includes(key))
+        .slice(0, 7)
+        .map(([key, value]) => `<div style="display:flex; gap:4px; font-size:10px; padding:2px 0;">
+          <span style="color:#6b7280; min-width:88px;">${escapeHtml(key)}:</span>
+          <span style="color:#111827;">${escapeHtml(truncateText(formatChangeValue(normalizeAuditValue(key, value)), 80))}</span>
+        </div>`)
+        .join('')
     }
 
     return `
       <tr>
         <td style="white-space:nowrap; font-size:11px;">${escapeHtml(formatDate(entry.fecha_evento))}</td>
+        <td style="font-family:monospace; font-size:10px; word-break:break-word;">${escapeHtml(entry.usuario_accion || 'Sistema')}</td>
         <td>
           <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; 
             ${entry.evento === 'insercion' ? 'background:#d1fae5; color:#065f46;' : ''}
@@ -346,6 +579,7 @@ function printPdf(entries: CatalogAuditEntry[]) {
           <thead>
             <tr>
               <th style="width:15%;">Fecha</th>
+              <th style="width:13%;">Usuario</th>
               <th style="width:12%;">Evento</th>
               <th style="width:10%;">Tabla</th>
               <th style="width:20%;">Entidad</th>
@@ -381,8 +615,41 @@ function printPdf(entries: CatalogAuditEntry[]) {
 function getChangedKeys(entry: CatalogAuditEntry): string[] {
   if (!entry.estado_anterior || !entry.estado_nuevo) return []
   return Object.keys(entry.estado_nuevo).filter((key) => {
-    return JSON.stringify(entry.estado_anterior?.[key]) !== JSON.stringify(entry.estado_nuevo?.[key])
+    return JSON.stringify(normalizeAuditValue(key, entry.estado_anterior?.[key])) !== JSON.stringify(normalizeAuditValue(key, entry.estado_nuevo?.[key]))
   })
+}
+
+function getVisibleChangedKeys(entry: CatalogAuditEntry): string[] {
+  return getChangedKeys(entry).filter((key) => key !== 'actualizado_en')
+}
+
+function isTimestampOnlyUpdate(entry: CatalogAuditEntry): boolean {
+  if (entry.evento !== 'actualizacion') return false
+  const changedKeys = getChangedKeys(entry)
+  return changedKeys.length > 0 && changedKeys.every((key) => key === 'actualizado_en')
+}
+
+function isAutomaticAssetCompletionUpdate(entry: CatalogAuditEntry): boolean {
+  if (entry.evento !== 'actualizacion' || !entry.estado_anterior || !entry.estado_nuevo) return false
+
+  const changedKeys = getChangedKeys(entry)
+  if (changedKeys.length === 0) return false
+
+  const allowedKeys = new Set(['url_portada', 'url_trailer', 'actualizado_en'])
+  if (changedKeys.some((key) => !allowedKeys.has(key))) return false
+
+  const createdAt = new Date(String((entry.estado_anterior as any).creado_en ?? '')).getTime()
+  const eventAt = new Date(entry.fecha_evento).getTime()
+  if (Number.isNaN(createdAt) || Number.isNaN(eventAt)) return false
+
+  const minutesAfterCreate = Math.abs(eventAt - createdAt) / 60000
+  return minutesAfterCreate <= 5
+}
+
+function formatUserAction(value?: string): string {
+  const trimmed = value?.trim() ?? ''
+  if (!trimmed) return 'Sistema'
+  return trimmed.length > 12 ? `${trimmed.slice(0, 8)}...` : trimmed
 }
 
 function getEntityDisplay(entry: CatalogAuditEntry): { icon: React.ReactNode; title: string; type: string } {
@@ -424,6 +691,10 @@ function formatChangeValue(value: unknown): string {
   }
   return String(value)
 }
+
+void downloadExcel
+void downloadCsv
+void downloadPlainPdf
 
 export function AdminAuditPage() {
   const session = getActiveSession()
@@ -494,6 +765,10 @@ export function AdminAuditPage() {
         }
 
         if (entry.evento === 'actualizacion') {
+          if (isTimestampOnlyUpdate(entry) || isAutomaticAssetCompletionUpdate(entry)) {
+            return
+          }
+
           const timeDiff = currentTime - lastEventTime
           
           if (lastEventType === 'insercion' && timeDiff > 1000) {
@@ -610,13 +885,14 @@ export function AdminAuditPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Fecha</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Evento</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Tabla</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Usuario</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Entidad</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Cambios</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
                 {filteredEntries.map((entry) => {
-                  const changedKeys = getChangedKeys(entry)
+                  const changedKeys = getVisibleChangedKeys(entry)
                   const entityInfo = getEntityDisplay(entry)
                   const estadoActual = entry.estado_nuevo || entry.estado_anterior
                   
@@ -635,6 +911,14 @@ export function AdminAuditPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-sm text-white">{entry.tabla_origen}</td>
+                      <td className="px-4 py-4">
+                        <span
+                          className="font-mono text-xs text-[var(--color-denim-300)]"
+                          title={formatUserAction(entry.usuario_accion)}
+                        >
+                          {formatUserAction(entry.usuario_accion)}
+                        </span>
+                      </td>
                       <td className="max-w-[200px] px-4 py-4">
                         <div className="flex items-center gap-2">
                           <span className="text-[var(--color-denim-400)]">
@@ -720,12 +1004,29 @@ export function AdminAuditPage() {
                 <span className="text-[var(--color-denim-500)] min-w-[80px]">Fecha:</span>
                 <span className="text-white">{formatDate(selectedEntry.fecha_evento)}</span>
               </div>
+              <div className="flex gap-2">
+                <span className="text-[var(--color-denim-500)] min-w-[80px]">Usuario:</span>
+                <span className="font-mono text-xs text-white">{selectedEntry.usuario_accion || 'Sistema'}</span>
+              </div>
             </div>
 
             <div className="mt-4">
-              <h4 className="text-sm font-semibold text-[var(--color-denim-300)] mb-2">Datos del contenido:</h4>
+              <h4 className="text-sm font-semibold text-[var(--color-denim-300)] mb-2">Cambios registrados:</h4>
               <div className="bg-[#080c14] p-4 rounded-lg space-y-1.5">
-                {(selectedEntry.estado_nuevo || selectedEntry.estado_anterior) && 
+                {selectedEntry.estado_anterior && selectedEntry.estado_nuevo ? (
+                  getVisibleChangedKeys(selectedEntry).map((key) => (
+                    <div key={key} className="flex gap-3 text-sm">
+                      <span className="text-[var(--color-denim-500)] min-w-[100px] font-medium">{key}:</span>
+                      <span className="text-[var(--color-denim-300)] break-all">
+                        {formatChangeValue(normalizeAuditValue(key, selectedEntry.estado_anterior?.[key]))}
+                      </span>
+                      <span className="text-[var(--color-denim-600)]">→</span>
+                      <span className="text-white break-all">
+                        {formatChangeValue(normalizeAuditValue(key, selectedEntry.estado_nuevo?.[key]))}
+                      </span>
+                    </div>
+                  ))
+                ) : (
                   Object.entries(selectedEntry.estado_nuevo || selectedEntry.estado_anterior || {}).map(([key, value]) => (
                     <div key={key} className="flex gap-3 text-sm">
                       <span className="text-[var(--color-denim-500)] min-w-[100px] font-medium">{key}:</span>
@@ -734,7 +1035,7 @@ export function AdminAuditPage() {
                       </span>
                     </div>
                   ))
-                }
+                )}
               </div>
             </div>
           </div>

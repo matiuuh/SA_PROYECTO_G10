@@ -26,7 +26,7 @@ class SubscriptionService:
         self._subscription_repository = subscription_repository
         self._divisas_client = divisas_client
 
-    def create_plan(self, request: CreatePlanRequest) -> Plan:
+    def create_plan(self, request: CreatePlanRequest, actor_account_id: str = "") -> Plan:
         now = datetime.now(timezone.utc)
         plan = Plan(
             id=str(uuid4()),
@@ -39,7 +39,7 @@ class SubscriptionService:
             creado_en=now,
             actualizado_en=now,
         )
-        return self._plan_repository.create(plan)
+        return self._plan_repository.create(plan, actor_account_id)
 
     def list_active_plans(self) -> list[Plan]:
         return self._plan_repository.list_active()

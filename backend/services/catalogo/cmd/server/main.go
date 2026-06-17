@@ -14,13 +14,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 	"quetzaltv/services/catalogo/internal/application"
+	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
 	gcsstorage "quetzaltv/services/catalogo/internal/infrastructure/gcs"
+	"quetzaltv/services/catalogo/internal/infrastructure/postgres"
 	grpchandler "quetzaltv/services/catalogo/internal/interfaces/grpc"
 	httphandler "quetzaltv/services/catalogo/internal/interfaces/http"
-	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
-	"quetzaltv/services/catalogo/internal/infrastructure/postgres"
+	catalogov1 "quetzaltv/services/catalogo/pkg/pb/catalogo/v1"
 )
 
 func main() {
@@ -41,6 +41,21 @@ func main() {
 	}
 	log.Println("conexion a postgres establecida")
 
+	var userPool *pgxpool.Pool
+	if userDBURL := os.Getenv("USUARIO_DATABASE_URL"); userDBURL != "" {
+		userPool, err = pgxpool.New(ctx, userDBURL)
+		if err != nil {
+			log.Printf("[catalogo] advertencia: no se pudo conectar a usuarios para auditoria: %v", err)
+		} else if err := userPool.Ping(ctx); err != nil {
+			log.Printf("[catalogo] advertencia: ping a usuarios para auditoria fallo: %v", err)
+			userPool.Close()
+			userPool = nil
+		} else {
+			defer userPool.Close()
+			log.Println("[catalogo] resolucion de correos para auditoria habilitada")
+		}
+	}
+
 	gcsBucket := getEnv("GCS_BUCKET", "")
 	gcsFolder := getEnv("GCS_TRAILERS_FOLDER", "trailers")
 
@@ -58,7 +73,7 @@ func main() {
 		log.Println("[catalogo] GCS_BUCKET no configurado, subida de trailers deshabilitada")
 	}
 
-	repo := postgres.NewContentRepository(pool)
+	repo := postgres.NewContentRepositoryWithUserDB(pool, userPool)
 	svc := application.New(repo)
 	alertDispatcher := alerts.NewDispatcherFromEnv()
 	handler := grpchandler.NewHandler(svc, alertDispatcher)

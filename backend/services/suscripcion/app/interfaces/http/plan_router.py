@@ -30,9 +30,9 @@ def build_plan_router(container: Container) -> APIRouter:
     @router.post("", response_model=PlanResponse, status_code=status.HTTP_201_CREATED)
     def create_plan(
         request: CreatePlanRequest,
-        _: TokenData = Depends(require_admin),
+        token: TokenData = Depends(require_admin),
     ) -> PlanResponse:
-        plan = container.subscription_service.create_plan(request)
+        plan = container.subscription_service.create_plan(request, token.account_id)
         return PlanResponse(**plan.__dict__)
 
     return router
