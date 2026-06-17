@@ -33,7 +33,8 @@ app.include_router(build_subscription_router(container), prefix="/api/v1")
 def startup() -> None:
     if container.database is not None:
         container.database.ping()
-    grpc_server.start(container.settings.grpc_port)
+    if container.settings.app_env != "test":
+        grpc_server.start(container.settings.grpc_port)
 
 
 @app.on_event("shutdown")
@@ -42,5 +43,5 @@ def shutdown() -> None:
 
 
 @app.get("/health")
-def healthcheck() -> dict[str, str]:
+async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}

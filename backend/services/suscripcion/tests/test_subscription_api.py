@@ -1,13 +1,38 @@
 from decimal import Decimal
+import os
 from uuid import uuid4
 
+import anyio
+import httpx
 import jwt as pyjwt
-from fastapi.testclient import TestClient
+
+os.environ["APP_ENV"] = "test"
 
 from app.main import app
 
 
-client = TestClient(app)
+class ASGITestClient:
+    def request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        async def send() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+                response = await async_client.request(method, url, **kwargs)
+                await response.aread()
+                return response
+
+        return anyio.run(send)
+
+    def get(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("PUT", url, **kwargs)
+
+
+client = ASGITestClient()
 
 JWT_SECRET = "change-me"
 JWT_ALGORITHM = "HS256"
