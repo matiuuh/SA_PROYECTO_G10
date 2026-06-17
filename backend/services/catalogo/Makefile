@@ -1,7 +1,7 @@
 PROTO_DIR   := ../../proto
 OUT_DIR     := .
 
-.PHONY: proto build run tidy
+.PHONY: proto build run tidy test
 
 # Genera el codigo Go a partir del .proto.
 # --go_opt=module=<modulo> deposita los archivos en pkg/pb/catalogo/v1/
@@ -25,3 +25,6 @@ run: build
 
 tidy:
 	go mod tidy
+
+test:
+	go test -cover ./internal/application ./internal/domain

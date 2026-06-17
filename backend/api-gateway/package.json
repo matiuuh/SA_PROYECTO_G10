@@ -7,15 +7,40 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "jest --coverage --runInBand"
   },
   "dependencies": {
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.ts"],
+    "collectCoverageFrom": [
+      "src/auth.ts",
+      "src/config.ts"
+    ],
+    "coverageReporters": ["text", "lcov"],
+    "coverageThreshold": {
+      "global": {
+        "statements": 75,
+        "branches": 75,
+        "functions": 75,
+        "lines": 75
+      }
+    },
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
+    }
   }
 }

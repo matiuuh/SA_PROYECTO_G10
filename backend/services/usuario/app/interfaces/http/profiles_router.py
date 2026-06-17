@@ -14,7 +14,7 @@ from app.infrastructure.container import Container
 def build_profiles_router(container: Container) -> APIRouter:
     router = APIRouter(prefix="/profiles", tags=["profiles"])
 
-    def get_bearer_token(authorization: str = Header(...)) -> str:
+    async def get_bearer_token(authorization: str = Header(...)) -> str:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise HTTPException(
@@ -24,7 +24,7 @@ def build_profiles_router(container: Container) -> APIRouter:
         return token
 
     @router.get("", response_model=list[ProfileResponse])
-    def list_profiles(token: str = Depends(get_bearer_token)) -> list[ProfileResponse]:
+    async def list_profiles(token: str = Depends(get_bearer_token)) -> list[ProfileResponse]:
         try:
             profiles = container.auth_service.list_profiles(token)
         except AuthenticationError as exc:
@@ -33,7 +33,7 @@ def build_profiles_router(container: Container) -> APIRouter:
         return [ProfileResponse(**profile.__dict__) for profile in profiles]
 
     @router.post("", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
-    def create_profile(
+    async def create_profile(
         request: CreateProfileRequest,
         token: str = Depends(get_bearer_token),
     ) -> ProfileResponse:
@@ -47,7 +47,7 @@ def build_profiles_router(container: Container) -> APIRouter:
         return ProfileResponse(**profile.__dict__)
 
     @router.patch("/{profile_id}", response_model=ProfileResponse)
-    def update_profile(
+    async def update_profile(
         profile_id: str,
         request: UpdateProfileRequest,
         token: str = Depends(get_bearer_token),
@@ -64,7 +64,7 @@ def build_profiles_router(container: Container) -> APIRouter:
         return ProfileResponse(**profile.__dict__)
 
     @router.post("/sync-availability", response_model=list[ProfileResponse])
-    def sync_profiles_availability(
+    async def sync_profiles_availability(
         request: SyncProfilesAvailabilityRequest,
         token: str = Depends(get_bearer_token),
     ) -> list[ProfileResponse]:
@@ -78,7 +78,7 @@ def build_profiles_router(container: Container) -> APIRouter:
         return [ProfileResponse(**profile.__dict__) for profile in profiles]
 
     @router.delete("/{profile_id}", response_model=MessageResponse)
-    def delete_profile(profile_id: str, token: str = Depends(get_bearer_token)) -> MessageResponse:
+    async def delete_profile(profile_id: str, token: str = Depends(get_bearer_token)) -> MessageResponse:
         try:
             container.auth_service.delete_profile(token, profile_id)
         except AuthenticationError as exc:
