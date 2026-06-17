@@ -89,8 +89,8 @@ jobs:
 
   # ════════════════════════════════════════════════════════════════════════════
   # GO — catalogo · streaming
-  # Si existen archivos _test.go → cobertura ≥ 75 %
-  # Si no hay tests aún        → compilación + go vet (validación mínima)
+  # Cobertura unitaria ≥ 75 % sobre paquetes de dominio/aplicación.
+  # No se incluyen cmd/, infraestructura, handlers HTTP/gRPC ni código generado.
   # ════════════════════════════════════════════════════════════════════════════
 
   test-catalogo:
@@ -104,25 +104,15 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: backend/services/catalogo/go.sum
 
-      - name: Compilar, verificar y ejecutar pruebas
+      - name: Ejecutar pruebas unitarias + verificar cobertura ≥ 75 %
         working-directory: backend/services/catalogo
         run: |
-          if find . -name "*_test.go" | grep -q .; then
-            echo "Archivos de test encontrados — ejecutando con cobertura"
-            go test ./... \
-              -coverprofile=coverage.out \
-              -covermode=atomic \
-              -v
-            COVERAGE=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | tr -d '%')
-            echo "Cobertura total: ${COVERAGE}%"
-            if awk "BEGIN { exit !($COVERAGE < 75) }"; then
-              echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
-              exit 1
-            fi
-          else
-            echo "Sin archivos _test.go — ejecutando compilación y análisis estático"
-            go build ./...
-            go vet ./...
+          go test -coverprofile=coverage.out -covermode=atomic -v ./internal/application ./internal/domain
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/total:/ {print $3}' | tr -d '%')
+          echo "Cobertura unitaria: ${COVERAGE}%"
+          if awk "BEGIN { exit !($COVERAGE < 75) }"; then
+            echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
+            exit 1
           fi
 
   test-streaming:
@@ -136,31 +126,21 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: backend/services/streaming/go.sum
 
-      - name: Compilar, verificar y ejecutar pruebas
+      - name: Ejecutar pruebas unitarias + verificar cobertura ≥ 75 %
         working-directory: backend/services/streaming
         run: |
-          if find . -name "*_test.go" | grep -q .; then
-            echo "Archivos de test encontrados — ejecutando con cobertura"
-            go test ./... \
-              -coverprofile=coverage.out \
-              -covermode=atomic \
-              -v
-            COVERAGE=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | tr -d '%')
-            echo "Cobertura total: ${COVERAGE}%"
-            if awk "BEGIN { exit !($COVERAGE < 75) }"; then
-              echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
-              exit 1
-            fi
-          else
-            echo "Sin archivos _test.go — ejecutando compilación y análisis estático"
-            go build ./...
-            go vet ./...
+          go test -coverprofile=coverage.out -covermode=atomic -v ./internal/application ./internal/domain
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/total:/ {print $3}' | tr -d '%')
+          echo "Cobertura unitaria: ${COVERAGE}%"
+          if awk "BEGIN { exit !($COVERAGE < 75) }"; then
+            echo "::error::Cobertura ${COVERAGE}% es menor al umbral requerido del 75%"
+            exit 1
           fi
 
   # ════════════════════════════════════════════════════════════════════════════
   # TYPESCRIPT — cobros · divisas · notificaciones · api-gateway
-  # Si existen archivos *.test.ts / *.spec.ts → cobertura ≥ 75 %
-  # Si no hay tests aún                        → verificación de tipos (tsc)
+  # Los package.json de cada servicio definen coverageThreshold >= 75.
+  # Se usa pnpm porque los servicios versionan pnpm-lock.yaml.
   # ════════════════════════════════════════════════════════════════════════════
 
   test-cobros:
@@ -168,92 +148,80 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: backend/services/cobros/package-lock.json
+          cache: pnpm
+          cache-dependency-path: backend/services/cobros/pnpm-lock.yaml
       - name: Instalar dependencias
         working-directory: backend/services/cobros
-        run: npm ci
-      - name: Verificar y ejecutar pruebas
+        run: pnpm install --frozen-lockfile
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
         working-directory: backend/services/cobros
-        run: |
-          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
-            npm run test:coverage -- --coverage.thresholds.statements=75
-          else
-            echo "Sin archivos de test — ejecutando verificación de tipos"
-            npx tsc --noEmit
-          fi
+        run: pnpm test
 
   test-divisas:
     name: "Tests · divisas (TypeScript)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: backend/services/divisas/package-lock.json
+          cache: pnpm
+          cache-dependency-path: backend/services/divisas/pnpm-lock.yaml
       - name: Instalar dependencias
         working-directory: backend/services/divisas
-        run: npm ci
-      - name: Verificar y ejecutar pruebas
+        run: pnpm install --frozen-lockfile
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
         working-directory: backend/services/divisas
-        run: |
-          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
-            npm run test:coverage -- --coverage.thresholds.statements=75
-          else
-            echo "Sin archivos de test — ejecutando verificación de tipos"
-            npx tsc --noEmit
-          fi
+        run: pnpm test
 
   test-notificaciones:
     name: "Tests · notificaciones (TypeScript)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: backend/services/notificaciones/package-lock.json
+          cache: pnpm
+          cache-dependency-path: backend/services/notificaciones/pnpm-lock.yaml
       - name: Instalar dependencias
         working-directory: backend/services/notificaciones
-        run: npm ci
-      - name: Verificar y ejecutar pruebas
+        run: pnpm install --frozen-lockfile
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
         working-directory: backend/services/notificaciones
-        run: |
-          if find tests -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
-            npm run test:coverage -- --coverage.thresholds.statements=75
-          else
-            echo "Sin archivos de test — ejecutando verificación de tipos"
-            npx tsc --noEmit
-          fi
+        run: pnpm test
 
   test-api-gateway:
     name: "Tests · api-gateway (TypeScript)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: backend/api-gateway/package-lock.json
+          cache: pnpm
+          cache-dependency-path: backend/api-gateway/pnpm-lock.yaml
       - name: Instalar dependencias
         working-directory: backend/api-gateway
-        run: npm ci
-      - name: Verificar y ejecutar pruebas
+        run: pnpm install --frozen-lockfile
+      - name: Ejecutar tests + verificar cobertura ≥ 75 %
         working-directory: backend/api-gateway
-        run: |
-          if find src -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
-            npm run test:coverage -- --coverage.thresholds.statements=75
-          else
-            echo "Sin archivos de test — ejecutando verificación de tipos"
-            npx tsc --noEmit
-          fi
+        run: pnpm test
 
   # ════════════════════════════════════════════════════════════════════════════
   # PUERTA DE CALIDAD
