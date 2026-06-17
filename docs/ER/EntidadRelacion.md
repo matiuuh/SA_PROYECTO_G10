@@ -32,6 +32,7 @@ Sesiones activas o historicas. Registra metodo de autenticacion, perfil seleccio
 ### `instantaneas`
 Auditoria declarativa. Registra inserciones, actualizaciones y eliminaciones en formato JSONB.
 
+![alt text](ER/01-ER-USUARIOS.svg)
 ---
 
 ## Base de datos `catalogo`
@@ -65,6 +66,7 @@ Reacciones de la comunidad por perfil y contenido. Un perfil solo puede califica
 ### `instantaneas`
 Auditoria declarativa del dominio de catalogo.
 
+![alt text](ER/02-ER-CATALOGO.svg)
 ---
 
 ## Base de datos `streaming`
@@ -76,6 +78,8 @@ Avance de visualizacion asociado a un perfil. Para peliculas guarda progreso en 
 
 ### `instantaneas`
 Auditoria declarativa del dominio de streaming.
+
+![alt text](ER/03-ER-STREAMING.svg)
 
 ---
 
@@ -95,6 +99,7 @@ Historial de migraciones entre planes de una suscripcion.
 ### `instantaneas`
 Auditoria declarativa del dominio de suscripciones.
 
+![alt text](ER/04-ER-SUSCRIPCIONES.svg)
 ---
 
 ## Base de datos `cobros`
@@ -110,6 +115,8 @@ Comprobante generado tras una transaccion aprobada. Incluye numero unico, correo
 ### `instantaneas`
 Auditoria declarativa del dominio de cobros.
 
+![alt text](ER/05-ER-COBROS.svg)
+
 ---
 
 ## Base de datos `notificaciones`
@@ -118,6 +125,8 @@ Centraliza el envio de correos electronicos y registra el resultado de cada inte
 
 ### `envios_correo`
 Registro operativo de cada intento de envio. Almacena tipo de notificacion, destinatario, asunto, estado (`enviado` o `fallido`), error si aplica, servicio origen y referencia del evento disparador.
+
+![alt text](ER/06-ER-NOTIFICACIONES.svg)
 
 ---
 
