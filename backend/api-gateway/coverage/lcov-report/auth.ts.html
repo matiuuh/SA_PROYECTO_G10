@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">54.16% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>13/24</span>
+                <span class='fraction'>24/24</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">75% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>9/12</span>
+                <span class='fraction'>12/12</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">80% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>8/10</span>
+                <span class='fraction'>10/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>11/22</span>
+                <span class='fraction'>22/22</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line medium'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -198,28 +198,28 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import http from 'http';
 import jwt from 'jsonwebtoken';
@@ -273,32 +273,32 @@ export function isPublic(method: string, url: string): boolean {
   );
 }
 &nbsp;
-export function <span class="fstat-no" title="function not covered" >verifyToken(</span>
+export function verifyToken(
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ): boolean {
-  const auth = <span class="cstat-no" title="statement not covered" >req.headers['authorization'] ?? '';</span>
+  const auth = req.headers['authorization'] ?? '';
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (!auth.startsWith('Bearer ')) {</span>
-<span class="cstat-no" title="statement not covered" >    writeJson(res, 401, { error: 'Token requerido' });</span>
-<span class="cstat-no" title="statement not covered" >    return false;</span>
+  if (!auth.startsWith('Bearer ')) {
+    writeJson(res, 401, { error: 'Token requerido' });
+    return false;
   }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  try {</span>
-<span class="cstat-no" title="statement not covered" >    jwt.verify(auth.slice(7), config.JWT_SECRET);</span>
-<span class="cstat-no" title="statement not covered" >    return true;</span>
+  try {
+    jwt.verify(auth.slice(7), config.JWT_SECRET);
+    return true;
   } catch {
-<span class="cstat-no" title="statement not covered" >    writeJson(res, 401, { error: 'Token invalido o expirado' });</span>
-<span class="cstat-no" title="statement not covered" >    return false;</span>
+    writeJson(res, 401, { error: 'Token invalido o expirado' });
+    return false;
   }
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >writeJson(</span>res: http.ServerResponse, status: number, body: unknown): void {
-<span class="cstat-no" title="statement not covered" >  res.writeHead(status, {</span>
+function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, {
     'Content-Type': 'application/json',
     'access-control-allow-origin': '*',
   });
-<span class="cstat-no" title="statement not covered" >  res.end(JSON.stringify(body));</span>
+  res.end(JSON.stringify(body));
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -307,7 +307,7 @@ function <span class="fstat-no" title="function not covered" >writeJson(</span>r
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-17T19:07:01.367Z
+                at 2026-06-17T20:57:47.466Z
             </div>
         <script src="prettify.js"></script>
         <script>

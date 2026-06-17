@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "lint": "tsc --noEmit",
-    "test": "jest --coverage"
+    "test": "jest --coverage --runInBand"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.0",
@@ -28,12 +28,20 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": ["**/tests/**/*.test.ts"],
-    "collectCoverageFrom": ["src/**/*.ts"],
+    "collectCoverageFrom": [
+      "src/application/**/*.ts"
+    ],
     "coverageReporters": ["text", "lcov"],
-    "globals": {
-      "ts-jest": {
-        "tsconfig": "tsconfig.test.json"
+    "coverageThreshold": {
+      "global": {
+        "statements": 75,
+        "branches": 75,
+        "functions": 75,
+        "lines": 75
       }
+    },
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
     }
   }
 }

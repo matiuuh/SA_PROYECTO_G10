@@ -1,4 +1,7 @@
-import { isPublic } from '../src/auth';
+import http from 'http';
+import jwt from 'jsonwebtoken';
+import { isPublic, verifyToken } from '../src/auth';
+import { config } from '../src/config';
 
 describe('auth — isPublic', () => {
   describe('rutas publicas de autenticacion', () => {
@@ -125,5 +128,60 @@ describe('auth — isPublic', () => {
     it('PATCH /api/usuario/api/v1/profiles/123 NO es publico', () => {
       expect(isPublic('PATCH', '/api/usuario/api/v1/profiles/123')).toBe(false);
     });
+  });
+});
+
+describe('auth — verifyToken', () => {
+  function makeResponse() {
+    const response = {
+      statusCode: 0,
+      headers: {} as http.OutgoingHttpHeaders,
+      body: '',
+      writeHead(status: number, headers: http.OutgoingHttpHeaders) {
+        response.statusCode = status;
+        response.headers = headers;
+        return response;
+      },
+      end(payload: string) {
+        response.body = payload;
+        return response;
+      },
+    };
+    return response as unknown as http.ServerResponse & {
+      statusCode: number;
+      body: string;
+    };
+  }
+
+  it('acepta un Bearer token valido', () => {
+    config.JWT_SECRET = 'test-secret';
+    const token = jwt.sign({ sub: 'account-1' }, config.JWT_SECRET);
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
+    } as http.IncomingMessage;
+    const res = makeResponse();
+
+    expect(verifyToken(req, res)).toBe(true);
+    expect(res.statusCode).toBe(0);
+  });
+
+  it('rechaza requests sin encabezado Bearer', () => {
+    const req = { headers: {} } as http.IncomingMessage;
+    const res = makeResponse();
+
+    expect(verifyToken(req, res)).toBe(false);
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Token requerido' });
+  });
+
+  it('rechaza tokens invalidos', () => {
+    const req = {
+      headers: { authorization: 'Bearer token-invalido' },
+    } as http.IncomingMessage;
+    const res = makeResponse();
+
+    expect(verifyToken(req, res)).toBe(false);
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Token invalido o expirado' });
   });
 });

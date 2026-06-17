@@ -49,7 +49,7 @@ def build_subscription_router(container: Container) -> APIRouter:
     # ── Usuario autenticado ───────────────────────────────────────────────────
 
     @router.post("", response_model=SubscriptionResponse, status_code=status.HTTP_201_CREATED)
-    def create_subscription(
+    async def create_subscription(
         request: CreateSubscriptionRequest,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionResponse:
@@ -74,7 +74,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.get("/account/{cuenta_id}", response_model=SubscriptionResponse)
-    def get_subscription_by_account(
+    async def get_subscription_by_account(
         cuenta_id: str,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionResponse:
@@ -92,7 +92,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.get("/account/{cuenta_id}/status", response_model=SubscriptionStatusResponse)
-    def get_subscription_status_by_account(
+    async def get_subscription_status_by_account(
         cuenta_id: str,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionStatusResponse:
@@ -110,7 +110,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         )
 
     @router.put("/{suscripcion_id}/plan", response_model=SubscriptionResponse)
-    def change_subscription_plan(
+    async def change_subscription_plan(
         suscripcion_id: str,
         request: ChangeSubscriptionPlanRequest,
         token: TokenData = Depends(require_user),
@@ -128,7 +128,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.post("/{suscripcion_id}/cancel", response_model=MessageResponse)
-    def cancel_subscription(
+    async def cancel_subscription(
         suscripcion_id: str,
         token: TokenData = Depends(require_user),
     ) -> MessageResponse:
@@ -145,7 +145,7 @@ def build_subscription_router(container: Container) -> APIRouter:
     # ── Solo administrador ────────────────────────────────────────────────────
 
     @router.get("/active/accounts", response_model=ActiveSubscriptionAccountsResponse)
-    def list_active_subscription_accounts(
+    async def list_active_subscription_accounts(
         _: TokenData = Depends(require_admin),
     ) -> ActiveSubscriptionAccountsResponse:
         return ActiveSubscriptionAccountsResponse(

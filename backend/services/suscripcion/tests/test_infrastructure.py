@@ -11,7 +11,6 @@ from app.infrastructure.repositories.postgres_plan_repository import PostgresPla
 from app.infrastructure.repositories.postgres_subscription_repository import (
     PostgresSubscriptionRepository,
 )
-from app.interfaces.grpc.server import build_grpc_server
 
 
 class FakeCursor:
@@ -163,8 +162,29 @@ def test_build_container_wires_postgres_repositories_when_configured(monkeypatch
 
 
 def test_grpc_server_handle_start_and_stop() -> None:
-    from app.infrastructure.container import build_container
+    from app.interfaces.grpc.server import GrpcServerHandle
 
-    handle = build_grpc_server(build_container())
-    handle.start(0)
+    class FakeGrpcServer:
+        def __init__(self) -> None:
+            self.bound_address = None
+            self.started = False
+            self.stopped_with_grace = None
+
+        def add_insecure_port(self, address: str) -> int:
+            self.bound_address = address
+            return 12345
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self, grace: int) -> None:
+            self.stopped_with_grace = grace
+
+    server = FakeGrpcServer()
+    handle = GrpcServerHandle(server)
+    handle.start(50052)
     handle.stop()
+
+    assert server.bound_address == "[::]:50052"
+    assert server.started is True
+    assert server.stopped_with_grace == 5

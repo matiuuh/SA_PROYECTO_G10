@@ -59,7 +59,7 @@ Los mocks de interfaces se implementan manualmente con structs que contienen cam
 | **Por qué se usa** | Jest es el estándar del ecosistema Node.js/TypeScript; integración nativa con cobertura via V8/Istanbul |
 | **Para qué sirve** | Ejecutar suites de pruebas con `describe`/`it`/`expect`, generar reportes de cobertura en texto y LCOV |
 | **Configuración** | `jest` key en `package.json` con `preset: "ts-jest"` y `tsconfig.test.json` propio de los tests |
-| **Cobertura** | `pnpm test` ejecuta `jest --coverage`; reporte en `coverage/` |
+| **Cobertura** | `pnpm test` ejecuta `jest --coverage --runInBand`; reporte en `coverage/` |
 | **`@types/jest`** | Provee los tipos globales de Jest (`describe`, `it`, `expect`) al compilador de TypeScript |
 
 Cada servicio TS tiene su propio `tsconfig.test.json` que extiende el `tsconfig.json` principal agregando `"types": ["jest", "node"]` e incluyendo la carpeta `tests/`.
@@ -524,14 +524,15 @@ Tests nuevos en `TestAuthServiceInMemory` cubriendo métodos que faltaban:
 ```bash
 # catalogo
 cd backend/services/catalogo
-go test -cover ./...
+make test
 
 # catalogo — reporte HTML interactivo
-go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+go test -coverprofile=coverage.out ./internal/application ./internal/domain
+go tool cover -html=coverage.out -o coverage.html
 
 # streaming
 cd backend/services/streaming
-go test -cover ./...
+make test
 ```
 
 ### TypeScript (pnpm)
@@ -540,7 +541,7 @@ go test -cover ./...
 # cobros  — 3 suites: domain.test.ts, helpers.test.ts, service.test.ts
 cd backend/services/cobros && pnpm install && pnpm test
 
-# divisas — 1 suite: domain.test.ts
+# divisas — 2 suites: domain.test.ts, service.test.ts
 cd backend/services/divisas && pnpm install && pnpm test
 
 # notificaciones — 2 suites: domain.test.ts, service.test.ts
@@ -555,13 +556,13 @@ cd backend/api-gateway && pnpm install && pnpm test
 ### Python (pytest + pytest-cov)
 
 ```bash
-# suscripcion — 2 archivos: test_subscription_service.py, test_domain_and_service.py
+# suscripcion — 4 archivos
 cd backend/services/suscripcion
 pip install -r requirements.txt
 pytest
 # Falla automáticamente si la cobertura baja del 75%
 
-# usuario — 1 archivo: test_domain.py
+# usuario — 2 archivos: test_auth_api.py, test_domain.py
 cd backend/services/usuario
 pip install -r requirements.txt
 pytest
@@ -575,12 +576,37 @@ pytest --cov-report=html
 
 | Servicio | Lenguaje | Tests aprox. | Archivos de test |
 |---|---|---|---|
-| `catalogo` | Go | ~21 | `content_test.go`, `service_test.go` |
-| `streaming` | Go | ~15 | `playback_test.go`, `service_test.go` |
-| `cobros` | TypeScript | ~27 | `domain.test.ts`, `helpers.test.ts`, `service.test.ts` |
-| `divisas` | TypeScript | ~19 | `domain.test.ts` |
-| `notificaciones` | TypeScript | ~24 | `domain.test.ts`, `service.test.ts` |
-| `api-gateway` | TypeScript | ~38 | `auth.test.ts`, `proxy.test.ts` |
-| `suscripcion` | Python | ~47 | `test_subscription_service.py`, `test_domain_and_service.py` |
-| `usuario` | Python | ~55 | `test_domain.py` |
-| **Total** | | **~246** | |
+| `catalogo` | Go | 30 | `content_test.go`, `service_test.go` |
+| `streaming` | Go | 17 | `playback_test.go`, `service_test.go` |
+| `cobros` | TypeScript | 27 | `domain.test.ts`, `helpers.test.ts`, `service.test.ts` |
+| `divisas` | TypeScript | 25 | `domain.test.ts`, `service.test.ts` |
+| `notificaciones` | TypeScript | 24 | `domain.test.ts`, `service.test.ts` |
+| `api-gateway` | TypeScript | 41 | `auth.test.ts`, `proxy.test.ts` |
+| `suscripcion` | Python | 82 | `test_domain_and_service.py`, `test_infrastructure.py`, `test_subscription_api.py`, `test_subscription_service.py` |
+| `usuario` | Python | 73 | `test_auth_api.py`, `test_domain.py` |
+| **Total** | | **319** | |
+
+---
+
+## 6. Resultado de ejecución local — 2026-06-17
+
+Las pruebas fueron ejecutadas servicio por servicio. Todas las suites terminaron en estado **passed** después de aislar los tests Python de red/gRPC, ejecutar Jest en modo serial para reducir consumo de memoria y limitar la cobertura unitaria a dominio/aplicación/código puro.
+
+| Servicio | Comando | Resultado | Cobertura reportada |
+|---|---|---:|---:|
+| `catalogo` | `make test` | 30 passed | `internal/application`: 100% |
+| `streaming` | `make test` | 17 passed | `internal/application`: 100% |
+| `cobros` | `pnpm test` | 27 passed | 100% statements / 90.90% branches |
+| `divisas` | `pnpm test` | 25 passed | 100% |
+| `notificaciones` | `pnpm test` | 24 passed | 96.77% statements / 78.26% branches |
+| `api-gateway` | `pnpm test` | 41 passed | 100% statements / 91.66% branches |
+| `suscripcion` | `pytest` | 82 passed | 76.15% |
+| `usuario` | `pytest` | 73 passed | 83.73% |
+
+### Observaciones importantes
+
+- La meta de cobertura unitaria ≥ 75% queda reforzada con `coverageThreshold` en TypeScript y `--cov-fail-under=75` en Python.
+- En Go se usa `make test` para medir paquetes unitarios. El comando crudo `go test -cover ./...` incluye `cmd`, infraestructura, handlers HTTP/gRPC y código generado, por lo que no representa cobertura unitaria.
+- En TypeScript, `collectCoverageFrom` excluye `server.ts`, infraestructura real y handlers gRPC; esas piezas corresponden a pruebas de integración/e2e porque abren red, BD o transporte gRPC.
+- Para validar archivos Python uno por uno sin que falle el umbral global de cobertura, usar `pytest tests/<archivo>.py --no-cov`; luego correr `pytest` completo para validar cobertura.
+- Para reducir RAM, los scripts TypeScript ejecutan Jest con `--runInBand`, evitando workers paralelos por servicio.
