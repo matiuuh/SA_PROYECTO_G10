@@ -147,6 +147,7 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 50052
+      STORAGE_BACKEND: postgres
       DB_HOST: postgres-suscripcion
       DB_PORT: 5432
       DB_NAME: suscripcion_db

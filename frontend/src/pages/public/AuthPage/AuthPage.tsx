@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { Button, Logo, Select } from '@/components/atoms'
 import LoginIllustration from '@/assets/Auth/Login.svg'
 import RegisterIllustration from '@/assets/Auth/Register.svg'
-import { storeSession } from '@/lib/auth'
+import { getHomeRouteByRole, getPostLoginRedirect, storeSession } from '@/lib/auth'
 import { loginUser, registerUser } from '@/lib/usuario-api'
 import type { AuthResponse } from '@/types/auth'
 import type { SelectOption } from '@/components/atoms'
@@ -51,10 +51,6 @@ function toSession(auth: AuthResponse) {
     expiresAt: auth.expires_at,
     account: auth.account,
   }
-}
-
-function getHomeRouteByRole(role: string): string {
-  return role === 'administrador' ? '/admin' : '/panel'
 }
 
 export function AuthPage() {
@@ -112,7 +108,7 @@ export function AuthPage() {
 
       const session = toSession(auth)
       storeSession(session)
-      const target = locationState.from ?? getHomeRouteByRole(session.account.rol)
+      const target = getPostLoginRedirect(session.account.rol, locationState.from)
       navigate(target, { replace: true })
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'No se pudo iniciar sesion.')

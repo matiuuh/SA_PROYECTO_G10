@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Play,
@@ -11,6 +11,8 @@ import {
   VolumeX,
   Maximize2,
   Pause,
+  Rewind,
+  FastForward,
   X,
   Film,
   ThumbsUp,
@@ -21,7 +23,7 @@ import {
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
-import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
+import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
@@ -105,11 +107,7 @@ function resolveTrailerSource(
     }
   }
 
-  if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(normalized)) {
-    return { type: 'video', src: normalized }
-  }
-
-  return null
+  return { type: 'video', src: normalized }
 }
 
 function formatProgress(seconds: number): string {
@@ -175,7 +173,7 @@ export function MovieDetailPage() {
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
   const requestedStartSeconds = parseRequestedStart(searchParams.get('start'))
   const session = getActiveSession()
-  const isAdmin = session?.account.rol === 'administrador'
+  const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
@@ -197,8 +195,15 @@ export function MovieDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [playbackError, setPlaybackError] = useState('')
+  const [shareFeedback, setShareFeedback] = useState('')
+  const [playbackPositionSeconds, setPlaybackPositionSeconds] = useState(0)
+  const [mediaDurationSeconds, setMediaDurationSeconds] = useState(0)
+  const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
+  const [showPlaybackControls, setShowPlaybackControls] = useState(true)
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const playbackContainerRef = useRef<HTMLDivElement | null>(null)
+  const controlsHideTimeoutRef = useRef<number | null>(null)
   const hasConsumedAutoplayRef = useRef(false)
 
   const selectedSeason = useMemo(
@@ -350,6 +355,18 @@ export function MovieDetailPage() {
     return `${hours}h ${minutes}min`
   }, [detail, selectedEpisode])
 
+  const playbackTotalSeconds = useMemo(() => {
+    if (selectedEpisode?.duracion_minutos) return selectedEpisode.duracion_minutos * 60
+    if (detail?.duracion_minutos) return detail.duracion_minutos * 60
+    return 0
+  }, [detail?.duracion_minutos, selectedEpisode?.duracion_minutos])
+
+  const effectivePlaybackTotalSeconds = mediaDurationSeconds || playbackTotalSeconds
+  const playbackProgressPercent =
+    effectivePlaybackTotalSeconds > 0
+      ? Math.max(0, Math.min(100, (playbackPositionSeconds / effectivePlaybackTotalSeconds) * 100))
+      : 0
+
   const genres = detail?.generos ?? []
   const cast = detail?.reparto ?? []
   const technicalSheetMetadata = useMemo(() => parseTechnicalSheet(detail?.ficha_tecnica), [detail?.ficha_tecnica])
@@ -365,6 +382,35 @@ export function MovieDetailPage() {
     [currentPlaybackUrl, muted, resumeFromSeconds],
   )
 
+  const clearControlsHideTimer = () => {
+    if (controlsHideTimeoutRef.current == null) return
+    window.clearTimeout(controlsHideTimeoutRef.current)
+    controlsHideTimeoutRef.current = null
+  }
+
+  const revealPlaybackControls = () => {
+    setShowPlaybackControls(true)
+    clearControlsHideTimer()
+
+    if (!playing || isPlaybackPaused) return
+    controlsHideTimeoutRef.current = window.setTimeout(() => {
+      setShowPlaybackControls(false)
+      controlsHideTimeoutRef.current = null
+    }, 3000)
+  }
+
+  const resetPlaybackSelectionState = () => {
+    setSavedProgress(null)
+    setResumeFromSeconds(0)
+    setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
+    setShowPlaybackControls(true)
+    setEpisodeSignedUrl(null)
+    setPlaybackStartedAt(null)
+    setPlaying(false)
+  }
+
   useEffect(() => {
     if (!id || !hasSubscription) return
     void getTrailerSignedUrl(id).then((url) => {
@@ -377,6 +423,7 @@ export function MovieDetailPage() {
       setEpisodeSignedUrl(null)
       return
     }
+    setEpisodeSignedUrl(null)
     void getEpisodeSignedUrl(selectedEpisode.url_video).then((url) => {
       setEpisodeSignedUrl(url)
     })
@@ -407,6 +454,17 @@ export function MovieDetailPage() {
   }, [playing, resumeFromSeconds, trailerSource])
 
   useEffect(() => {
+    if (!playing) {
+      clearControlsHideTimer()
+      setShowPlaybackControls(true)
+      return
+    }
+
+    revealPlaybackControls()
+    return clearControlsHideTimer
+  }, [isPlaybackPaused, playing])
+
+  useEffect(() => {
     if (!shouldAutoplay || hasConsumedAutoplayRef.current) return
     if (!hasSubscription || !detail) return
     if (detail.tipo === 'serie' && !selectedEpisode) return
@@ -417,6 +475,7 @@ export function MovieDetailPage() {
 
     hasConsumedAutoplayRef.current = true
     setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
     setPlaying(true)
@@ -431,52 +490,79 @@ export function MovieDetailPage() {
   ])
 
   const handlePlay = () => {
-    if (!hasSubscription) return
+    if (isAdmin) {
+      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
+      return
+    }
+    if (!hasSubscription) {
+      setPlaybackError('Activa un plan para reproducir este contenido.')
+      return
+    }
     if (detail?.tipo === 'serie' && !selectedEpisode) {
       setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
       return
     }
     setResumeFromSeconds(0)
+    setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
     setPlaying(true)
   }
 
   const handleResume = () => {
-    if (!hasSubscription) return
+    if (isAdmin) {
+      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
+      return
+    }
+    if (!hasSubscription) {
+      setPlaybackError('Activa un plan para reanudar este contenido.')
+      return
+    }
     if (detail?.tipo === 'serie' && !selectedEpisode) {
       setPlaybackError('Selecciona un episodio para reanudar la reproduccion.')
       return
     }
     const nextResumePoint = savedProgress?.progreso_segundos ?? 0
     setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setIsPlaybackPaused(false)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
     setPlaying(true)
+  }
+
+  const getCurrentVideoProgressSeconds = (): number | null => {
+    const currentTime = videoRef.current?.currentTime
+    if (currentTime == null || !Number.isFinite(currentTime) || currentTime < 0) return null
+    return Math.floor(currentTime)
+  }
+
+  const getEstimatedPlaybackProgressSeconds = (): number => {
+    const videoProgress = getCurrentVideoProgressSeconds()
+    if (videoProgress != null) return videoProgress
+
+    if (playbackStartedAt != null) {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - playbackStartedAt) / 1000))
+      return resumeFromSeconds + elapsedSeconds
+    }
+
+    return resumeFromSeconds
   }
 
   const persistPlaybackProgress = async (forceSeconds?: number) => {
     const currentProfile = getStoredActiveProfile()
     if (!hasSubscription || !currentProfile?.id || !detail?.id) return
 
-    let nextProgress = forceSeconds ?? resumeFromSeconds
-
-    if (forceSeconds == null && playbackStartedAt != null) {
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - playbackStartedAt) / 1000))
-      nextProgress = resumeFromSeconds + elapsedSeconds
-    }
+    let nextProgress = forceSeconds ?? getEstimatedPlaybackProgressSeconds()
 
     if (!Number.isFinite(nextProgress) || nextProgress < 0) {
       return
     }
 
-    const totalDurationSeconds = selectedEpisode?.duracion_minutos
-      ? selectedEpisode.duracion_minutos * 60
-      : detail.duracion_minutos
-        ? detail.duracion_minutos * 60
-        : 0
-    if (totalDurationSeconds > 0 && nextProgress > totalDurationSeconds) {
-      nextProgress = totalDurationSeconds
+    if (effectivePlaybackTotalSeconds > 0 && nextProgress > effectivePlaybackTotalSeconds) {
+      nextProgress = effectivePlaybackTotalSeconds
     }
 
     try {
@@ -485,8 +571,9 @@ export function MovieDetailPage() {
         contenido_id: detail.id,
         episodio_id: selectedEpisode?.id ?? '',
         progreso_segundos: nextProgress,
-        duracion_total_segundos: totalDurationSeconds,
+        duracion_total_segundos: effectivePlaybackTotalSeconds,
       })
+      setPlaybackPositionSeconds(nextProgress)
 
       if (nextProgress > 0) {
         setSavedProgress((prev) => ({
@@ -495,7 +582,7 @@ export function MovieDetailPage() {
           contenido_id: detail.id,
           episodio_id: selectedEpisode?.id ?? '',
           estado:
-            totalDurationSeconds > 0 && nextProgress >= totalDurationSeconds * 0.9
+            effectivePlaybackTotalSeconds > 0 && nextProgress >= effectivePlaybackTotalSeconds * 0.9
               ? 'finalizado'
               : 'en_progreso',
           progreso_segundos: nextProgress,
@@ -515,7 +602,84 @@ export function MovieDetailPage() {
     setPlaybackStartedAt(null)
   }
 
+  const handleVideoTimeUpdate = () => {
+    const videoProgress = getCurrentVideoProgressSeconds()
+    if (videoProgress == null) return
+    setPlaybackPositionSeconds(videoProgress)
+  }
+
+  const handleVideoLoadedMetadata = () => {
+    const duration = videoRef.current?.duration
+    if (duration == null || !Number.isFinite(duration) || duration <= 0) return
+    setMediaDurationSeconds(Math.floor(duration))
+  }
+
+  const seekVideoTo = (seconds: number) => {
+    const video = videoRef.current
+    const safeSeconds = Math.max(0, Math.min(seconds, effectivePlaybackTotalSeconds || seconds))
+    setPlaybackPositionSeconds(Math.floor(safeSeconds))
+    setResumeFromSeconds(Math.floor(safeSeconds))
+
+    if (video) {
+      video.currentTime = safeSeconds
+    }
+
+    void persistPlaybackProgress(Math.floor(safeSeconds))
+  }
+
+  const handleSeekChange = (event: ChangeEvent<HTMLInputElement>) => {
+    seekVideoTo(Number(event.target.value))
+  }
+
+  const handleSkip = (deltaSeconds: number) => {
+    seekVideoTo(playbackPositionSeconds + deltaSeconds)
+  }
+
+  const handleTogglePlayback = async () => {
+    const video = videoRef.current
+    if (!video) {
+      await closePlayback()
+      return
+    }
+
+    if (video.paused) {
+      await video.play()
+      setIsPlaybackPaused(false)
+      setPlaybackStartedAt(Date.now())
+      return
+    }
+
+    video.pause()
+    setIsPlaybackPaused(true)
+    setPlaybackStartedAt(null)
+  }
+
+  const handleVideoSeeked = () => {
+    const videoProgress = getCurrentVideoProgressSeconds()
+    if (videoProgress == null) return
+    void persistPlaybackProgress(videoProgress)
+  }
+
+  const handleVideoPause = () => {
+    const videoProgress = getCurrentVideoProgressSeconds()
+    if (videoProgress == null) return
+    setIsPlaybackPaused(true)
+    void persistPlaybackProgress(videoProgress)
+  }
+
+  const handleVideoEnded = () => {
+    setIsPlaybackPaused(true)
+    const finalProgress = effectivePlaybackTotalSeconds || getCurrentVideoProgressSeconds()
+    if (finalProgress == null) return
+    void persistPlaybackProgress(finalProgress)
+  }
+
   const handleReaction = async (nextReaction: 'like' | 'dislike') => {
+    if (isAdmin) {
+      setPlaybackError('Las reacciones estan disponibles solo para usuarios con perfil.')
+      return
+    }
+
     if (!detail?.id || !accessToken) {
       setPlaybackError('Debes iniciar sesion para registrar tu reaccion.')
       return
@@ -559,6 +723,11 @@ export function MovieDetailPage() {
   }
 
   const handleToggleMyList = () => {
+    if (isAdmin) {
+      setPlaybackError('Mi lista esta disponible solo para usuarios con perfil.')
+      return
+    }
+
     if (!detail?.id) return
 
     const currentProfile = getStoredActiveProfile()
@@ -569,6 +738,40 @@ export function MovieDetailPage() {
 
     const result = toggleMyListItem(currentProfile.id, detail.id)
     setInList(result.inList)
+    setPlaybackError('')
+  }
+
+  const handleShare = async () => {
+    if (!detail) return
+
+    const shareUrl = window.location.href
+    setShareFeedback('')
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: detail.titulo, url: shareUrl })
+        setShareFeedback('Enlace compartido.')
+        return
+      }
+
+      await navigator.clipboard.writeText(shareUrl)
+      setShareFeedback('Enlace copiado.')
+    } catch {
+      setShareFeedback('No se pudo compartir el enlace.')
+    }
+  }
+
+  const handleToggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+        return
+      }
+
+      await (playbackContainerRef.current ?? document.documentElement).requestFullscreen()
+    } catch {
+      setPlaybackError('No se pudo activar pantalla completa.')
+    }
   }
 
   if (isLoading) {
@@ -591,11 +794,26 @@ export function MovieDetailPage() {
     )
   }
 
+  const playbackChromeClass = showPlaybackControls
+    ? 'opacity-100'
+    : 'pointer-events-none opacity-0'
+
   return (
     <div className="min-h-screen bg-[#080c14]">
       {playing && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-black">
-          <div className="relative flex h-full w-full items-center justify-center">
+          <div
+            ref={playbackContainerRef}
+            className={`relative flex h-full w-full items-center justify-center ${showPlaybackControls ? 'cursor-default' : 'cursor-none'}`}
+            onMouseMove={revealPlaybackControls}
+            onMouseDown={revealPlaybackControls}
+            onTouchStart={revealPlaybackControls}
+            onKeyDown={revealPlaybackControls}
+            tabIndex={-1}
+          >
+            <div className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-gradient-to-b from-black/80 via-black/35 to-transparent transition-opacity duration-500 ${playbackChromeClass}`} />
+            <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-44 bg-gradient-to-t from-black/85 via-black/35 to-transparent transition-opacity duration-500 ${playbackChromeClass}`} />
+
             {trailerSource?.type === 'youtube' ? (
               <iframe
                 key={trailerSource.src}
@@ -612,9 +830,15 @@ export function MovieDetailPage() {
                 ref={videoRef}
                 src={trailerSource.src}
                 className="h-full w-full bg-black"
-                controls
                 autoPlay
                 muted={muted}
+                playsInline
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onSeeked={handleVideoSeeked}
+                onPlay={() => setIsPlaybackPaused(false)}
+                onPause={handleVideoPause}
+                onEnded={handleVideoEnded}
               />
             ) : (
               <div
@@ -633,47 +857,100 @@ export function MovieDetailPage() {
               </div>
             )}
 
-            <div className="absolute right-4 top-4 flex items-center gap-2">
+            <div className={`pointer-events-none absolute left-4 top-4 z-20 max-w-[calc(100%-12rem)] rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white shadow-2xl shadow-black/40 backdrop-blur-md transition-opacity duration-500 sm:left-6 ${playbackChromeClass}`}>
+              <p className="truncate text-sm font-semibold">
+                {selectedEpisode ? `${detail.titulo} - ${selectedEpisode.titulo}` : detail.titulo}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--color-denim-300)]">
+                {selectedEpisode ? `Episodio ${selectedEpisode.numero}` : trailerSource ? 'Trailer' : 'Reproduccion'}
+              </p>
+            </div>
+
+            <div className={`absolute right-4 top-4 z-30 flex items-center gap-2 transition-opacity duration-500 sm:right-6 ${playbackChromeClass}`}>
               <button
                 onClick={() => setMuted((value) => !value)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white transition-colors duration-200 hover:bg-black/70"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-xl shadow-black/35 backdrop-blur-md transition-all duration-200 hover:border-white/25 hover:bg-white/15"
+                aria-label={muted ? 'Activar sonido' : 'Silenciar'}
               >
                 {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
-              <button className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white transition-colors duration-200 hover:bg-black/70">
+              <button
+                onClick={() => {
+                  void handleToggleFullscreen()
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-xl shadow-black/35 backdrop-blur-md transition-all duration-200 hover:border-white/25 hover:bg-white/15"
+                aria-label="Pantalla completa"
+              >
                 <Maximize2 size={16} />
               </button>
               <button
                 onClick={() => {
                   void closePlayback()
                 }}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white transition-colors duration-200 hover:bg-black/70"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-xl shadow-black/35 backdrop-blur-md transition-all duration-200 hover:border-white/25 hover:bg-red-500/25"
+                aria-label="Cerrar reproductor"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="absolute inset-x-0 bottom-8 flex flex-col gap-3 px-8">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
-                <div className="h-full w-1/3 rounded-full bg-[var(--color-denim-500)]" />
+            <div className={`absolute inset-x-0 bottom-5 z-20 flex flex-col gap-3 px-4 transition-opacity duration-500 sm:bottom-6 sm:px-8 ${playbackChromeClass}`}>
+              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/35 px-3 py-3 text-white shadow-2xl shadow-black/30 backdrop-blur-md sm:px-4">
+                <span className="w-12 text-right text-xs font-medium tabular-nums text-[var(--color-denim-200)]">
+                  {formatProgress(playbackPositionSeconds)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(effectivePlaybackTotalSeconds, playbackPositionSeconds, 1)}
+                  value={Math.min(playbackPositionSeconds, Math.max(effectivePlaybackTotalSeconds, playbackPositionSeconds, 1))}
+                  onChange={handleSeekChange}
+                  aria-label="Progreso de reproduccion"
+                  className="h-1.5 flex-1 cursor-pointer rounded-full bg-white/20 accent-[var(--color-primary)]"
+                  style={{
+                    background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${playbackProgressPercent}%, rgba(255,255,255,0.22) ${playbackProgressPercent}%, rgba(255,255,255,0.22) 100%)`,
+                  }}
+                />
+                <span className="w-12 text-xs font-medium tabular-nums text-[var(--color-denim-200)]">
+                  {effectivePlaybackTotalSeconds > 0 ? formatProgress(effectivePlaybackTotalSeconds) : '--:--'}
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/35 px-3 py-3 text-white shadow-2xl shadow-black/30 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-4">
+                <div className="flex min-w-0 items-center gap-2">
+                  <button
+                    onClick={() => handleSkip(-10)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition-all duration-200 hover:bg-white/20"
+                    aria-label="Retroceder 10 segundos"
+                  >
+                    <Rewind size={17} />
+                  </button>
                   <button
                     onClick={() => {
-                      void closePlayback()
+                      void handleTogglePlayback()
                     }}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white transition-colors duration-200 hover:bg-white/90"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[#080c14] shadow-lg shadow-black/25 transition-transform duration-200 hover:scale-105 hover:bg-white/90"
+                    aria-label={isPlaybackPaused ? 'Reproducir' : 'Pausar'}
                   >
-                    <Pause size={18} fill="#080c14" strokeWidth={0} />
+                    {isPlaybackPaused ? (
+                      <Play size={19} fill="#080c14" strokeWidth={0} />
+                    ) : (
+                      <Pause size={19} fill="#080c14" strokeWidth={0} />
+                    )}
                   </button>
-                  <span className="text-sm font-medium text-white">
+                  <button
+                    onClick={() => handleSkip(10)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition-all duration-200 hover:bg-white/20"
+                    aria-label="Adelantar 10 segundos"
+                  >
+                    <FastForward size={17} />
+                  </button>
+                  <span className="ml-2 truncate text-sm font-semibold text-white">
                     {selectedEpisode ? `${detail.titulo} · ${selectedEpisode.titulo}` : detail.titulo}
                   </span>
                 </div>
-                <span className="text-xs text-[var(--color-denim-400)]">
-                  {selectedEpisode ? duration : trailerSource ? 'Trailer' : duration}
-                </span>
+                <div className="flex shrink-0 items-center justify-between gap-3 text-xs font-medium text-[var(--color-denim-300)] sm:justify-end">
+                  <span>{selectedEpisode ? `Episodio ${selectedEpisode.numero}` : trailerSource ? 'Trailer' : 'Reproduccion'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -795,49 +1072,56 @@ export function MovieDetailPage() {
               </Link>
             )}
 
-            <button
-              onClick={handleToggleMyList}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                inList
-                  ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-white'
-                  : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-300)] hover:bg-white/[0.10] hover:text-white'
-              }`}
-            >
-              <Plus size={15} strokeWidth={inList ? 2.5 : 1.75} className={inList ? 'rotate-45' : ''} />
-              {inList ? 'En mi lista' : 'Mi lista'}
-            </button>
+            {!isAdmin && (
+              <>
+                <button
+                  onClick={handleToggleMyList}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                    inList
+                      ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-white'
+                      : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-300)] hover:bg-white/[0.10] hover:text-white'
+                  }`}
+                >
+                  <Plus size={15} strokeWidth={inList ? 2.5 : 1.75} className={inList ? 'rotate-45' : ''} />
+                  {inList ? 'En mi lista' : 'Mi lista'}
+                </button>
+
+                <button
+                  onClick={() => {
+                    void handleReaction('like')
+                  }}
+                  disabled={isSubmittingReaction}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
+                    reaction === 'like'
+                      ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-[var(--color-denim-300)]'
+                      : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
+                  } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
+                  aria-label={reaction === 'like' ? 'Contenido marcado con like' : 'Marcar contenido con like'}
+                >
+                  <ThumbsUp size={15} strokeWidth={1.75} fill={reaction === 'like' ? 'currentColor' : 'none'} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    void handleReaction('dislike')
+                  }}
+                  disabled={isSubmittingReaction}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
+                    reaction === 'dislike'
+                      ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                      : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
+                  } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
+                  aria-label={reaction === 'dislike' ? 'Contenido marcado con dislike' : 'Marcar contenido con dislike'}
+                >
+                  <ThumbsDown size={15} strokeWidth={1.75} fill={reaction === 'dislike' ? 'currentColor' : 'none'} />
+                </button>
+              </>
+            )}
 
             <button
               onClick={() => {
-                void handleReaction('like')
+                void handleShare()
               }}
-              disabled={isSubmittingReaction}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
-                reaction === 'like'
-                  ? 'border-[var(--color-denim-600)]/70 bg-[var(--color-denim-700)]/40 text-[var(--color-denim-300)]'
-                  : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
-              } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
-              aria-label={reaction === 'like' ? 'Contenido marcado con like' : 'Marcar contenido con like'}
-            >
-              <ThumbsUp size={15} strokeWidth={1.75} fill={reaction === 'like' ? 'currentColor' : 'none'} />
-            </button>
-
-            <button
-              onClick={() => {
-                void handleReaction('dislike')
-              }}
-              disabled={isSubmittingReaction}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
-                reaction === 'dislike'
-                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                  : 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
-              } ${isSubmittingReaction ? 'cursor-wait opacity-70' : ''}`}
-              aria-label={reaction === 'dislike' ? 'Contenido marcado con dislike' : 'Marcar contenido con dislike'}
-            >
-              <ThumbsDown size={15} strokeWidth={1.75} fill={reaction === 'dislike' ? 'currentColor' : 'none'} />
-            </button>
-
-            <button
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] transition-colors duration-200 hover:bg-white/[0.10] hover:text-white"
               aria-label="Compartir"
             >
@@ -848,6 +1132,9 @@ export function MovieDetailPage() {
 
           {!isAdminView && playbackError ? (
             <p className="text-sm text-[var(--color-warning)]">{playbackError}</p>
+          ) : null}
+          {!isAdminView && shareFeedback ? (
+            <p className="text-sm text-[var(--color-denim-300)]">{shareFeedback}</p>
           ) : null}
         </div>
       </div>
@@ -880,6 +1167,8 @@ export function MovieDetailPage() {
                             setSelectedSeasonId(season.id)
                             setSelectedEpisodeId(season.episodios[0]?.id ?? '')
                             setPlaybackError('')
+                            setShareFeedback('')
+                            resetPlaybackSelectionState()
                           }}
                           className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                             selectedSeasonId === season.id
@@ -906,7 +1195,8 @@ export function MovieDetailPage() {
                               onClick={() => {
                                 setSelectedEpisodeId(episode.id)
                                 setPlaybackError('')
-                                setPlaying(false)
+                                setShareFeedback('')
+                                resetPlaybackSelectionState()
                               }}
                               className={`flex w-full items-start justify-between rounded-xl border px-4 py-3 text-left transition-colors ${
                                 selectedEpisodeId === episode.id

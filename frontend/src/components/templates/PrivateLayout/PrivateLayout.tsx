@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AppNavbar } from '@/components/organisms'
-import { getActiveSession } from '@/lib/auth'
+import { getActiveSession, isAdminRole } from '@/lib/auth'
 
 export function PrivateLayout() {
   const location = useLocation()
@@ -8,6 +8,10 @@ export function PrivateLayout() {
 
   if (!session) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (isAdminRole(session.account.rol)) {
+    return <Navigate to="/admin" replace />
   }
 
   return (

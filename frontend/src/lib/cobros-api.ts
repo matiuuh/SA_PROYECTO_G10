@@ -1,4 +1,5 @@
 import type { ProcessPaymentPayload, ProcessPaymentResponse } from '@/types/cobros'
+import { getActiveSession } from '@/lib/auth'
 
 const API_BASE_URL = import.meta.env.VITE_COBROS_API_URL ?? 'http://localhost:8006'
 
@@ -14,10 +15,12 @@ async function parseError(response: Response): Promise<string> {
 }
 
 export async function processPayment(payload: ProcessPaymentPayload): Promise<ProcessPaymentResponse> {
+  const session = getActiveSession()
   const response = await fetch(`${API_BASE_URL}/api/v1/payments/process`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(session ? { Authorization: `Bearer ${session.accessToken}` } : {}),
     },
     body: JSON.stringify(payload),
   })

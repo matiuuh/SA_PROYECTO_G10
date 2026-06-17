@@ -520,28 +520,35 @@ export function UploadSeriesEpisodesPage() {
             </div>
           </section>
 
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() => navigate('/admin/catalog')}>
+          <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/[0.08] bg-[#080c14]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-[var(--color-denim-400)]">
+                {editingSeasonId ? 'Actualiza la temporada cargada.' : 'Guarda la temporada cuando los episodios esten completos.'}
+              </p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <Button type="button" variant="ghost" onClick={() => navigate('/admin/catalog')} className="w-full sm:w-auto">
               Volver al catalogo
-            </Button>
-            {editingSeasonId ? (
-              <Button type="button" variant="ghost" onClick={() => resetForm()}>
-                Crear nueva temporada
-              </Button>
-            ) : null}
-            <Button type="submit" disabled={isSaving || isAnyUploading}>
-              {isSaving || isAnyUploading ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  {isAnyUploading ? 'Subiendo videos...' : 'Guardando...'}
-                </span>
-              ) : (
-                <>
-                  <Save size={15} />
-                  {editingSeasonId ? 'Actualizar capitulos' : 'Guardar capitulos'}
-                </>
-              )}
-            </Button>
+                </Button>
+                {editingSeasonId ? (
+                  <Button type="button" variant="ghost" onClick={() => resetForm()} className="w-full sm:w-auto">
+                    Crear nueva temporada
+                  </Button>
+                ) : null}
+                <Button type="submit" disabled={isSaving || isAnyUploading} className="w-full sm:w-auto">
+                  {isSaving || isAnyUploading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      {isAnyUploading ? 'Subiendo videos...' : 'Guardando...'}
+                    </span>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      {editingSeasonId ? 'Actualizar capitulos' : 'Guardar capitulos'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </form>
 
