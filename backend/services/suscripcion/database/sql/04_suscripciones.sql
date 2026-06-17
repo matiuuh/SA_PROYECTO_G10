@@ -46,6 +46,7 @@ CREATE TABLE suscripciones.instantaneas (
     tabla_origen VARCHAR(100) NOT NULL,
     entidad_id UUID NOT NULL,
     evento evento_instantanea NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo JSONB,
     usuario_accion UUID,
     fecha_evento TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -61,18 +62,42 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION suscripciones.fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
+    v_row JSONB;
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NOW());
+        v_row := to_jsonb(OLD);
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(v_row->>'cuenta_id', '')::UUID,
+            (SELECT cuenta_id FROM suscripciones.suscripciones WHERE id = NULLIF(v_row->>'suscripcion_id', '')::UUID)
+        );
+
+        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NULL, v_actor, NOW());
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW), NOW());
+        v_row := to_jsonb(NEW);
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(v_row->>'cuenta_id', '')::UUID,
+            (SELECT cuenta_id FROM suscripciones.suscripciones WHERE id = NULLIF(v_row->>'suscripcion_id', '')::UUID)
+        );
+
+        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(OLD), to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     ELSE
-        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW), NOW());
+        v_row := to_jsonb(NEW);
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(v_row->>'cuenta_id', '')::UUID,
+            (SELECT cuenta_id FROM suscripciones.suscripciones WHERE id = NULLIF(v_row->>'suscripcion_id', '')::UUID)
+        );
+
+        INSERT INTO suscripciones.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', NULL, to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     END IF;
 END;
