@@ -20,9 +20,7 @@ name: CD — release → GKE
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  workflow_run:
-    workflows: ["CI — Tests & Cobertura"]
-    types: [completed]
+  push:
     branches: [release]
 
 jobs:
@@ -32,11 +30,10 @@ jobs:
   # ════════════════════════════════════════════════════════════════════════════
 
   ci-passed:
-    name: "Verificar que CI pasó"
+    name: "Verificar rama"
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "CI aprobado — iniciando despliegue a GKE (release)"
+      - run: echo "Push a release detectado — iniciando despliegue a GKE"
 
   # ════════════════════════════════════════════════════════════════════════════
   # 1. VERSIONAMIENTO SEMÁNTICO
@@ -47,6 +44,8 @@ jobs:
     name: "Generar tag semántico v2.X.0"
     runs-on: ubuntu-latest
     needs: ci-passed
+    permissions:
+      contents: write
 
     outputs:
       version: ${{ steps.semver.outputs.version }}
@@ -243,6 +242,15 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Preparar clave SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh-keyscan -H ${{ secrets.VM3_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Ejecutar backup en VM3 vía SSH
         uses: appleboy/ssh-action@v1
         env:
@@ -252,7 +260,7 @@ jobs:
         with:
           host: ${{ secrets.VM3_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          key_path: /tmp/deploy_key
           envs: GCP_SA_KEY,GCS_BUCKET,DB_PASSWORD
           script: |
             set -e
@@ -293,12 +301,12 @@ jobs:
   # ════════════════════════════════════════════════════════════════════════════
 
   deploy-gke:
-    name: "Deploy → GKE (${{ needs.version.outputs.version }})"
+    name: "Deploy → GKE (${{ needs.build-and-push.outputs.version }})"
     runs-on: ubuntu-latest
     needs: [build-and-push, backup-databases]
     env:
       AR_REGISTRY: ${{ needs.build-and-push.outputs.ar_registry }}
-      VERSION: ${{ needs.version.outputs.version }}
+      VERSION: ${{ needs.build-and-push.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -319,14 +327,14 @@ jobs:
 
       - name: Sustituir variables en los manifiestos
         run: |
-          # envsubst reemplaza $AR_REGISTRY, $VERSION y $VM3_HOST dentro de los YAML
           export AR_REGISTRY="${{ env.AR_REGISTRY }}"
           export VERSION="${{ env.VERSION }}"
           export VM3_HOST="${{ secrets.VM3_HOST }}"
-          find k8s/ -name "*.yaml" -exec \
-            sh -c 'envsubst < "$1" > "$1.rendered" && mv "$1.rendered" "$1"' \
-            _ {} \;
-          echo "Variables sustituidas en manifiestos k8s/"
+          for f in k8s/*.yaml; do
+            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST}' < "$f" > "$f.rendered"
+            mv "$f.rendered" "$f"
+          done
+          echo "Variables sustituidas: AR_REGISTRY=${AR_REGISTRY} VERSION=${VERSION}"
 
       - name: Crear namespace (si no existe)
         run: kubectl apply -f k8s/00-namespace.yaml
