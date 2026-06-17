@@ -20,9 +20,7 @@ name: CD — release → GKE
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  workflow_run:
-    workflows: ["CI — Tests & Cobertura"]
-    types: [completed]
+  push:
     branches: [release]
 
 jobs:
@@ -32,11 +30,10 @@ jobs:
   # ════════════════════════════════════════════════════════════════════════════
 
   ci-passed:
-    name: "Verificar que CI pasó"
+    name: "Verificar rama"
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "CI aprobado — iniciando despliegue a GKE (release)"
+      - run: echo "Push a release detectado — iniciando despliegue a GKE"
 
   # ════════════════════════════════════════════════════════════════════════════
   # 1. VERSIONAMIENTO SEMÁNTICO
@@ -243,6 +240,15 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Preparar clave SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh-keyscan -H ${{ secrets.VM3_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Ejecutar backup en VM3 vía SSH
         uses: appleboy/ssh-action@v1
         env:
@@ -252,7 +258,7 @@ jobs:
         with:
           host: ${{ secrets.VM3_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          key_path: /tmp/deploy_key
           envs: GCP_SA_KEY,GCS_BUCKET,DB_PASSWORD
           script: |
             set -e
