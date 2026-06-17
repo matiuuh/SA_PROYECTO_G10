@@ -44,6 +44,8 @@ jobs:
     name: "Generar tag semántico v2.X.0"
     runs-on: ubuntu-latest
     needs: ci-passed
+    permissions:
+      contents: write
 
     outputs:
       version: ${{ steps.semver.outputs.version }}
