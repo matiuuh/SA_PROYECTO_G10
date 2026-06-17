@@ -9,7 +9,7 @@ interface PaymentMethodSelectorProps {
 const PAYMENT_METHODS = [
   {
     id: 'card',
-    label: 'Tarjeta de crédito/débito',
+    label: 'Tarjeta de credito/debito',
     description: 'Visa, Mastercard, American Express',
     icon: CreditCard,
   },
@@ -21,14 +21,14 @@ export function PaymentMethodSelector({ value, onChange }: PaymentMethodSelector
       {PAYMENT_METHODS.map(({ id, label, description, icon: Icon }) => (
         <div
           key={id}
-          className={`p-4 rounded-lg border transition-colors ${
+          className={`rounded-lg border p-4 transition-colors ${
             value === id
               ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
               : 'border-white/[0.07] hover:border-white/[0.12]'
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#0d1220] border border-white/[0.07] flex items-center justify-center text-[var(--color-denim-400)]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.07] bg-[#0d1220] text-[var(--color-denim-400)]">
               <Icon size={18} strokeWidth={1.75} />
             </div>
             <div className="flex-1">
@@ -36,7 +36,7 @@ export function PaymentMethodSelector({ value, onChange }: PaymentMethodSelector
                 name="paymentMethod"
                 value={id}
                 checked={value === id}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(event) => onChange(event.target.value)}
                 label={label}
                 description={description}
               />

@@ -24,7 +24,7 @@ CREATE TABLE historial_reproduccion (
     progreso_segundos INTEGER NOT NULL DEFAULT 0,
     creado_en         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_historial_perfil_recurso UNIQUE (perfil_id, contenido_id, episodio_id),
+    CONSTRAINT uq_historial_perfil_recurso UNIQUE NULLS NOT DISTINCT (perfil_id, contenido_id, episodio_id),
     CONSTRAINT ck_progreso_segundos CHECK (progreso_segundos >= 0)
 );
 

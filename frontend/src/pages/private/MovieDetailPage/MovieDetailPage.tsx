@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Play,
@@ -11,6 +11,8 @@ import {
   VolumeX,
   Maximize2,
   Pause,
+  Rewind,
+  FastForward,
   X,
   Film,
   ThumbsUp,
@@ -195,9 +197,13 @@ export function MovieDetailPage() {
   const [playbackError, setPlaybackError] = useState('')
   const [shareFeedback, setShareFeedback] = useState('')
   const [playbackPositionSeconds, setPlaybackPositionSeconds] = useState(0)
+  const [mediaDurationSeconds, setMediaDurationSeconds] = useState(0)
+  const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
+  const [showPlaybackControls, setShowPlaybackControls] = useState(true)
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playbackContainerRef = useRef<HTMLDivElement | null>(null)
+  const controlsHideTimeoutRef = useRef<number | null>(null)
   const hasConsumedAutoplayRef = useRef(false)
 
   const selectedSeason = useMemo(
@@ -355,9 +361,10 @@ export function MovieDetailPage() {
     return 0
   }, [detail?.duracion_minutos, selectedEpisode?.duracion_minutos])
 
+  const effectivePlaybackTotalSeconds = mediaDurationSeconds || playbackTotalSeconds
   const playbackProgressPercent =
-    playbackTotalSeconds > 0
-      ? Math.max(0, Math.min(100, (playbackPositionSeconds / playbackTotalSeconds) * 100))
+    effectivePlaybackTotalSeconds > 0
+      ? Math.max(0, Math.min(100, (playbackPositionSeconds / effectivePlaybackTotalSeconds) * 100))
       : 0
 
   const genres = detail?.generos ?? []
@@ -375,10 +382,30 @@ export function MovieDetailPage() {
     [currentPlaybackUrl, muted, resumeFromSeconds],
   )
 
+  const clearControlsHideTimer = () => {
+    if (controlsHideTimeoutRef.current == null) return
+    window.clearTimeout(controlsHideTimeoutRef.current)
+    controlsHideTimeoutRef.current = null
+  }
+
+  const revealPlaybackControls = () => {
+    setShowPlaybackControls(true)
+    clearControlsHideTimer()
+
+    if (!playing || isPlaybackPaused) return
+    controlsHideTimeoutRef.current = window.setTimeout(() => {
+      setShowPlaybackControls(false)
+      controlsHideTimeoutRef.current = null
+    }, 3000)
+  }
+
   const resetPlaybackSelectionState = () => {
     setSavedProgress(null)
     setResumeFromSeconds(0)
     setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
+    setShowPlaybackControls(true)
     setEpisodeSignedUrl(null)
     setPlaybackStartedAt(null)
     setPlaying(false)
@@ -427,6 +454,17 @@ export function MovieDetailPage() {
   }, [playing, resumeFromSeconds, trailerSource])
 
   useEffect(() => {
+    if (!playing) {
+      clearControlsHideTimer()
+      setShowPlaybackControls(true)
+      return
+    }
+
+    revealPlaybackControls()
+    return clearControlsHideTimer
+  }, [isPlaybackPaused, playing])
+
+  useEffect(() => {
     if (!shouldAutoplay || hasConsumedAutoplayRef.current) return
     if (!hasSubscription || !detail) return
     if (detail.tipo === 'serie' && !selectedEpisode) return
@@ -466,6 +504,8 @@ export function MovieDetailPage() {
     }
     setResumeFromSeconds(0)
     setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
     setPlaying(true)
@@ -487,6 +527,7 @@ export function MovieDetailPage() {
     const nextResumePoint = savedProgress?.progreso_segundos ?? 0
     setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
     setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setIsPlaybackPaused(false)
     setPlaybackStartedAt(Date.now())
     setPlaybackError('')
     setPlaying(true)
@@ -520,8 +561,8 @@ export function MovieDetailPage() {
       return
     }
 
-    if (playbackTotalSeconds > 0 && nextProgress > playbackTotalSeconds) {
-      nextProgress = playbackTotalSeconds
+    if (effectivePlaybackTotalSeconds > 0 && nextProgress > effectivePlaybackTotalSeconds) {
+      nextProgress = effectivePlaybackTotalSeconds
     }
 
     try {
@@ -530,7 +571,7 @@ export function MovieDetailPage() {
         contenido_id: detail.id,
         episodio_id: selectedEpisode?.id ?? '',
         progreso_segundos: nextProgress,
-        duracion_total_segundos: playbackTotalSeconds,
+        duracion_total_segundos: effectivePlaybackTotalSeconds,
       })
       setPlaybackPositionSeconds(nextProgress)
 
@@ -541,7 +582,7 @@ export function MovieDetailPage() {
           contenido_id: detail.id,
           episodio_id: selectedEpisode?.id ?? '',
           estado:
-            playbackTotalSeconds > 0 && nextProgress >= playbackTotalSeconds * 0.9
+            effectivePlaybackTotalSeconds > 0 && nextProgress >= effectivePlaybackTotalSeconds * 0.9
               ? 'finalizado'
               : 'en_progreso',
           progreso_segundos: nextProgress,
@@ -567,6 +608,52 @@ export function MovieDetailPage() {
     setPlaybackPositionSeconds(videoProgress)
   }
 
+  const handleVideoLoadedMetadata = () => {
+    const duration = videoRef.current?.duration
+    if (duration == null || !Number.isFinite(duration) || duration <= 0) return
+    setMediaDurationSeconds(Math.floor(duration))
+  }
+
+  const seekVideoTo = (seconds: number) => {
+    const video = videoRef.current
+    const safeSeconds = Math.max(0, Math.min(seconds, effectivePlaybackTotalSeconds || seconds))
+    setPlaybackPositionSeconds(Math.floor(safeSeconds))
+    setResumeFromSeconds(Math.floor(safeSeconds))
+
+    if (video) {
+      video.currentTime = safeSeconds
+    }
+
+    void persistPlaybackProgress(Math.floor(safeSeconds))
+  }
+
+  const handleSeekChange = (event: ChangeEvent<HTMLInputElement>) => {
+    seekVideoTo(Number(event.target.value))
+  }
+
+  const handleSkip = (deltaSeconds: number) => {
+    seekVideoTo(playbackPositionSeconds + deltaSeconds)
+  }
+
+  const handleTogglePlayback = async () => {
+    const video = videoRef.current
+    if (!video) {
+      await closePlayback()
+      return
+    }
+
+    if (video.paused) {
+      await video.play()
+      setIsPlaybackPaused(false)
+      setPlaybackStartedAt(Date.now())
+      return
+    }
+
+    video.pause()
+    setIsPlaybackPaused(true)
+    setPlaybackStartedAt(null)
+  }
+
   const handleVideoSeeked = () => {
     const videoProgress = getCurrentVideoProgressSeconds()
     if (videoProgress == null) return
@@ -576,11 +663,13 @@ export function MovieDetailPage() {
   const handleVideoPause = () => {
     const videoProgress = getCurrentVideoProgressSeconds()
     if (videoProgress == null) return
+    setIsPlaybackPaused(true)
     void persistPlaybackProgress(videoProgress)
   }
 
   const handleVideoEnded = () => {
-    const finalProgress = playbackTotalSeconds || getCurrentVideoProgressSeconds()
+    setIsPlaybackPaused(true)
+    const finalProgress = effectivePlaybackTotalSeconds || getCurrentVideoProgressSeconds()
     if (finalProgress == null) return
     void persistPlaybackProgress(finalProgress)
   }
@@ -705,13 +794,25 @@ export function MovieDetailPage() {
     )
   }
 
+  const playbackChromeClass = showPlaybackControls
+    ? 'opacity-100'
+    : 'pointer-events-none opacity-0'
+
   return (
     <div className="min-h-screen bg-[#080c14]">
       {playing && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-black">
-          <div ref={playbackContainerRef} className="relative flex h-full w-full items-center justify-center">
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-gradient-to-b from-black/80 via-black/35 to-transparent" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-44 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+          <div
+            ref={playbackContainerRef}
+            className={`relative flex h-full w-full items-center justify-center ${showPlaybackControls ? 'cursor-default' : 'cursor-none'}`}
+            onMouseMove={revealPlaybackControls}
+            onMouseDown={revealPlaybackControls}
+            onTouchStart={revealPlaybackControls}
+            onKeyDown={revealPlaybackControls}
+            tabIndex={-1}
+          >
+            <div className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-gradient-to-b from-black/80 via-black/35 to-transparent transition-opacity duration-500 ${playbackChromeClass}`} />
+            <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-44 bg-gradient-to-t from-black/85 via-black/35 to-transparent transition-opacity duration-500 ${playbackChromeClass}`} />
 
             {trailerSource?.type === 'youtube' ? (
               <iframe
@@ -729,11 +830,13 @@ export function MovieDetailPage() {
                 ref={videoRef}
                 src={trailerSource.src}
                 className="h-full w-full bg-black"
-                controls
                 autoPlay
                 muted={muted}
+                playsInline
+                onLoadedMetadata={handleVideoLoadedMetadata}
                 onTimeUpdate={handleVideoTimeUpdate}
                 onSeeked={handleVideoSeeked}
+                onPlay={() => setIsPlaybackPaused(false)}
                 onPause={handleVideoPause}
                 onEnded={handleVideoEnded}
               />
@@ -754,7 +857,7 @@ export function MovieDetailPage() {
               </div>
             )}
 
-            <div className="pointer-events-none absolute left-4 top-4 z-20 max-w-[calc(100%-12rem)] rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white shadow-2xl shadow-black/40 backdrop-blur-md sm:left-6">
+            <div className={`pointer-events-none absolute left-4 top-4 z-20 max-w-[calc(100%-12rem)] rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white shadow-2xl shadow-black/40 backdrop-blur-md transition-opacity duration-500 sm:left-6 ${playbackChromeClass}`}>
               <p className="truncate text-sm font-semibold">
                 {selectedEpisode ? `${detail.titulo} - ${selectedEpisode.titulo}` : detail.titulo}
               </p>
@@ -763,7 +866,7 @@ export function MovieDetailPage() {
               </p>
             </div>
 
-            <div className="absolute right-4 top-4 z-30 flex items-center gap-2 sm:right-6">
+            <div className={`absolute right-4 top-4 z-30 flex items-center gap-2 transition-opacity duration-500 sm:right-6 ${playbackChromeClass}`}>
               <button
                 onClick={() => setMuted((value) => !value)}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-xl shadow-black/35 backdrop-blur-md transition-all duration-200 hover:border-white/25 hover:bg-white/15"
@@ -791,32 +894,62 @@ export function MovieDetailPage() {
               </button>
             </div>
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex flex-col gap-3 px-4 sm:bottom-6 sm:px-8">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20 shadow-inner shadow-black/30">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-denim-300)] transition-[width] duration-300"
-                  style={{ width: `${playbackProgressPercent}%` }}
+            <div className={`absolute inset-x-0 bottom-5 z-20 flex flex-col gap-3 px-4 transition-opacity duration-500 sm:bottom-6 sm:px-8 ${playbackChromeClass}`}>
+              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/35 px-3 py-3 text-white shadow-2xl shadow-black/30 backdrop-blur-md sm:px-4">
+                <span className="w-12 text-right text-xs font-medium tabular-nums text-[var(--color-denim-200)]">
+                  {formatProgress(playbackPositionSeconds)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(effectivePlaybackTotalSeconds, playbackPositionSeconds, 1)}
+                  value={Math.min(playbackPositionSeconds, Math.max(effectivePlaybackTotalSeconds, playbackPositionSeconds, 1))}
+                  onChange={handleSeekChange}
+                  aria-label="Progreso de reproduccion"
+                  className="h-1.5 flex-1 cursor-pointer rounded-full bg-white/20 accent-[var(--color-primary)]"
+                  style={{
+                    background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${playbackProgressPercent}%, rgba(255,255,255,0.22) ${playbackProgressPercent}%, rgba(255,255,255,0.22) 100%)`,
+                  }}
                 />
+                <span className="w-12 text-xs font-medium tabular-nums text-[var(--color-denim-200)]">
+                  {effectivePlaybackTotalSeconds > 0 ? formatProgress(effectivePlaybackTotalSeconds) : '--:--'}
+                </span>
               </div>
               <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/35 px-3 py-3 text-white shadow-2xl shadow-black/30 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-4">
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <button
+                    onClick={() => handleSkip(-10)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition-all duration-200 hover:bg-white/20"
+                    aria-label="Retroceder 10 segundos"
+                  >
+                    <Rewind size={17} />
+                  </button>
                   <button
                     onClick={() => {
-                      void closePlayback()
+                      void handleTogglePlayback()
                     }}
-                    className="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#080c14] shadow-lg shadow-black/25 transition-transform duration-200 hover:scale-105 hover:bg-white/90"
-                    aria-label="Pausar y cerrar reproductor"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[#080c14] shadow-lg shadow-black/25 transition-transform duration-200 hover:scale-105 hover:bg-white/90"
+                    aria-label={isPlaybackPaused ? 'Reproducir' : 'Pausar'}
                   >
-                    <Pause size={18} fill="#080c14" strokeWidth={0} />
+                    {isPlaybackPaused ? (
+                      <Play size={19} fill="#080c14" strokeWidth={0} />
+                    ) : (
+                      <Pause size={19} fill="#080c14" strokeWidth={0} />
+                    )}
                   </button>
-                  <span className="truncate text-sm font-medium text-white">
+                  <button
+                    onClick={() => handleSkip(10)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition-all duration-200 hover:bg-white/20"
+                    aria-label="Adelantar 10 segundos"
+                  >
+                    <FastForward size={17} />
+                  </button>
+                  <span className="ml-2 truncate text-sm font-semibold text-white">
                     {selectedEpisode ? `${detail.titulo} · ${selectedEpisode.titulo}` : detail.titulo}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center justify-between gap-3 text-xs font-medium text-[var(--color-denim-300)] sm:justify-end">
-                  <span>{formatProgress(playbackPositionSeconds)}</span>
-                  <span className="h-1 w-1 rounded-full bg-white/35" />
-                  <span>{playbackTotalSeconds > 0 ? formatProgress(playbackTotalSeconds) : selectedEpisode ? duration : trailerSource ? 'Trailer' : duration}</span>
+                  <span>{selectedEpisode ? `Episodio ${selectedEpisode.numero}` : trailerSource ? 'Trailer' : 'Reproduccion'}</span>
                 </div>
               </div>
             </div>
