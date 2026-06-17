@@ -512,11 +512,11 @@ func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID st
 func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			id,
+			id::text,
 			tabla_origen,
-			entidad_id,
+			entidad_id::text,
 			evento::text,
-			estado_anterior,
+			NULL as estado_anterior,
 			estado_nuevo,
 			COALESCE(usuario_accion::text, ''),
 			fecha_evento
