@@ -649,7 +649,7 @@ function isAutomaticAssetCompletionUpdate(entry: CatalogAuditEntry): boolean {
 function formatUserAction(value?: string): string {
   const trimmed = value?.trim() ?? ''
   if (!trimmed) return 'Sistema'
-  return trimmed.length > 12 ? `${trimmed.slice(0, 8)}...` : trimmed
+  return trimmed
 }
 
 function getEntityDisplay(entry: CatalogAuditEntry): { icon: React.ReactNode; title: string; type: string } {
@@ -885,7 +885,7 @@ export function AdminAuditPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Fecha</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Evento</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Tabla</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Usuario</th>
+                  <th className="w-[170px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Usuario</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Entidad</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-denim-500)]">Cambios</th>
                 </tr>
@@ -911,9 +911,9 @@ export function AdminAuditPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-sm text-white">{entry.tabla_origen}</td>
-                      <td className="px-4 py-4">
+                      <td className="w-[170px] px-4 py-4">
                         <span
-                          className="font-mono text-xs text-[var(--color-denim-300)]"
+                          className="block max-w-[160px] break-all font-mono text-xs leading-5 text-[var(--color-denim-300)]"
                           title={formatUserAction(entry.usuario_accion)}
                         >
                           {formatUserAction(entry.usuario_accion)}
