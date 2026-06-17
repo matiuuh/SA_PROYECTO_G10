@@ -213,6 +213,7 @@ jobs:
           host: ${{ secrets.VM3_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          debug: true
           envs: GCP_SA_KEY,GCS_BUCKET,DB_PASSWORD,AR_REGION
           script: |
             set -e
