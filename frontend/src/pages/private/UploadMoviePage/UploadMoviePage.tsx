@@ -325,39 +325,6 @@ export function UploadMoviePage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <ScrollReveal variant="fade-up" delay={20}>
-          <section className="sticky top-3 z-10 rounded-xl border border-[var(--color-primary)]/20 bg-[#0a0f1c]/95 p-4 backdrop-blur">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-white">Accion principal</p>
-                <p className="text-xs text-[var(--color-denim-400)]">
-                  {editingId
-                    ? 'Actualiza los datos y guarda los cambios para reflejarlos en el catalogo.'
-                    : 'Cuando termines de llenar los datos, usa este boton para subir la pelicula al catalogo.'}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="ghost" onClick={resetForm}>
-                  Limpiar
-                </Button>
-                <Button type="submit" disabled={loading || isUploading}>
-                  {loading || isUploading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      {isUploading ? 'Subiendo trailer...' : 'Guardando...'}
-                    </span>
-                  ) : (
-                    <>
-                      <Save size={15} />
-                      {editingId ? 'Guardar cambios' : 'Subir pelicula'}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </section>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={40}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
             <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
               Informacion general
@@ -410,7 +377,7 @@ export function UploadMoviePage() {
           </section>
         </ScrollReveal>
 
-        <ScrollReveal variant="fade-up" delay={80}>
+        <ScrollReveal variant="fade-up" delay={60}>
           <section className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-6">
             <h3 className="mb-4 border-b border-white/[0.06] pb-2 text-sm font-semibold text-[var(--color-denim-200)]">
               Informacion tecnica y recursos
@@ -527,26 +494,31 @@ export function UploadMoviePage() {
           </section>
         </ScrollReveal>
 
-        <ScrollReveal variant="fade-up" delay={120}>
-          <div className="flex items-center justify-end gap-3 pb-4">
-            <Button type="button" variant="ghost" onClick={resetForm}>
-              Limpiar formulario
-            </Button>
-            <Button type="submit" disabled={loading || isUploading}>
-              {loading || isUploading ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  {isUploading ? 'Subiendo trailer...' : 'Guardando...'}
-                </span>
-              ) : (
-                <>
-                  <Save size={15} />
-                  {editingId ? 'Guardar cambios' : 'Subir pelicula'}
-                </>
-              )}
-            </Button>
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/[0.08] bg-[#080c14]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-[var(--color-denim-400)]">
+              {editingId ? 'Guarda los cambios de la pelicula.' : 'Guarda la pelicula cuando los campos esten completos.'}
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <Button type="button" variant="ghost" onClick={resetForm} className="w-full sm:w-auto">
+                Limpiar formulario
+              </Button>
+              <Button type="submit" disabled={loading || isUploading} className="w-full sm:w-auto">
+                {loading || isUploading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    {isUploading ? 'Subiendo trailer...' : 'Guardando...'}
+                  </span>
+                ) : (
+                  <>
+                    <Save size={15} />
+                    {editingId ? 'Guardar cambios' : 'Subir pelicula'}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-        </ScrollReveal>
+        </div>
       </form>
     </div>
   )

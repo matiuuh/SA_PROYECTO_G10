@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
-import { clearSession, getActiveSession } from '@/lib/auth'
+import { clearSession, getActiveSession, isAdminRole } from '@/lib/auth'
 import { logoutUser } from '@/lib/usuario-api'
 
 interface NavItem {
@@ -39,7 +39,7 @@ export function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
-  if (session.account.rol !== 'administrador') {
+  if (!isAdminRole(session.account.rol)) {
     return <Navigate to="/panel" replace />
   }
 

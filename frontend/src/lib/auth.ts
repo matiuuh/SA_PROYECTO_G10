@@ -2,6 +2,30 @@ import type { AuthSession, UserProfile } from '@/types/auth'
 
 const SESSION_STORAGE_KEY = 'quetzal_auth_session'
 const ACTIVE_PROFILE_STORAGE_KEY = 'quetzal_active_profile'
+const ADMIN_ROLES = new Set(['administrador', 'admin', 'administrator'])
+
+function normalizeRole(role: string): string {
+  return role.trim().toLowerCase()
+}
+
+export function isAdminRole(role: string): boolean {
+  return ADMIN_ROLES.has(normalizeRole(role))
+}
+
+export function getHomeRouteByRole(role: string): string {
+  return isAdminRole(role) ? '/admin' : '/panel'
+}
+
+export function getPostLoginRedirect(role: string, requestedPath?: string): string {
+  const homeRoute = getHomeRouteByRole(role)
+  if (!requestedPath) return homeRoute
+
+  if (isAdminRole(role)) {
+    return requestedPath.startsWith('/admin') ? requestedPath : '/admin'
+  }
+
+  return requestedPath.startsWith('/admin') ? '/panel' : requestedPath
+}
 
 export function getStoredSession(): AuthSession | null {
   const raw = localStorage.getItem(SESSION_STORAGE_KEY)

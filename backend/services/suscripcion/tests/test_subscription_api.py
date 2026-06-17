@@ -182,7 +182,7 @@ def test_create_subscription_for_another_account_is_forbidden() -> None:
     assert response.status_code == 403
 
 
-def test_admin_can_create_subscription_for_another_account() -> None:
+def test_admin_cannot_create_subscription() -> None:
     plan = create_plan()
     admin_id = str(uuid4())
     target_account_id = str(uuid4())
@@ -192,8 +192,7 @@ def test_admin_can_create_subscription_for_another_account() -> None:
         headers=auth_header(admin_id, role="administrador"),
         json={"cuenta_id": target_account_id, "plan_id": plan["id"]},
     )
-    assert response.status_code == 201
-    assert response.json()["cuenta_id"] == target_account_id
+    assert response.status_code == 403
 
 
 def test_create_subscription_with_unknown_plan_is_not_found() -> None:
@@ -312,6 +311,48 @@ def test_change_subscription_plan_on_cancelled_subscription_is_conflict() -> Non
     assert response.status_code == 409
 
 
+def test_change_subscription_plan_for_other_account_is_forbidden() -> None:
+    plan = create_plan()
+    other_plan = create_plan()
+    account_id = str(uuid4())
+    other_account_id = str(uuid4())
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        headers=auth_header(account_id),
+        json={"cuenta_id": account_id, "plan_id": plan["id"]},
+    )
+    subscription_id = created.json()["id"]
+
+    response = client.put(
+        f"/api/v1/subscriptions/{subscription_id}/plan",
+        headers=auth_header(other_account_id),
+        json={"plan_id": other_plan["id"]},
+    )
+    assert response.status_code == 403
+
+
+def test_admin_cannot_change_subscription_plan() -> None:
+    plan = create_plan()
+    other_plan = create_plan()
+    account_id = str(uuid4())
+    admin_id = str(uuid4())
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        headers=auth_header(account_id),
+        json={"cuenta_id": account_id, "plan_id": plan["id"]},
+    )
+    subscription_id = created.json()["id"]
+
+    response = client.put(
+        f"/api/v1/subscriptions/{subscription_id}/plan",
+        headers=auth_header(admin_id, role="administrador"),
+        json={"plan_id": other_plan["id"]},
+    )
+    assert response.status_code == 403
+
+
 def test_change_subscription_plan_success_and_errors() -> None:
     original_plan = create_plan()
     new_plan = create_plan()
@@ -385,9 +426,48 @@ def test_cancel_subscription_success_and_errors() -> None:
     assert unknown_subscription_response.status_code == 404
 
 
+def test_cancel_subscription_for_other_account_is_forbidden() -> None:
+    plan = create_plan()
+    account_id = str(uuid4())
+    other_account_id = str(uuid4())
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        headers=auth_header(account_id),
+        json={"cuenta_id": account_id, "plan_id": plan["id"]},
+    )
+    subscription_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/v1/subscriptions/{subscription_id}/cancel",
+        headers=auth_header(other_account_id),
+    )
+    assert response.status_code == 403
+
+
+def test_admin_cannot_cancel_subscription() -> None:
+    plan = create_plan()
+    account_id = str(uuid4())
+    admin_id = str(uuid4())
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        headers=auth_header(account_id),
+        json={"cuenta_id": account_id, "plan_id": plan["id"]},
+    )
+    subscription_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/v1/subscriptions/{subscription_id}/cancel",
+        headers=auth_header(admin_id, role="administrador"),
+    )
+    assert response.status_code == 403
+
+
 def test_list_active_subscription_accounts_includes_created_account() -> None:
     plan = create_plan()
     account_id = str(uuid4())
+    admin_id = str(uuid4())
 
     client.post(
         "/api/v1/subscriptions",
@@ -395,6 +475,22 @@ def test_list_active_subscription_accounts_includes_created_account() -> None:
         json={"cuenta_id": account_id, "plan_id": plan["id"]},
     )
 
-    response = client.get("/api/v1/subscriptions/active/accounts")
+    response = client.get(
+        "/api/v1/subscriptions/active/accounts",
+        headers=auth_header(admin_id, role="administrador"),
+    )
     assert response.status_code == 200
     assert account_id in response.json()["cuenta_ids"]
+
+
+def test_list_active_subscription_accounts_requires_admin() -> None:
+    account_id = str(uuid4())
+
+    missing_token_response = client.get("/api/v1/subscriptions/active/accounts")
+    assert missing_token_response.status_code == 422
+
+    user_response = client.get(
+        "/api/v1/subscriptions/active/accounts",
+        headers=auth_header(account_id),
+    )
+    assert user_response.status_code == 403
