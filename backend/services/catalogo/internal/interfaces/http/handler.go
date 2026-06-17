@@ -177,6 +177,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/catalog/series/", h.handleAdminSeries)
 	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-poster", h.handleUploadPoster)
 	mux.HandleFunc("/api/v1/admin/catalog/upload-trailer", h.handleUploadTrailer)
 	mux.HandleFunc("/api/v1/admin/catalog/upload-episode-video", h.handleUploadEpisodeVideo)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
@@ -209,7 +210,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"contenidos": toContentResponseList(contents),
+		"contenidos": h.toContentResponseList(r.Context(), contents),
 	})
 }
 
@@ -231,7 +232,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"contenidos": toContentResponseList(contents),
+		"contenidos": h.toContentResponseList(r.Context(), contents),
 	})
 }
 
@@ -312,8 +313,10 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	response := h.toDetailResponse(r.Context(), detail)
+	response.UrlPortada = detail.PosterURL
 	writeJSON(w, http.StatusOK, map[string]any{
-		"detalle": toDetailResponse(detail),
+		"detalle": response,
 	})
 }
 
@@ -498,7 +501,7 @@ func (h *Handler) handleAdminListContent(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"contenidos": toContentResponseList(contents),
+		"contenidos": h.toContentResponseList(r.Context(), contents),
 	})
 }
 
@@ -580,7 +583,7 @@ func (h *Handler) handleAdminGetContent(w http.ResponseWriter, r *http.Request, 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"detalle": toDetailResponse(detail),
+		"detalle": h.toDetailResponse(r.Context(), detail),
 	})
 }
 
@@ -657,7 +660,7 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message": "Contenido actualizado correctamente.",
-		"detalle": toDetailResponse(detail),
+		"detalle": h.toDetailResponse(r.Context(), detail),
 	})
 }
 
@@ -936,6 +939,73 @@ func (h *Handler) handleUploadTrailer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleUploadPoster(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		ContenidoID string `json:"contenido_id"`
+		Extension   string `json:"extension"`
+		ContentType string `json:"content_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.ContenidoID = strings.TrimSpace(req.ContenidoID)
+	req.Extension = strings.Trim(strings.ToLower(strings.TrimSpace(req.Extension)), ".")
+	req.ContentType = strings.TrimSpace(req.ContentType)
+	if req.ContenidoID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el contenido_id.")
+		return
+	}
+	if req.Extension == "" {
+		req.Extension = "jpg"
+	}
+	if req.Extension != "jpg" && req.Extension != "jpeg" && req.Extension != "png" && req.Extension != "webp" {
+		writeError(w, http.StatusBadRequest, "La portada debe ser jpg, jpeg, png o webp.")
+		return
+	}
+	if req.ContentType == "" {
+		req.ContentType = "image/jpeg"
+	}
+	if !strings.HasPrefix(req.ContentType, "image/") {
+		writeError(w, http.StatusBadRequest, "El content_type debe ser de imagen.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.PosterSignedURL(r.Context(), req.ContenidoID, req.Extension, req.ContentType)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida de portada para %q: %v", req.ContenidoID, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":   uploadURL,
+		"object_name": objectName,
+		"method":      "PUT",
+		"content_type": req.ContentType,
+	})
+}
+
 func (h *Handler) handleUploadEpisodeVideo(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		writePreflight(w)
@@ -1001,22 +1071,22 @@ func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 	}()
 }
 
-func toContentResponseList(contents []domain.Content) []contentResponse {
+func (h *Handler) toContentResponseList(ctx context.Context, contents []domain.Content) []contentResponse {
 	out := make([]contentResponse, 0, len(contents))
 	for _, content := range contents {
-		out = append(out, toContentResponse(content))
+		out = append(out, h.toContentResponse(ctx, content))
 	}
 	return out
 }
 
-func toContentResponse(content domain.Content) contentResponse {
+func (h *Handler) toContentResponse(ctx context.Context, content domain.Content) contentResponse {
 	response := contentResponse{
 		ID:                      content.ID,
 		Titulo:                  content.Title,
 		Tipo:                    string(content.Type),
 		Sinopsis:                content.Synopsis,
 		Idioma:                  content.Language,
-		UrlPortada:              content.PosterURL,
+		UrlPortada:              h.resolvePosterURL(ctx, content.PosterURL),
 		PorcentajeRecomendacion: content.RecommendationPct,
 		UrlTrailer:              content.TrailerURL,
 	}
@@ -1024,6 +1094,23 @@ func toContentResponse(content domain.Content) contentResponse {
 		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02")
 	}
 	return response
+}
+
+func (h *Handler) resolvePosterURL(ctx context.Context, posterURL string) string {
+	value := strings.TrimSpace(posterURL)
+	if value == "" || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		return value
+	}
+	if h.uploader == nil || !strings.HasPrefix(value, "posters/") {
+		return value
+	}
+
+	signedURL, err := h.uploader.ReadSignedURL(ctx, value)
+	if err != nil {
+		log.Printf("[catalogo] no se pudo firmar portada %q: %v", value, err)
+		return value
+	}
+	return signedURL
 }
 
 func toAuditEntryResponseList(entries []domain.AuditEntry) []auditEntryResponse {
@@ -1043,7 +1130,7 @@ func toAuditEntryResponseList(entries []domain.AuditEntry) []auditEntryResponse 
 	return out
 }
 
-func toDetailResponse(detail *domain.ContentDetail) detailResponse {
+func (h *Handler) toDetailResponse(ctx context.Context, detail *domain.ContentDetail) detailResponse {
 	response := detailResponse{
 		ID:                      detail.ID,
 		Titulo:                  detail.Title,
@@ -1053,7 +1140,7 @@ func toDetailResponse(detail *domain.ContentDetail) detailResponse {
 		ClasificacionEdad:       detail.AgeRating,
 		DuracionMinutos:         detail.DurationMinutes,
 		Idioma:                  detail.Language,
-		UrlPortada:              detail.PosterURL,
+		UrlPortada:              h.resolvePosterURL(ctx, detail.PosterURL),
 		UrlTrailer:              detail.TrailerURL,
 		TotalLikes:              detail.TotalLikes,
 		TotalDislikes:           detail.TotalDislikes,

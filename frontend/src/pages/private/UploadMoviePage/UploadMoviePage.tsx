@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Film, Save, Upload, X } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createCatalogContent, getAdminCatalogDetail, getUploadTrailerUrl, updateCatalogContent } from '@/lib/catalogo-api'
+import { createCatalogContent, getAdminCatalogDetail, getUploadPosterUrl, getUploadTrailerUrl, updateCatalogContent } from '@/lib/catalogo-api'
 
 interface MovieForm {
   titulo: string
@@ -85,11 +85,14 @@ export function UploadMoviePage() {
   const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [loading, setLoading] = useState(false)
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(editingId))
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [posterUploadState, setPosterUploadState] = useState<UploadState>({ phase: 'idle' })
   const [trailerFile, setTrailerFile] = useState<File | null>(null)
   const [uploadState, setUploadState] = useState<UploadState>({ phase: 'idle' })
   const [savedContentId, setSavedContentId] = useState(editingId)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const isUploading = uploadState.phase === 'uploading'
+  const posterInputRef = useRef<HTMLInputElement>(null)
+  const isUploading = uploadState.phase === 'uploading' || posterUploadState.phase === 'uploading'
 
   const setField = (field: keyof MovieForm) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
@@ -100,8 +103,21 @@ export function UploadMoviePage() {
   const resetForm = () => {
     setForm(INITIAL_FORM)
     setFeedback(null)
+    setPosterFile(null)
+    setPosterUploadState({ phase: 'idle' })
     setTrailerFile(null)
     setUploadState({ phase: 'idle' })
+  }
+
+  const handlePosterSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPosterUploadState({ phase: 'error', message: 'Solo se aceptan imagenes jpg, png o webp.' })
+      return
+    }
+    setPosterFile(file)
+    setPosterUploadState({ phase: 'idle' })
   }
 
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -151,6 +167,43 @@ export function UploadMoviePage() {
     }
   }
 
+  const uploadPosterToGCS = async (token: string, contentId: string, file: File): Promise<string> => {
+    setPosterUploadState({ phase: 'uploading', progress: 0 })
+    try {
+      const { upload_url, object_name, content_type } = await getUploadPosterUrl(token, contentId, file)
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', upload_url)
+        xhr.setRequestHeader('Content-Type', content_type)
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setPosterUploadState({ phase: 'uploading', progress: Math.round((event.loaded / event.total) * 100) })
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve()
+          } else {
+            reject(new Error(`Error al subir la portada: HTTP ${xhr.status}`))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Error de red al subir la portada.'))
+        xhr.send(file)
+      })
+
+      setPosterUploadState({ phase: 'done', objectName: object_name })
+      setForm((prev) => ({ ...prev, urlPortada: object_name }))
+      return object_name
+    } catch (error) {
+      setPosterUploadState({
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo subir la portada.',
+      })
+      throw error
+    }
+  }
+
   const handleManualUpload = async () => {
     if (!trailerFile) return
     const token = session?.accessToken
@@ -167,6 +220,25 @@ export function UploadMoviePage() {
       await uploadTrailerToGCS(token, targetId, trailerFile)
     } catch {
       // Error already set in uploadTrailerToGCS
+    }
+  }
+
+  const handleManualPosterUpload = async () => {
+    if (!posterFile) return
+    const token = session?.accessToken
+    if (!token) {
+      setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa.' })
+      return
+    }
+    const targetId = savedContentId || editingId
+    if (!targetId) {
+      setFeedback({ type: 'error', message: 'Primero guarda la pelicula para habilitar la subida de portada.' })
+      return
+    }
+    try {
+      await uploadPosterToGCS(token, targetId, posterFile)
+    } catch {
+      // Error already set in uploadPosterToGCS
     }
   }
 
@@ -198,6 +270,9 @@ export function UploadMoviePage() {
         if (detail.url_trailer) {
           setUploadState({ phase: 'done', objectName: detail.url_trailer })
         }
+        if (detail.url_portada?.startsWith('posters/')) {
+          setPosterUploadState({ phase: 'done', objectName: detail.url_portada })
+        }
       } catch (error) {
         setFeedback({
           type: 'error',
@@ -219,7 +294,7 @@ export function UploadMoviePage() {
       return
     }
 
-    if (!form.titulo.trim() || !form.sinopsis.trim() || !form.urlPortada.trim() || !form.duracionMinutos.trim()) {
+    if (!form.titulo.trim() || !form.sinopsis.trim() || (!form.urlPortada.trim() && !posterFile) || !form.duracionMinutos.trim()) {
       setFeedback({ type: 'error', message: 'Completa los campos obligatorios antes de guardar.' })
       return
     }
@@ -234,7 +309,8 @@ export function UploadMoviePage() {
     setFeedback(null)
 
     try {
-      const trailerObjectName = uploadState.phase === 'done' ? uploadState.objectName : undefined
+      let trailerObjectName = uploadState.phase === 'done' ? uploadState.objectName : undefined
+      let posterObjectName = posterUploadState.phase === 'done' ? posterUploadState.objectName : undefined
 
       const payload = {
         titulo: form.titulo.trim(),
@@ -244,7 +320,7 @@ export function UploadMoviePage() {
         clasificacion_edad: form.clasificacionEdad || undefined,
         duracion_minutos: duration,
         idioma: form.idioma.trim(),
-        url_portada: form.urlPortada.trim(),
+        url_portada: posterObjectName || form.urlPortada.trim() || 'posters/pendiente.jpg',
         url_trailer: trailerObjectName,
       }
 
@@ -260,9 +336,20 @@ export function UploadMoviePage() {
         setSavedContentId(created.id)
       }
 
+      if (posterFile && targetId) {
+        posterObjectName = await uploadPosterToGCS(session.accessToken, targetId, posterFile)
+      }
+
       if (trailerFile && targetId) {
-        const objectName = await uploadTrailerToGCS(session.accessToken, targetId, trailerFile)
-        await updateCatalogContent(session.accessToken, targetId, { ...payload, url_trailer: objectName })
+        trailerObjectName = await uploadTrailerToGCS(session.accessToken, targetId, trailerFile)
+      }
+
+      if (targetId && (posterFile || trailerFile)) {
+        await updateCatalogContent(session.accessToken, targetId, {
+          ...payload,
+          url_portada: posterObjectName || payload.url_portada,
+          url_trailer: trailerObjectName,
+        })
       }
 
       setFeedback({
@@ -397,14 +484,91 @@ export function UploadMoviePage() {
                   className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
                 />
               </div>
-              <Input
-                label="URL de portada *"
-                type="url"
-                placeholder="https://..."
-                value={form.urlPortada}
-                onChange={setField('urlPortada')}
-                required
-              />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                  Portada *
+                </label>
+                <div className="flex flex-col gap-2 rounded-lg border border-white/[0.07] bg-[#0d1220] p-3">
+                  {posterUploadState.phase === 'done' ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 size={15} className="shrink-0 text-[var(--color-success)]" />
+                      <span className="truncate text-[var(--color-denim-300)]">{posterUploadState.objectName}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setPosterUploadState({ phase: 'idle' }); setPosterFile(null); setForm((prev) => ({ ...prev, urlPortada: '' })) }}
+                        className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : posterUploadState.phase === 'uploading' ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-[var(--color-primary)]" />
+                        Subiendo portada... {posterUploadState.progress}%
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-[var(--color-primary)] transition-all duration-200"
+                          style={{ width: `${posterUploadState.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {posterFile ? (
+                        <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                          <Film size={14} className="shrink-0" />
+                          <span className="truncate">{posterFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPosterFile(null)}
+                            className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--color-denim-500)]">
+                          Selecciona una imagen jpg, png o webp. Se guardara en posters/{'{contenido_id}'}.
+                        </p>
+                      )}
+                      {posterUploadState.phase === 'error' && (
+                        <p className="text-xs text-[var(--color-error)]">{posterUploadState.message}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[var(--color-denim-300)] transition-colors hover:bg-white/[0.10] hover:text-white">
+                          <Upload size={12} />
+                          Elegir portada
+                          <input
+                            ref={posterInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/*"
+                            className="sr-only"
+                            onChange={handlePosterSelect}
+                          />
+                        </label>
+                        {posterFile && (savedContentId || editingId) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => { void handleManualPosterUpload() }}
+                            disabled={isUploading}
+                          >
+                            <Upload size={12} />
+                            Subir ahora
+                          </Button>
+                        )}
+                      </div>
+                      {posterFile && !savedContentId && !editingId && (
+                        <p className="text-xs text-[var(--color-denim-400)]">
+                          La portada se subira automaticamente al guardar la pelicula.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">
                   Trailer (video mp4)

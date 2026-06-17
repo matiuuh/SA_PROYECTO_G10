@@ -66,3 +66,45 @@ func (u *Uploader) EpisodeSignedURL(ctx context.Context, episodeKey string) (obj
 
 	return objectName, signedURL, nil
 }
+
+// PosterSignedURL genera una URL firmada V4 con metodo PUT para subir portadas.
+// El objeto resultante sera: posters/<contentID>.<extension>
+func (u *Uploader) PosterSignedURL(ctx context.Context, contentID string, extension string, contentType string) (objectName string, signedURL string, err error) {
+	if extension == "" {
+		extension = "jpg"
+	}
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	objectName = fmt.Sprintf("posters/%s.%s", contentID, extension)
+
+	opts := &storage.SignedURLOptions{
+		Method:      "PUT",
+		Expires:     time.Now().Add(u.ttl),
+		Scheme:      storage.SigningSchemeV4,
+		ContentType: contentType,
+	}
+
+	signedURL, err = u.client.Bucket(u.bucketName).SignedURL(objectName, opts)
+	if err != nil {
+		return "", "", fmt.Errorf("no se pudo generar la URL de subida de portada: %w", err)
+	}
+
+	return objectName, signedURL, nil
+}
+
+// ReadSignedURL genera una URL firmada V4 con metodo GET para objetos privados.
+func (u *Uploader) ReadSignedURL(ctx context.Context, objectName string) (string, error) {
+	opts := &storage.SignedURLOptions{
+		Method:  "GET",
+		Expires: time.Now().Add(u.ttl),
+		Scheme:  storage.SigningSchemeV4,
+	}
+
+	signedURL, err := u.client.Bucket(u.bucketName).SignedURL(objectName, opts)
+	if err != nil {
+		return "", fmt.Errorf("no se pudo generar la URL firmada de lectura: %w", err)
+	}
+
+	return signedURL, nil
+}

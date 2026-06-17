@@ -285,6 +285,33 @@ export async function getUploadTrailerUrl(
   return (await response.json()) as { upload_url: string; object_name: string }
 }
 
+export async function getUploadPosterUrl(
+  accessToken: string,
+  contenidoId: string,
+  file: File,
+): Promise<{ upload_url: string; object_name: string; content_type: string }> {
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const contentType = file.type || 'image/jpeg'
+  const response = await fetch(`${API_BASE_URL}/api/v1/admin/catalog/upload-poster`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      contenido_id: contenidoId,
+      extension,
+      content_type: contentType,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as { upload_url: string; object_name: string; content_type: string }
+}
+
 export async function getUploadEpisodeVideoUrl(
   accessToken: string,
   episodeKey: string,
