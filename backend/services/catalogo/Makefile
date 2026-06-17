@@ -13,8 +13,9 @@ proto:
 		--go_opt=module=quetzaltv/services/catalogo \
 		--go-grpc_out=$(OUT_DIR) \
 		--go-grpc_opt=module=quetzaltv/services/catalogo \
-		$(PROTO_DIR)/catalogo/v1/catalogo.proto
-	@echo "Proto generado en pkg/pb/catalogo/v1/"
+		$(PROTO_DIR)/catalogo/v1/catalogo.proto \
+		$(PROTO_DIR)/notificaciones/v1/notificaciones.proto
+	@echo "Proto generado en pkg/pb/catalogo/v1/ y pkg/pb/notificaciones/v1/"
 
 build: proto
 	go build -o bin/catalogo-service ./cmd/server

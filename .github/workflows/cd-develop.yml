@@ -1,8 +1,7 @@
 name: CD — develop → GCE
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Se dispara ÚNICAMENTE cuando el workflow de CI completa con éxito en la
-# rama develop. Orden de ejecución:
+# Se dispara en cada push a develop. Orden de ejecución:
 #
 #   1. build-and-push   — Construye las 9 imágenes Docker y las sube a
 #                         Artifact Registry con la etiqueta develop-<SHA>.
@@ -29,23 +28,21 @@ name: CD — develop → GCE
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  workflow_run:
-    workflows: ["CI — Tests & Cobertura"]
-    types: [completed]
+  push:
     branches: [develop]
 
 jobs:
 
   # ════════════════════════════════════════════════════════════════════════════
-  # GUARDIA: solo continúa si el CI pasó. Cualquier fallo en CI cancela todo.
+  # GUARDIA: solo un paso informativo (el gate de CI lo garantiza el workflow
+  # de CI separado; aquí desplegamos en cuanto el push llega a develop).
   # ════════════════════════════════════════════════════════════════════════════
 
   ci-passed:
-    name: "Verificar que CI pasó"
+    name: "Verificar rama"
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "CI aprobado — iniciando despliegue a GCE (develop)"
+      - run: echo "Push a develop detectado — iniciando despliegue a GCE"
 
   # ════════════════════════════════════════════════════════════════════════════
   # 1. BUILD & PUSH — Construye todas las imágenes y las sube a Artifact Registry
@@ -66,7 +63,7 @@ jobs:
       - name: Calcular etiqueta de imagen
         id: meta
         run: |
-          SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           TAG="develop-${SHA}"
           REGISTRY="${{ secrets.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/quetzaltv"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
