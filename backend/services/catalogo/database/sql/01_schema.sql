@@ -42,6 +42,7 @@ CREATE TABLE contenidos (
     url_portada          TEXT,
     url_trailer          TEXT,
     creado_por_cuenta_id UUID,
+    alerta_publicacion_enviada_en TIMESTAMPTZ,
     creado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     eliminado_en         TIMESTAMPTZ,
@@ -330,6 +331,9 @@ CREATE TRIGGER trg_snap_calificaciones
 -- =========================================================
 
 CREATE INDEX idx_contenidos_titulo     ON contenidos(titulo);
+CREATE INDEX idx_contenidos_alerta_publicacion
+    ON contenidos(fecha_lanzamiento)
+    WHERE eliminado_en IS NULL AND alerta_publicacion_enviada_en IS NULL;
 CREATE INDEX idx_temporadas_contenido  ON temporadas(contenido_id);
 CREATE INDEX idx_episodios_temporada   ON episodios(temporada_id);
 CREATE INDEX idx_calif_contenido       ON calificaciones(contenido_id);

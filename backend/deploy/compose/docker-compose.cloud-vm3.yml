@@ -107,10 +107,11 @@ services:
       PGPASSWORD: ${DB_PASSWORD}
     volumes:
       - ../../services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+      - ../../services/catalogo/database/sql/04_migrate_alertas_publicacion.sql:/migrations/04_migrate_alertas_publicacion.sql:ro
     command:
       - sh
       - -c
-      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql
+      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql && psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U postgres -d quetzal_catalogo -f /migrations/04_migrate_alertas_publicacion.sql
     depends_on:
       postgres-catalogo:
         condition: service_healthy
