@@ -272,6 +272,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push, backup-databases]
     steps:
+      - uses: actions/checkout@v4
+
       - name: Preparar clave SSH
         env:
           SSH_KEY: ${{ secrets.VM_SSH_KEY }}
@@ -280,6 +282,12 @@ jobs:
           printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           ssh-keyscan -H ${{ secrets.VM1_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copiar compose file actualizado a VM1
+        run: |
+          scp -i /tmp/deploy_key \
+            backend/deploy/compose/docker-compose.cloud-vm1.yml \
+            ${{ secrets.VM_USER }}@${{ secrets.VM1_HOST }}:/opt/quetzaltv/backend/deploy/compose/docker-compose.cloud-vm1.yml
 
       - name: SSH a VM1 → pull + restart
         uses: appleboy/ssh-action@v1
@@ -304,11 +312,14 @@ jobs:
 
             cd /opt/quetzaltv
 
-            # Actualizar etiquetas en el .env del compose
-            sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
-              backend/deploy/compose/.env
-            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
-              backend/deploy/compose/.env
+            # Actualizar AR_REGISTRY e IMAGE_TAG en el .env (upsert: actualiza o agrega)
+            ENV_FILE="backend/deploy/compose/.env"
+            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
+              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
+              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
+            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
+              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
+              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
 
             # Key de quetzal-tv-storage para que catalogo-service firme URLs V4 de GCS
             mkdir -p secrets
@@ -317,7 +328,7 @@ jobs:
 
             # Pull de nuevas imágenes y reinicio de servicios
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml up -d
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml up -d --force-recreate
 
             echo "✓ VM1 actualizada con imagen ${IMAGE_TAG}"
 
@@ -326,6 +337,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push, backup-databases]
     steps:
+      - uses: actions/checkout@v4
+
       - name: Preparar clave SSH
         env:
           SSH_KEY: ${{ secrets.VM_SSH_KEY }}
@@ -334,6 +347,12 @@ jobs:
           printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           ssh-keyscan -H ${{ secrets.VM2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copiar compose file actualizado a VM2
+        run: |
+          scp -i /tmp/deploy_key \
+            backend/deploy/compose/docker-compose.cloud-vm2.yml \
+            ${{ secrets.VM_USER }}@${{ secrets.VM2_HOST }}:/opt/quetzaltv/backend/deploy/compose/docker-compose.cloud-vm2.yml
 
       - name: SSH a VM2 → pull + restart
         uses: appleboy/ssh-action@v1
@@ -357,10 +376,13 @@ jobs:
 
             cd /opt/quetzaltv
 
-            sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
-              backend/deploy/compose/.env
-            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
-              backend/deploy/compose/.env
+            ENV_FILE="backend/deploy/compose/.env"
+            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
+              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
+              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
+            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
+              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
+              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
 
             # Key de quetzal-tv-storage para que streaming-service firme URLs V4 de GCS
             mkdir -p secrets
@@ -368,7 +390,7 @@ jobs:
             chmod 600 secrets/gcs-key.json
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml up -d
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml up -d --force-recreate
 
             echo "✓ VM2 actualizada con imagen ${IMAGE_TAG}"
 
@@ -377,6 +399,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push, backup-databases]
     steps:
+      - uses: actions/checkout@v4
+
       - name: Preparar clave SSH
         env:
           SSH_KEY: ${{ secrets.VM_SSH_KEY }}
@@ -385,6 +409,12 @@ jobs:
           printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           ssh-keyscan -H ${{ secrets.VM4_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copiar compose file actualizado a VM4
+        run: |
+          scp -i /tmp/deploy_key \
+            backend/deploy/compose/docker-compose.cloud-vm4.yml \
+            ${{ secrets.VM_USER }}@${{ secrets.VM4_HOST }}:/opt/quetzaltv/backend/deploy/compose/docker-compose.cloud-vm4.yml
 
       - name: SSH a VM4 → pull + restart
         uses: appleboy/ssh-action@v1
@@ -407,12 +437,15 @@ jobs:
 
             cd /opt/quetzaltv
 
-            sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
-              backend/deploy/compose/.env
-            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
-              backend/deploy/compose/.env
+            ENV_FILE="backend/deploy/compose/.env"
+            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
+              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
+              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
+            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
+              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
+              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml up -d
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml up -d --force-recreate
 
             echo "✓ VM4 actualizada con imagen ${IMAGE_TAG}"
