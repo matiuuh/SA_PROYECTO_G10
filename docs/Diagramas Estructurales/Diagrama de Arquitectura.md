@@ -1,106 +1,228 @@
-# Diagrama de Arquitectura
+# Diagrama de Arquitectura — Despliegue Develop
 
-## Introducción
+## Descripción general
 
-El presente diagrama de arquitectura representa la solución propuesta para la plataforma de streaming **Quetxal TV**, desarrollada conforme al enunciado del proyecto. La arquitectura adopta un enfoque de **microservicios** con comunicación **sincrónica mediante gRPC**, un **API Gateway** como punto único de entrada y una distribución **políglota** de servicios implementados con **Python, Go y TypeScript**. Esta decisión responde a los requisitos de escalabilidad, desacoplamiento, mantenibilidad y soporte para múltiples dominios de negocio dentro de la plataforma.
+![Diagrama de Arquitectura Despliegue Develop](./img/Diagrama%20de%20Arquitectura%20Despliegue%20Develop.png)
 
-Además, el diagrama refleja restricciones clave del enunciado, como el uso obligatorio de **JWT**, **Session Cookies**, **Redis** para caché de divisas, **Docker** para contenerización, el patrón **Database per Microservice** y el despliegue obligatorio en **Google Cloud Platform**. En conjunto, esta vista permite entender cómo interactúan los componentes principales del sistema y cómo se distribuyen las responsabilidades técnicas y funcionales.
+El diagrama representa la arquitectura de **Quetzal TV** desplegada en el entorno
+`develop` dentro de **Google Cloud Platform**. La solución utiliza máquinas virtuales de
+**Compute Engine**, contenedores **Docker**, comunicación interna mediante **gRPC**,
+bases de datos PostgreSQL independientes y un pipeline de **CI/CD con GitHub Actions**.
 
-## Descripción general del diagrama
+Los usuarios y administradores acceden desde dispositivos móviles o computadoras mediante
+HTTP. Las solicitudes ingresan por el componente **Ingress**, que funciona como punto de
+acceso externo y dirige el tráfico hacia el frontend y el API Gateway. Ningún
+microservicio ni base de datos se expone directamente a los clientes.
 
-![Diagrama de Arquitectura](./img/Diagrama%20Arqui%20Simetrica-Page-2.drawio.svg)
+## Distribución en Compute Engine
 
-El diagrama muestra una arquitectura sincrónica desplegada en **Google Cloud Platform**, donde el cliente accede al sistema a través de una aplicación web construida con **React + Vite**. Tanto el usuario final como el administrador consumen la plataforma por medio de solicitudes **HTTPS**, las cuales llegan primero al **API Gateway**. Este componente actúa como único punto de entrada, cumpliendo con el requisito del enunciado de impedir el acceso directo del cliente a los microservicios internos.
+La arquitectura se distribuye en cuatro máquinas virtuales:
 
-El **API Gateway** centraliza funciones de seguridad y enrutamiento. En esta capa se gestionan los mecanismos de autenticación y sesión, específicamente el uso de **JWT** para la propagación de identidad entre servicios y **cookies** para el mantenimiento de sesión del cliente. A partir de este punto, la comunicación hacia el ecosistema backend se realiza exclusivamente mediante **gRPC**, lo que garantiza contratos estrictos y una integración uniforme entre servicios escritos en distintos lenguajes.
+| Máquina virtual | Componentes desplegados |
+| --- | --- |
+| VM1 | Frontend React con Vite y API Gateway |
+| VM2 | Usuarios, Suscripción y Catálogo |
+| VM3 | Notificaciones, Cobros, Divisas, Streaming y Redis |
+| VM4 | Bases de datos PostgreSQL de todos los microservicios |
 
-## Microservicios identificados
+Cada componente se ejecuta dentro de su propio contenedor Docker. Esta distribución
+separa la capa de acceso, los servicios principales, los servicios auxiliares y la
+persistencia de datos.
 
-La solución se divide en varios microservicios, cada uno asociado a un dominio de negocio específico y a su propia base de datos:
+## Frontend y API Gateway
 
-### 1. Servicio de Usuarios y Autenticación
+El frontend está desarrollado con **React y Vite** y proporciona las interfaces para
+usuarios y administradores. Todas las operaciones del cliente pasan por el **API Gateway**,
+que centraliza el enrutamiento, la autenticación y la propagación de identidad mediante
+JWT.
 
-Este microservicio, implementado en **Python**, gestiona el registro, inicio de sesión y administración de perfiles. Su responsabilidad está alineada con el módulo de **Autenticación, Gestión de Sesiones y Multiperfil** descrito en el enunciado. También se conecta con **Usuarios DB**, manteniendo de forma aislada la información de cuentas, credenciales y perfiles por usuario.
+El API Gateway se comunica con los microservicios internos mediante **gRPC**, evitando
+que los clientes accedan directamente a los servicios de negocio.
 
-### 2. Servicio de Streaming y Progreso
+## Microservicios
 
-Desarrollado en **Go**, este servicio administra la reproducción y el avance del contenido. Atiende el requisito de **Historial de reproducción reciente**, almacenando el progreso de visualización por perfil y permitiendo reanudar series o películas desde el punto exacto donde fueron pausadas. Para ello utiliza su propia base de datos, **Streaming DB**.
+La plataforma utiliza un backend políglota compuesto por:
 
-### 3. Servicio de Catálogo
+- **Usuarios — Python:** registro, autenticación, cuentas y perfiles.
+- **Suscripción — Python:** planes, suscripciones y cambios de plan.
+- **Catálogo — Go:** películas, series, temporadas, episodios y calificaciones.
+- **Streaming — Go:** reproducción e historial de visualización.
+- **Cobros — TypeScript:** pagos, transacciones y recibos.
+- **Divisas — TypeScript:** consulta y conversión de tipos de cambio.
+- **Notificaciones — TypeScript:** envío y registro de notificaciones por correo.
 
-También desarrollado en **Go**, este microservicio se encarga de la consulta de películas y series, soportando búsquedas, filtrado y visualización de detalles del contenido. Su base dedicada, **Catalogo DB**, permite aislar la información del catálogo, géneros, fichas técnicas y posiblemente la relación con actores o metadatos adicionales.
+El servicio de **Divisas** utiliza Redis como caché para reducir consultas repetitivas al
+proveedor externo de tipos de cambio. El servicio de **Notificaciones** se conecta con un
+proveedor SMTP para realizar el envío de correos.
 
-### 4. Servicio de Suscripciones
+## Persistencia y auditoría
 
-Este microservicio, desarrollado en **Python**, administra planes, membresías y validación del acceso según la suscripción activa del usuario. Cumple directamente con el módulo de **Gestión de Planes y Suscripciones**, permitiendo consultar, modificar o cancelar planes. Opera con su propia base de datos, **Suscripciones DB**.
+La arquitectura aplica el patrón **Database per Microservice**. Cada servicio dispone de
+su propia base de datos PostgreSQL:
 
-### 5. Servicio de Cobros
+- Usuarios
+- Suscripción
+- Catálogo
+- Streaming
+- Cobros
+- Divisas
+- Notificaciones
 
-Desarrollado en **TypeScript**, este servicio gestiona pagos y recibos. Se integra con el servicio de suscripciones para formalizar la contratación o renovación de planes y utiliza **Cobros DB** como almacenamiento independiente. Además, consulta al servicio financiero para obtener el tipo de cambio correspondiente cuando es necesario presentar montos en moneda local.
+Las bases de datos contienen **triggers** que registran automáticamente las operaciones de
+inserción, actualización y eliminación en sus respectivas tablas de auditoría. Estos
+registros conservan información como la tabla afectada, el usuario responsable, la fecha
+del evento y los estados anterior y nuevo.
 
-### 6. FX-Service
+La comunicación entre los microservicios y PostgreSQL utiliza conexiones TCP dentro de la
+red privada de Google Cloud.
 
-Este servicio financiero, implementado en **TypeScript**, cumple uno de los requisitos explícitos del enunciado: consultar tipos de cambio para convertir el costo de los planes según la moneda del usuario. El diagrama muestra que se conecta a una **API externa de divisas** y utiliza **Redis Cache** con **TTL** para evitar consultas repetitivas, reduciendo latencia y dependencia directa de servicios externos. También mantiene una base de datos propia, **Divisas DB**, para soporte de configuraciones, histórico o persistencia complementaria.
+## Google Cloud Storage
 
-### 7. Servicio de Notificaciones
+La arquitectura utiliza dos buckets de Google Cloud Storage:
 
-Desarrollado en **TypeScript**, este microservicio administra el envío de correos electrónicos para confirmación de registro, recibos y alertas. Su comunicación con un servicio de **SMTP / Email** evidencia el cumplimiento del módulo de **Sistema de notificaciones por correo** definido en el enunciado.
+- **Bucket de streaming:** almacena videos, capítulos y portadas. Los servicios de
+  Catálogo y Streaming gestionan estos archivos y generan las URLs necesarias para su
+  consumo.
+- **Bucket de backups:** conserva las copias de seguridad de las siete bases de datos
+  PostgreSQL.
 
-## Comunicación entre componentes
+Redis se excluye del proceso de respaldo porque funciona como una caché temporal en
+memoria.
 
-Uno de los aspectos más importantes del diagrama es la interconexión interna por **gRPC**. Esta decisión es coherente con el requerimiento de mantener una comunicación sincrónica y directa entre servicios. Algunos flujos destacados son los siguientes:
+## Integración y despliegue continuo
 
-- El **API Gateway** enruta solicitudes del frontend hacia los servicios internos según la operación solicitada.
-- El servicio de **Streaming** consulta al servicio de **Catálogo** para obtener información del contenido reproducido.
-- El flujo de reproducción también realiza una validación de plan por medio del servicio de **Suscripciones**, asegurando que el usuario tenga acceso al contenido solicitado.
-- El servicio de **Cobros** consulta al **FX-Service** para convertir precios utilizando tipos de cambio actualizados.
-- El servicio de **Notificaciones** puede activarse como parte de procesos de registro, compra o emisión de recibos.
+El pipeline de `develop` se ejecuta mediante **GitHub Actions**:
 
-Esta organización evita el acoplamiento directo entre cliente y backend interno, y distribuye la lógica de negocio en dominios especializados que colaboran entre sí por contratos bien definidos.
+1. El código se obtiene desde GitHub.
+2. Se ejecutan las pruebas unitarias y se valida una cobertura mínima del **75 %**.
+3. Si las pruebas son exitosas, se construyen las imágenes Docker.
+4. Las imágenes se publican en **Google Artifact Registry**.
+5. GitHub Actions ordena el despliegue automático en las máquinas virtuales de Compute
+   Engine.
+6. Antes del despliegue se ejecuta el backup de las bases de datos y se almacena en el
+   bucket de backups.
 
-## Persistencia y patrón Database per Microservice
+Artifact Registry funciona únicamente como repositorio privado de imágenes. El despliegue
+es iniciado por GitHub Actions y las máquinas virtuales descargan desde allí las imágenes
+correspondientes a la versión de `develop`.
 
-El diagrama cumple claramente con el patrón **Database per Microservice**, ya que cada servicio posee una base de datos independiente:
+Si las pruebas, la compilación o el proceso de backup fallan, el pipeline se detiene y no
+continúa con la publicación ni con el despliegue.
 
-- `Usuarios DB`
-- `Streaming DB`
-- `Catalogo DB`
-- `Calificaciones DB`
-- `Suscripciones DB`
-- `Cobros DB`
-- `Divisas DB`
+## Flujo general
 
-Esta separación permite que cada microservicio evolucione de manera autónoma, reduzca dependencias estructurales y mantenga mejor aislamiento de datos. También facilita la aplicación posterior de objetos programables de base de datos, tal como exige el enunciado, por ejemplo:
+El funcionamiento de la arquitectura puede resumirse de la siguiente manera:
 
-- **Procedimientos almacenados** para compras, activación de suscripciones o registro transaccional.
-- **Vistas** para simplificar consultas del catálogo y fichas de contenido.
-- **Funciones** para calcular porcentajes de recomendación o validaciones de negocio.
-- **Triggers** para auditoría de cambios sensibles como credenciales o estado de membresías.
+1. El usuario o administrador envía una solicitud.
+2. Ingress dirige la solicitud al frontend o al API Gateway.
+3. El API Gateway valida y enruta la operación.
+4. Los microservicios se comunican internamente mediante gRPC.
+5. Cada microservicio accede exclusivamente a su propia base de datos.
+6. Los triggers registran automáticamente los cambios en las tablas de auditoría.
+7. Streaming y Catálogo utilizan Cloud Storage para videos y portadas.
+8. GitHub Actions mantiene actualizado el entorno `develop` mediante CI/CD.
 
-## Despliegue e infraestructura
+## Arquitectura Kubernetes — Despliegue Release
 
-El diagrama ubica la solución dentro de **Google Cloud Platform**, lo cual responde directamente al requerimiento de que la aplicación funcional esté desplegada en la nube usando dicha plataforma. Asimismo, cada microservicio aparece asociado a **Docker**, lo que indica que el sistema ha sido diseñado para ejecutarse mediante contenedores independientes. Esta decisión favorece la portabilidad, el aislamiento y la futura orquestación a través de **Docker Compose** tanto en entorno local como en entorno cloud.
+![Diagrama de Arquitectura Despliegue Kubernetes](./img/Diagrama%20de%20Arquitectura%20Despliegue%20Kubernetes.png)
 
-La presencia de **Redis Cache** como componente separado también es relevante a nivel de despliegue, ya que representa una pieza de infraestructura transversal dedicada al rendimiento del servicio financiero. Del mismo modo, la integración con servicios externos como **SMTP/Email** y la **API de divisas** muestra que la arquitectura considera dependencias externas necesarias para cubrir las capacidades de negocio solicitadas.
+Esta segunda arquitectura representa el entorno asociado a la rama `release`. A
+diferencia del despliegue de `develop`, los componentes de aplicación se ejecutan dentro
+de un clúster de **Google Kubernetes Engine (GKE)**.
 
-## Relación con el enunciado del proyecto
+El clúster contiene un nodo de trabajo donde cada componente se despliega como un pod
+independiente:
 
-Este diagrama satisface los principales puntos solicitados en el enunciado:
+- Pod Frontend
+- Pod API Gateway
+- Pod Usuarios
+- Pod Suscripción
+- Pod Catálogo
+- Pod Streaming
+- Pod Cobros
+- Pod Divisas
+- Pod Notificaciones
+- Pod Redis
 
-- Presenta un **API Gateway** como único punto de entrada.
-- Modela la comunicación interna mediante **gRPC**.
-- Distribuye los microservicios en **Python, Go y TypeScript**, cumpliendo el backend políglota.
-- Incorpora un servicio de **autenticación**, un módulo de **suscripciones**, un **catálogo**, un sistema de **calificaciones**, un servicio de **streaming**, un módulo de **cobros**, un **FX-Service** y un sistema de **notificaciones**.
-- Representa una capa de **Redis** con políticas de caché para divisas.
-- Aplica el patrón **una base de datos por microservicio**.
-- Muestra un despliegue pensado para **contenedores Docker** y para su ejecución en **Google Cloud Platform**.
+Esta separación permite que Kubernetes administre individualmente la ejecución,
+reinicio, actualización y escalamiento de cada componente.
 
-## Conclusiones
+### Acceso mediante Ingress
 
-La arquitectura propuesta para **Quetxal TV** responde de forma adecuada a los requerimientos funcionales y no funcionales planteados en el proyecto. El uso de microservicios desacoplados, comunicación sincrónica con **gRPC** y un **API Gateway** como núcleo de seguridad y enrutamiento permite construir una plataforma escalable, mantenible y preparada para crecimiento.
+Los usuarios y administradores acceden al sistema por medio de **Ingress**, que constituye
+el único punto de entrada público al clúster. Ingress dirige las solicitudes hacia el
+frontend y el API Gateway, mientras que el resto de los pods permanece accesible
+únicamente dentro de la red interna de Kubernetes.
 
-La separación por dominios de negocio y por bases de datos independientes fortalece la autonomía de cada servicio, facilita el mantenimiento y reduce el impacto de cambios futuros. A su vez, la adopción de **Docker**, **Redis** y **Google Cloud Platform** demuestra que la solución no solo cubre las funciones de negocio solicitadas, sino que también considera aspectos de despliegue, rendimiento e infraestructura exigidos por el enunciado.
+El API Gateway conserva su responsabilidad como punto central de autenticación y
+enrutamiento. Desde este componente se realizan las comunicaciones internas con los
+microservicios mediante gRPC y JWT.
 
-En conclusión, el diagrama de arquitectura no solo representa la estructura técnica del sistema, sino que también evidencia el cumplimiento de las restricciones académicas del proyecto, especialmente en cuanto a seguridad, integración entre lenguajes, separación de responsabilidades y despliegue en la nube.
+### Persistencia fuera del clúster
 
-[Volver a Documentación](/docs/Documentación.md)
+Las siete bases de datos PostgreSQL se mantienen en una máquina virtual de **Compute
+Engine**, separadas de los pods de aplicación. Cada microservicio se conecta mediante TCP
+exclusivamente con su propia base de datos.
+
+Las bases conservan sus triggers y tablas de auditoría para registrar operaciones de
+inserción, actualización y eliminación. Esta separación permite que los datos persistan
+independientemente de la creación, sustitución o reinicio de los pods.
+
+### Cloud Storage y servicios externos
+
+La arquitectura utiliza los mismos recursos externos del entorno `develop`:
+
+- El bucket de streaming almacena videos y portadas.
+- El bucket de backups conserva los respaldos de PostgreSQL.
+- El proveedor de divisas entrega los tipos de cambio.
+- El proveedor SMTP permite enviar correos electrónicos.
+
+Redis se ejecuta dentro del clúster como un pod independiente y continúa funcionando como
+caché temporal para el servicio de Divisas.
+
+### CI/CD de la rama release
+
+El despliegue hacia GKE se realiza exclusivamente mediante GitHub Actions:
+
+1. Un cambio aprobado se integra en la rama `release`.
+2. El pipeline ejecuta las pruebas y valida una cobertura mínima del 75 %.
+3. Si las validaciones son exitosas, crea la versión semántica correspondiente.
+4. Se construyen y publican las imágenes Docker en Artifact Registry.
+5. Se ejecuta el backup automático de las bases de datos.
+6. GitHub Actions aplica los manifiestos YAML al clúster GKE.
+7. Kubernetes descarga las imágenes desde Artifact Registry y actualiza los pods.
+
+El despliegue utiliza una estrategia **RollingUpdate** para sustituir gradualmente los
+pods sin interrumpir el servicio. Las sondas **readiness** determinan cuándo un pod está
+listo para recibir tráfico y las sondas **liveness** permiten reiniciar contenedores que
+dejen de responder.
+
+Si la nueva versión no completa correctamente el rollout o presenta errores como
+`CrashLoopBackOff`, el pipeline ejecuta un rollback automático para restaurar la última
+versión estable.
+
+## Comparación de los entornos
+
+| Característica | Develop | Release |
+| --- | --- | --- |
+| Destino | Compute Engine | Google Kubernetes Engine |
+| Ejecución | Contenedores Docker distribuidos en VMs | Pods administrados por Kubernetes |
+| Imágenes | Artifact Registry con tag `develop-SHA` | Artifact Registry con tag semántico `v2.x.0` |
+| Despliegue | Docker Compose mediante GitHub Actions | Manifiestos YAML mediante GitHub Actions |
+| Actualización | Reinicio de contenedores | RollingUpdate |
+| Recuperación | Conservación de la versión anterior | Rollback automático |
+| Bases de datos | VM de Compute Engine | VM de Compute Engine externa al clúster |
+
+## Conclusión general
+
+Las dos arquitecturas mantienen los mismos dominios, contratos gRPC, bases de datos y
+servicios externos, pero emplean estrategias distintas de despliegue según la rama.
+`Develop` utiliza máquinas virtuales de Compute Engine para integración continua,
+mientras que `release` utiliza GKE para obtener orquestación, actualizaciones progresivas,
+monitoreo de salud y rollback automático.
+
+GitHub Actions, Artifact Registry y Cloud Storage complementan ambos entornos,
+proporcionando pruebas automatizadas, distribución privada de imágenes y respaldo de la
+información.
+
+[Volver a Documentación](../Documentación.md)
