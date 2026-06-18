@@ -304,6 +304,9 @@ jobs:
 
             cd /opt/quetzaltv
 
+            # Actualizar compose files desde el repo
+            git pull origin develop
+
             # Actualizar etiquetas en el .env del compose
             sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
               backend/deploy/compose/.env
@@ -357,6 +360,9 @@ jobs:
 
             cd /opt/quetzaltv
 
+            # Actualizar compose files desde el repo
+            git pull origin develop
+
             sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
               backend/deploy/compose/.env
             sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" \
@@ -406,6 +412,9 @@ jobs:
               "${AR_REGION}-docker.pkg.dev"
 
             cd /opt/quetzaltv
+
+            # Actualizar compose files desde el repo
+            git pull origin develop
 
             sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" \
               backend/deploy/compose/.env
