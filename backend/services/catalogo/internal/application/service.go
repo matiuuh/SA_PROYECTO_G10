@@ -104,3 +104,14 @@ func (s *CatalogoService) ListAudit(ctx context.Context, limit int) ([]domain.Au
 	}
 	return s.repo.ListAudit(ctx, limit)
 }
+
+func (s *CatalogoService) ListPendingPublicationAlerts(ctx context.Context, limit int) ([]domain.Content, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	return s.repo.ListPendingPublicationAlerts(ctx, limit)
+}
+
+func (s *CatalogoService) MarkPublicationAlertSent(ctx context.Context, contentID string) error {
+	return s.repo.MarkPublicationAlertSent(ctx, strings.TrimSpace(contentID))
+}

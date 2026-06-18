@@ -20,10 +20,10 @@ import (
 )
 
 type Dispatcher struct {
-	httpClient               *http.Client
-	subscriptionAPIURL       string
-	userAPIURL               string
-	notificationsGRPCTarget  string
+	httpClient              *http.Client
+	subscriptionAPIURL      string
+	userAPIURL              string
+	notificationsGRPCTarget string
 }
 
 type activeAccountsResponse struct {
@@ -49,7 +49,7 @@ func NewDispatcherFromEnv() *Dispatcher {
 	}
 
 	return &Dispatcher{
-		httpClient: &http.Client{Timeout: 8 * time.Second},
+		httpClient:              &http.Client{Timeout: 8 * time.Second},
 		subscriptionAPIURL:      subscriptionAPIURL,
 		userAPIURL:              userAPIURL,
 		notificationsGRPCTarget: notificationsGRPCTarget,
@@ -179,7 +179,7 @@ func (d *Dispatcher) sendNotification(ctx context.Context, content domain.Conten
 	}
 
 	_, err = stub.EnviarAlertaNuevaPublicacion(ctx, &notificacionesv1.AlertaPublicacionRequest{
-		CorreosDestino: emails,
+		CorreosDestino:  emails,
 		TituloContenido: content.Title,
 		TipoContenido:   string(content.Type),
 		Descripcion:     description,
