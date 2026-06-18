@@ -41,7 +41,7 @@ Integrantes:
 - [Justificacion toma de decisiones](./Justificacion/justificacion_decisiones.md)
 
 ### Pruebas Unitarias
-- [Pruebas unitarias del backend](./PruebasUnitarias.md)
+- [Pruebas unitarias del backend](./Pruebas/PruebasUnitarias.md)
 
 ### Diagramas Estructurales, Comportamentales y Persistencia
 - [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
