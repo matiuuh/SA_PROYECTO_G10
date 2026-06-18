@@ -4,7 +4,7 @@
 | Representación | Actor | Descripción |
 |----|-------------|-------------|
 |![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles, gestionar su suscripción, explorar el catálogo, reproducir contenido y calificarlo. |
-|![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar y eliminar películas o series. |
+|![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar, eliminar películas o series y consultar la auditoría del catálogo. |
 |![Proveedor de Divisas](./img/actor.png)  | **Proveedor de Divisas** | Servicio externo que suministra los tipos de cambio utilizados por la plataforma para mostrar precios en la moneda local del usuario. |
 |![Proveedor de Correo SMTP](./img/actor.png)  | **Proveedor de Correo SMTP** | Servicio externo encargado de entregar los correos de confirmación de registro, recibos de compra y alertas de nuevo contenido. |
 
@@ -28,6 +28,8 @@
 **CDU005**: **Reproducción e Historial**: Permite al usuario reproducir contenido, reanudarlo desde el punto en que lo dejó y consultar el historial reciente de su perfil activo.
 
 **CDU006**: **Administración de Contenido**: Permite al administrador gestionar el catálogo de la plataforma mediante operaciones de registro, modificación y eliminación de películas o series.
+
+**CDU007**: **Consulta de Auditoría del Catálogo**: Permite al administrador consultar los eventos críticos registrados por triggers sobre el catálogo, revisar cambios realizados y exportar la información para trazabilidad.
 
 ## Casos de uso expandidos
 
@@ -553,6 +555,28 @@
 | Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible eliminar el contenido. Intenta nuevamente. |
 | Reglas de negocio | Solo administradores pueden eliminar contenido.<br>La eliminación debe aplicarse únicamente a contenidos existentes. |
 | Reglas de calidad | La acción debe requerir confirmación explícita para evitar errores.<br>El sistema debe mostrar un mensaje claro sobre el resultado final. |
+
+### Expandidos de CDU007: Consulta de Auditoría del Catálogo
+
+![CDU007](./img/CDU_CDU007.svg)
+
+- **CDU-007.1**: Consulta de Tabla de Auditoría
+
+#### CDU-007.1 Consulta de Tabla de Auditoría
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Consulta de Tabla de Auditoría |
+| Código | CDU-007.1 |
+| Actores | Administrador |
+| Descripción | Permite al administrador visualizar los registros de auditoría generados automáticamente por triggers de base de datos sobre las operaciones del catálogo. |
+| Precondiciones | El administrador debe haber iniciado sesión con una cuenta activa y rol de administrador.<br>Deben existir permisos vigentes para acceder al panel administrativo.<br>La tabla de auditoría del catálogo debe estar disponible. |
+| Postcondiciones | Eventos de auditoría mostrados correctamente; o consulta rechazada por falta de autorización, sesión inválida o error de consulta. |
+| Flujo principal | 1. El administrador ingresa al panel administrativo.<br>2. El administrador selecciona la opción Auditoría del menú lateral.<br>3. El sistema valida que la sesión exista y que la cuenta tenga rol de administrador.<br>4. El sistema solicita al servicio de catálogo los registros de auditoría más recientes.<br>5. El servicio de catálogo valida el token administrativo y consulta la tabla `instantaneas` ordenada por fecha de evento descendente.<br>6. El sistema muestra la tabla de auditoría con fecha, evento, usuario responsable, tabla afectada, entidad y cambios registrados.<br>7. El administrador revisa los eventos de inserción, actualización o eliminación del catálogo. |
+| Flujos alternos | FA1. El administrador actualiza la consulta.<br>FA1.1 El sistema vuelve a solicitar los registros más recientes y refresca la tabla.<br>FA2. El administrador descarga la información.<br>FA2.1 El sistema genera un archivo CSV, Excel o PDF con los eventos cargados en pantalla.<br>FA3. No existen eventos registrados.<br>FA3.1 El sistema muestra la tabla sin registros e informa que no hay eventos disponibles. |
+| Flujos de excepción | FE1. Sesión inexistente o token expirado.<br>FE1.1 El sistema redirige al administrador a la pantalla de inicio de sesión.<br>FE2. La cuenta autenticada no tiene rol de administrador.<br>FE2.1 El sistema bloquea el acceso al panel de auditoría y redirige al panel de usuario.<br>FE3. Error de conexión con la base de datos del catálogo.<br>FE3.1 El sistema informa que no fue posible consultar la auditoría del catálogo. |
+| Reglas de negocio | Solo administradores autorizados pueden consultar la auditoría del catálogo.<br>Los eventos de auditoría deben originarse desde triggers de base de datos sobre operaciones de inserción, actualización y eliminación.<br>La consulta debe limitar la cantidad de registros retornados para evitar sobrecarga del servicio. |
+| Reglas de calidad | La tabla debe presentar los eventos en orden cronológico descendente para facilitar la revisión reciente.<br>La exportación debe conservar los datos relevantes de la auditoría mostrada.<br>Los errores de autorización o sesión deben informarse sin exponer detalles sensibles. |
 
 
 [Volver al documentación](../Documentación.md)
