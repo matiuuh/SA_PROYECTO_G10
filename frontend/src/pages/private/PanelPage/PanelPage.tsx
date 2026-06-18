@@ -4,7 +4,7 @@ import { Search, X, Lock } from 'lucide-react'
 import { ContentRow, SearchBar, MediaCard } from '@/components/molecules'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { DashboardHero } from '@/components/organisms'
-import { getActiveSession, getStoredActiveProfile, syncStoredActiveProfile } from '@/lib/auth'
+import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { getCatalogDetail, listCatalogContent, searchCatalogContent } from '@/lib/catalogo-api'
 import { getMyList } from '@/lib/my-list'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
@@ -75,7 +75,7 @@ function mapCatalogToContentItem(content: CatalogContent): ContentItem {
 export function PanelPage() {
   const navigate = useNavigate()
   const session = getActiveSession()
-  const isAdmin = session?.account.rol === 'administrador'
+  const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
@@ -320,7 +320,7 @@ export function PanelPage() {
   }, [catalogFilter, genreFilter])
 
   const searchPlaceholder = useMemo(() => {
-    if (genreFilter !== 'all') return `Buscar en ${genreFilter}...`
+    if (genreFilter !== 'all') return `Buscar por título`
     if (catalogFilter === 'pelicula') return 'Buscar peliculas por titulo o genero...'
     if (catalogFilter === 'serie') return 'Buscar series por titulo o genero...'
     return 'Buscar por titulo, categoria o genero...'

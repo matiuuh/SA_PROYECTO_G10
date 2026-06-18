@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,12 +15,14 @@ import (
 	"quetzaltv/services/catalogo/internal/application"
 	"quetzaltv/services/catalogo/internal/domain"
 	"quetzaltv/services/catalogo/internal/infrastructure/alerts"
+	"quetzaltv/services/catalogo/internal/infrastructure/gcs"
 )
 
 type Handler struct {
 	svc       *application.CatalogoService
 	jwtSecret []byte
 	alerts    *alerts.Dispatcher
+	uploader  *gcs.Uploader
 }
 
 type contentResponse struct {
@@ -116,6 +119,17 @@ type createContentResponse struct {
 	Message string `json:"message"`
 }
 
+type auditEntryResponse struct {
+	ID             string          `json:"id"`
+	TablaOrigen    string          `json:"tabla_origen"`
+	EntidadID      string          `json:"entidad_id"`
+	Evento         string          `json:"evento"`
+	EstadoAnterior json.RawMessage `json:"estado_anterior"`
+	EstadoNuevo    json.RawMessage `json:"estado_nuevo"`
+	UsuarioAccion  string          `json:"usuario_accion,omitempty"`
+	FechaEvento    string          `json:"fecha_evento"`
+}
+
 type rateContentRequest struct {
 	PerfilID string `json:"perfil_id"`
 }
@@ -148,19 +162,24 @@ type jwtClaims struct {
 	jwt.RegisteredClaims
 }
 
-func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher) *Handler {
+func NewHandler(svc *application.CatalogoService, dispatcher *alerts.Dispatcher, uploader *gcs.Uploader) *Handler {
 	return &Handler{
 		svc:       svc,
 		jwtSecret: []byte(strings.TrimSpace(os.Getenv("JWT_SECRET"))),
 		alerts:    dispatcher,
+		uploader:  uploader,
 	}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
+	mux.HandleFunc("/api/v1/admin/catalog/audit", h.handleAdminAudit)
 	mux.HandleFunc("/api/v1/admin/catalog/series/", h.handleAdminSeries)
 	mux.HandleFunc("/api/v1/admin/catalog/content/", h.handleAdminContentByID)
 	mux.HandleFunc("/api/v1/admin/catalog/content", h.handleCreateContent)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-poster", h.handleUploadPoster)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-trailer", h.handleUploadTrailer)
+	mux.HandleFunc("/api/v1/admin/catalog/upload-episode-video", h.handleUploadEpisodeVideo)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
 	mux.HandleFunc("/api/v1/catalog/", h.handleDetail)
 	mux.HandleFunc("/api/v1/catalog", h.handleList)
@@ -191,7 +210,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"contenidos": toContentResponseList(contents),
+		"contenidos": h.toContentResponseList(r.Context(), contents),
 	})
 }
 
@@ -213,7 +232,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"contenidos": toContentResponseList(contents),
+		"contenidos": h.toContentResponseList(r.Context(), contents),
 	})
 }
 
@@ -289,9 +308,14 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "No se pudo obtener el detalle del contenido.")
 		return
 	}
+	if !isReleased(detail.ReleaseDate) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
 
+	response := h.toDetailResponse(r.Context(), detail)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"detalle": toDetailResponse(detail),
+		"detalle": response,
 	})
 }
 
@@ -422,14 +446,18 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 		writePreflight(w)
 		return
 	}
-	if r.Method != http.MethodPost {
-		writeMethodNotAllowed(w)
-		return
-	}
-
 	accountID, err := h.requireAdmin(r)
 	if err != nil {
 		writeAuthError(w, err)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		h.handleAdminListContent(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
 		return
 	}
 
@@ -464,6 +492,53 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleAdminListContent(w http.ResponseWriter, r *http.Request) {
+	contents, err := h.svc.ListAll(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo cargar el catalogo administrativo.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"contenidos": h.toContentResponseList(r.Context(), contents),
+	})
+}
+
+func (h *Handler) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	limit := 100
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil || parsedLimit <= 0 {
+			writeError(w, http.StatusBadRequest, "El parametro limit no es valido.")
+			return
+		}
+		limit = parsedLimit
+	}
+
+	entries, err := h.svc.ListAudit(r.Context(), limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo consultar la auditoria del catalogo.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"eventos": toAuditEntryResponseList(entries),
+	})
+}
+
 func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		writePreflight(w)
@@ -477,19 +552,40 @@ func (h *Handler) handleAdminContentByID(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, err := h.requireAdmin(r); err != nil {
+	accountID, err := h.requireAdmin(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
 
 	switch r.Method {
+	case http.MethodGet:
+		h.handleAdminGetContent(w, r, contentID)
 	case http.MethodPut:
-		h.handleUpdateContent(w, r, contentID)
+		h.handleUpdateContent(w, r, contentID, accountID)
 	case http.MethodDelete:
-		h.handleDeleteContent(w, r, contentID)
+		h.handleDeleteContent(w, r, contentID, accountID)
 	default:
 		writeMethodNotAllowed(w)
 	}
+}
+
+func (h *Handler) handleAdminGetContent(w http.ResponseWriter, r *http.Request, contentID string) {
+	detail, err := h.svc.GetDetail(r.Context(), contentID)
+	if errors.Is(err, domain.ErrContentNotFound) {
+		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudo obtener el detalle del contenido.")
+		return
+	}
+
+	response := h.toDetailResponse(r.Context(), detail)
+	response.UrlPortada = detail.PosterURL
+	writeJSON(w, http.StatusOK, map[string]any{
+		"detalle": response,
+	})
 }
 
 func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
@@ -498,7 +594,8 @@ func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.requireAdmin(r); err != nil {
+	accountID, err := h.requireAdmin(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -527,10 +624,10 @@ func (h *Handler) handleAdminSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.handleCreateEpisodeBatch(w, r, contentID)
+	h.handleCreateEpisodeBatch(w, r, contentID, accountID)
 }
 
-func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string) {
+func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
 	var req updateContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
@@ -543,7 +640,7 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 		return
 	}
 
-	if err := h.svc.Update(r.Context(), contentID, content); err != nil {
+	if err := h.svc.Update(r.Context(), contentID, content, accountID); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
 			return
@@ -564,12 +661,12 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message": "Contenido actualizado correctamente.",
-		"detalle": toDetailResponse(detail),
+		"detalle": h.toDetailResponse(r.Context(), detail),
 	})
 }
 
-func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, contentID string) {
-	if err := h.svc.Delete(r.Context(), contentID); err != nil {
+func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
+	if err := h.svc.Delete(r.Context(), contentID, accountID); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			writeError(w, http.StatusNotFound, "Contenido no encontrado.")
 			return
@@ -583,7 +680,7 @@ func (h *Handler) handleDeleteContent(w http.ResponseWriter, r *http.Request, co
 	})
 }
 
-func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Request, contentID string) {
+func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Request, contentID string, accountID string) {
 	var req createEpisodeBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
@@ -596,7 +693,7 @@ func (h *Handler) handleCreateEpisodeBatch(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	episodes, err := h.svc.CreateEpisodeBatch(r.Context(), contentID, batch)
+	episodes, err := h.svc.CreateEpisodeBatch(r.Context(), contentID, batch, accountID)
 	if errors.Is(err, domain.ErrContentNotFound) {
 		writeError(w, http.StatusNotFound, "Serie no encontrada.")
 		return
@@ -632,6 +729,20 @@ func (h *Handler) requireAdmin(r *http.Request) (string, error) {
 	}
 
 	return accountID, nil
+}
+
+func isReleased(releaseDate *time.Time) bool {
+	if releaseDate == nil {
+		return true
+	}
+
+	now := time.Now()
+	releaseYear, releaseMonth, releaseDay := releaseDate.Date()
+	todayYear, todayMonth, todayDay := now.Date()
+	releaseOnlyDate := time.Date(releaseYear, releaseMonth, releaseDay, 0, 0, 0, 0, now.Location())
+	todayOnlyDate := time.Date(todayYear, todayMonth, todayDay, 0, 0, 0, 0, now.Location())
+
+	return !releaseOnlyDate.After(todayOnlyDate)
 }
 
 func parseCreateContentRequest(req createContentRequest, createdByAccountID string) (*domain.Content, error) {
@@ -780,8 +891,176 @@ func parseEpisodeBatchRequest(req createEpisodeBatchRequest) (domain.EpisodeBatc
 	return batch, nil
 }
 
+func (h *Handler) handleUploadTrailer(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		ContenidoID string `json:"contenido_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.ContenidoID = strings.TrimSpace(req.ContenidoID)
+	if req.ContenidoID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el contenido_id.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.UploadSignedURL(r.Context(), req.ContenidoID)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida para %q: %v", req.ContenidoID, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":   uploadURL,
+		"object_name":  objectName,
+		"method":       "PUT",
+		"content_type": "video/mp4",
+	})
+}
+
+func (h *Handler) handleUploadPoster(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		ContenidoID string `json:"contenido_id"`
+		Extension   string `json:"extension"`
+		ContentType string `json:"content_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.ContenidoID = strings.TrimSpace(req.ContenidoID)
+	req.Extension = strings.Trim(strings.ToLower(strings.TrimSpace(req.Extension)), ".")
+	req.ContentType = strings.TrimSpace(req.ContentType)
+	if req.ContenidoID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el contenido_id.")
+		return
+	}
+	if req.Extension == "" {
+		req.Extension = "jpg"
+	}
+	if req.Extension != "jpg" && req.Extension != "jpeg" && req.Extension != "png" && req.Extension != "webp" {
+		writeError(w, http.StatusBadRequest, "La portada debe ser jpg, jpeg, png o webp.")
+		return
+	}
+	if req.ContentType == "" {
+		req.ContentType = "image/jpeg"
+	}
+	if !strings.HasPrefix(req.ContentType, "image/") {
+		writeError(w, http.StatusBadRequest, "El content_type debe ser de imagen.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.PosterSignedURL(r.Context(), req.ContenidoID, req.Extension, req.ContentType)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida de portada para %q: %v", req.ContenidoID, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":   uploadURL,
+		"object_name":  objectName,
+		"method":       "PUT",
+		"content_type": req.ContentType,
+	})
+}
+
+func (h *Handler) handleUploadEpisodeVideo(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	if _, err := h.requireAdmin(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	if h.uploader == nil {
+		writeError(w, http.StatusServiceUnavailable, "El servicio de almacenamiento no esta configurado.")
+		return
+	}
+
+	var req struct {
+		EpisodeKey string `json:"episode_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "El cuerpo de la solicitud no es JSON valido.")
+		return
+	}
+
+	req.EpisodeKey = strings.TrimSpace(req.EpisodeKey)
+	if req.EpisodeKey == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el episode_key.")
+		return
+	}
+
+	objectName, uploadURL, err := h.uploader.EpisodeSignedURL(r.Context(), req.EpisodeKey)
+	if err != nil {
+		log.Printf("[catalogo] error al generar URL de subida de episodio para %q: %v", req.EpisodeKey, err)
+		writeError(w, http.StatusInternalServerError, "No se pudo generar la URL de subida.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"upload_url":   uploadURL,
+		"object_name":  objectName,
+		"method":       "PUT",
+		"content_type": "video/mp4",
+	})
+}
+
 func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 	if h.alerts == nil || content == nil {
+		return
+	}
+	if !isReleased(content.ReleaseDate) {
 		return
 	}
 
@@ -792,26 +1071,30 @@ func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 
 		if err := h.alerts.DispatchNewContentAlert(ctx, contentCopy); err != nil {
 			log.Printf("[catalogo] fallo al despachar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
+			return
+		}
+		if err := h.svc.MarkPublicationAlertSent(ctx, contentCopy.ID); err != nil {
+			log.Printf("[catalogo] no se pudo marcar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
 		}
 	}()
 }
 
-func toContentResponseList(contents []domain.Content) []contentResponse {
+func (h *Handler) toContentResponseList(ctx context.Context, contents []domain.Content) []contentResponse {
 	out := make([]contentResponse, 0, len(contents))
 	for _, content := range contents {
-		out = append(out, toContentResponse(content))
+		out = append(out, h.toContentResponse(ctx, content))
 	}
 	return out
 }
 
-func toContentResponse(content domain.Content) contentResponse {
+func (h *Handler) toContentResponse(ctx context.Context, content domain.Content) contentResponse {
 	response := contentResponse{
 		ID:                      content.ID,
 		Titulo:                  content.Title,
 		Tipo:                    string(content.Type),
 		Sinopsis:                content.Synopsis,
 		Idioma:                  content.Language,
-		UrlPortada:              content.PosterURL,
+		UrlPortada:              h.resolvePosterURL(ctx, content.PosterURL),
 		PorcentajeRecomendacion: content.RecommendationPct,
 		UrlTrailer:              content.TrailerURL,
 	}
@@ -821,7 +1104,41 @@ func toContentResponse(content domain.Content) contentResponse {
 	return response
 }
 
-func toDetailResponse(detail *domain.ContentDetail) detailResponse {
+func (h *Handler) resolvePosterURL(ctx context.Context, posterURL string) string {
+	value := strings.TrimSpace(posterURL)
+	if value == "" || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		return value
+	}
+	if h.uploader == nil || !strings.HasPrefix(value, "posters/") {
+		return value
+	}
+
+	signedURL, err := h.uploader.ReadSignedURL(ctx, value)
+	if err != nil {
+		log.Printf("[catalogo] no se pudo firmar portada %q: %v", value, err)
+		return value
+	}
+	return signedURL
+}
+
+func toAuditEntryResponseList(entries []domain.AuditEntry) []auditEntryResponse {
+	out := make([]auditEntryResponse, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, auditEntryResponse{
+			ID:             entry.ID,
+			TablaOrigen:    entry.TableName,
+			EntidadID:      entry.EntityID,
+			Evento:         entry.Event,
+			EstadoAnterior: entry.PreviousState,
+			EstadoNuevo:    entry.NewState,
+			UsuarioAccion:  entry.UserID,
+			FechaEvento:    entry.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return out
+}
+
+func (h *Handler) toDetailResponse(ctx context.Context, detail *domain.ContentDetail) detailResponse {
 	response := detailResponse{
 		ID:                      detail.ID,
 		Titulo:                  detail.Title,
@@ -831,7 +1148,7 @@ func toDetailResponse(detail *domain.ContentDetail) detailResponse {
 		ClasificacionEdad:       detail.AgeRating,
 		DuracionMinutos:         detail.DurationMinutes,
 		Idioma:                  detail.Language,
-		UrlPortada:              detail.PosterURL,
+		UrlPortada:              h.resolvePosterURL(ctx, detail.PosterURL),
 		UrlTrailer:              detail.TrailerURL,
 		TotalLikes:              detail.TotalLikes,
 		TotalDislikes:           detail.TotalDislikes,

@@ -26,7 +26,7 @@ class SubscriptionService:
         self._subscription_repository = subscription_repository
         self._divisas_client = divisas_client
 
-    def create_plan(self, request: CreatePlanRequest) -> Plan:
+    def create_plan(self, request: CreatePlanRequest, actor_account_id: str = "") -> Plan:
         now = datetime.now(timezone.utc)
         plan = Plan(
             id=str(uuid4()),
@@ -39,7 +39,7 @@ class SubscriptionService:
             creado_en=now,
             actualizado_en=now,
         )
-        return self._plan_repository.create(plan)
+        return self._plan_repository.create(plan, actor_account_id)
 
     def list_active_plans(self) -> list[Plan]:
         return self._plan_repository.list_active()
@@ -134,6 +134,12 @@ class SubscriptionService:
         subscription = self._subscription_repository.get_active_by_account_id(account_id)
         if subscription is None:
             raise NotFoundError("No hay una suscripcion activa para esa cuenta.")
+        return subscription
+
+    def get_subscription_by_id(self, subscription_id: str) -> Subscription:
+        subscription = self._subscription_repository.get_by_id(subscription_id)
+        if subscription is None:
+            raise NotFoundError("Suscripcion no encontrada.")
         return subscription
 
     def get_subscription_status_by_account(self, account_id: str) -> Subscription | None:

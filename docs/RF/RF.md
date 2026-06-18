@@ -3,8 +3,8 @@
 | ID | Prioridad | Módulo | Requerimiento | Descripción |
 |----|-----------|--------|---------------|-------------|
 | RF-01 | Alta | Autenticación | Registro de usuario | El sistema debe permitir a un nuevo usuario registrarse proporcionando nombre, correo electrónico y contraseña. |
-| RF-02 | Alta | Autenticación | Inicio de sesión | El sistema debe autenticar al usuario mediante correo electrónico y contraseña, generando una sesión válida mediante JWT y Session Cookie segura. |
-| RF-03 | Media | Autenticación | Cierre de sesión | El sistema debe permitir al usuario cerrar su sesión activa, invalidando el token y la cookie de sesión correspondientes. |
+| RF-02 | Alta | Autenticación | Inicio de sesión | El sistema debe autenticar al usuario mediante correo electrónico y contraseña, generando una sesión válida mediante JWT. |
+| RF-03 | Media | Autenticación | Cierre de sesión | El sistema debe permitir al usuario cerrar su sesión activa, invalidando el token. |
 | RF-04 | Alta | Multiperfil | Gestión de perfiles | El sistema debe permitir a un usuario crear, editar y eliminar perfiles dentro de su cuenta, con un máximo de 5 perfiles por cuenta. Cada perfil tendrá nombre e imagen opcional. |
 | RF-05 | Alta | Multiperfil | Selección de perfil | Al iniciar sesión, el sistema debe presentar al usuario la lista de perfiles disponibles en su cuenta para que seleccione con cuál desea navegar. |
 | RF-06 | Media | Autenticación | Actualización de credenciales | El sistema debe permitir al usuario actualizar su contraseña y correo electrónico desde el panel de administración de su cuenta. |
@@ -25,5 +25,8 @@
 | RF-21 | Alta | Notificaciones | Correo de confirmación de registro | El sistema debe enviar automáticamente un correo electrónico de bienvenida al usuario al completar el proceso de registro. |
 | RF-22 | Alta | Notificaciones | Correo de recibo de compra | El sistema debe enviar automáticamente un correo electrónico con el detalle del recibo al usuario al confirmar la contratación o modificación de un plan de suscripción. |
 | RF-23 | Media | Notificaciones | Alerta de nuevas publicaciones | El sistema debe enviar notificaciones por correo electrónico a los usuarios suscritos cuando se publique nuevo contenido en la plataforma. |
+| RF-24 | Media | Catalogo | Administración de contenido | El sistema debe permitir a los administradores agregar, editar y eliminar películas y series en el catálogo, gestionando su ficha técnica completa. |
+| RF-25 | Media | Catalogo | Programación de publicaciones | El sistema debe permitir a los administradores programar la fecha de publicación de nuevos contenidos en el catálogo. |
+| RF-26 | Media | Auditoría | Visualización de triggers | El sistema debe registrar en un log centralizado los eventos críticos de la base de datos y mostrarlos al administrador además de permitir descagarlos en csv y pdf. |
 
 [Volver a Documentación](../Documentación.md)

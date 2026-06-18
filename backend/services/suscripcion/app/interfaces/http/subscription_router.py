@@ -13,18 +13,53 @@ from app.infrastructure.container import Container
 from app.interfaces.http.deps import TokenData, require_admin, require_user
 
 
+USER_ROLE = "usuario"
+
+
+def is_user_role(role: str) -> bool:
+    return role.strip().lower() == USER_ROLE
+
+
+def ensure_subscription_owner(
+    container: Container,
+    subscription_id: str,
+    token: TokenData,
+) -> None:
+    if not is_user_role(token.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo las cuentas de usuario pueden gestionar suscripciones.",
+        )
+
+    try:
+        subscription = container.subscription_service.get_subscription_by_id(subscription_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    if subscription.cuenta_id != token.account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para modificar esta suscripcion.",
+        )
+
+
 def build_subscription_router(container: Container) -> APIRouter:
     router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
     # ── Usuario autenticado ───────────────────────────────────────────────────
 
     @router.post("", response_model=SubscriptionResponse, status_code=status.HTTP_201_CREATED)
-    def create_subscription(
+    async def create_subscription(
         request: CreateSubscriptionRequest,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionResponse:
         # El usuario solo puede crear suscripción para su propia cuenta
-        if token.role != "administrador" and request.cuenta_id != token.account_id:
+        if not is_user_role(token.role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo las cuentas de usuario pueden contratar planes.",
+            )
+        if request.cuenta_id != token.account_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No puedes crear una suscripcion para otra cuenta.",
@@ -39,7 +74,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.get("/account/{cuenta_id}", response_model=SubscriptionResponse)
-    def get_subscription_by_account(
+    async def get_subscription_by_account(
         cuenta_id: str,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionResponse:
@@ -57,7 +92,7 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.get("/account/{cuenta_id}/status", response_model=SubscriptionStatusResponse)
-    def get_subscription_status_by_account(
+    async def get_subscription_status_by_account(
         cuenta_id: str,
         token: TokenData = Depends(require_user),
     ) -> SubscriptionStatusResponse:
@@ -75,11 +110,12 @@ def build_subscription_router(container: Container) -> APIRouter:
         )
 
     @router.put("/{suscripcion_id}/plan", response_model=SubscriptionResponse)
-    def change_subscription_plan(
+    async def change_subscription_plan(
         suscripcion_id: str,
         request: ChangeSubscriptionPlanRequest,
-        _: TokenData = Depends(require_user),
+        token: TokenData = Depends(require_user),
     ) -> SubscriptionResponse:
+        ensure_subscription_owner(container, suscripcion_id, token)
         try:
             subscription = container.subscription_service.change_subscription_plan(
                 suscripcion_id, request
@@ -92,10 +128,11 @@ def build_subscription_router(container: Container) -> APIRouter:
         return SubscriptionResponse(**subscription.__dict__)
 
     @router.post("/{suscripcion_id}/cancel", response_model=MessageResponse)
-    def cancel_subscription(
+    async def cancel_subscription(
         suscripcion_id: str,
-        _: TokenData = Depends(require_user),
+        token: TokenData = Depends(require_user),
     ) -> MessageResponse:
+        ensure_subscription_owner(container, suscripcion_id, token)
         try:
             container.subscription_service.cancel_subscription(suscripcion_id)
         except NotFoundError as exc:
@@ -108,7 +145,9 @@ def build_subscription_router(container: Container) -> APIRouter:
     # ── Solo administrador ────────────────────────────────────────────────────
 
     @router.get("/active/accounts", response_model=ActiveSubscriptionAccountsResponse)
-    def list_active_subscription_accounts() -> ActiveSubscriptionAccountsResponse:
+    async def list_active_subscription_accounts(
+        _: TokenData = Depends(require_admin),
+    ) -> ActiveSubscriptionAccountsResponse:
         return ActiveSubscriptionAccountsResponse(
             cuenta_ids=container.subscription_service.list_active_account_ids()
         )

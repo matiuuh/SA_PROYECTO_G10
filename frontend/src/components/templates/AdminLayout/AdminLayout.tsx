@@ -7,11 +7,12 @@ import {
   List,
   LogOut,
   Menu,
+  FileClock,
   Tv2,
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
-import { clearSession, getActiveSession } from '@/lib/auth'
+import { clearSession, getActiveSession, isAdminRole } from '@/lib/auth'
 import { logoutUser } from '@/lib/usuario-api'
 
 interface NavItem {
@@ -25,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Subir pelicula', to: '/admin/upload/movie', icon: <Film size={18} strokeWidth={1.75} /> },
   { label: 'Subir serie', to: '/admin/upload/series', icon: <Tv2 size={18} strokeWidth={1.75} /> },
   { label: 'Catalogo', to: '/admin/catalog', icon: <List size={18} strokeWidth={1.75} /> },
+  { label: 'Auditoria', to: '/admin/audit', icon: <FileClock size={18} strokeWidth={1.75} /> },
 ]
 
 export function AdminLayout() {
@@ -37,7 +39,7 @@ export function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
-  if (session.account.rol !== 'administrador') {
+  if (!isAdminRole(session.account.rol)) {
     return <Navigate to="/panel" replace />
   }
 

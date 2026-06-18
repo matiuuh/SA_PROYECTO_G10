@@ -163,7 +163,7 @@ func (h *Handler) ActualizarContenido(
 		c.DurationMinutes = &v
 	}
 
-	if err := h.svc.Update(ctx, req.ContenidoId, c); err != nil {
+	if err := h.svc.Update(ctx, req.ContenidoId, c, ""); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			return nil, status.Error(codes.NotFound, "contenido no encontrado")
 		}
@@ -177,7 +177,7 @@ func (h *Handler) EliminarContenido(
 	ctx context.Context,
 	req *catalogov1.EliminarContenidoRequest,
 ) (*catalogov1.EliminarContenidoResponse, error) {
-	if err := h.svc.Delete(ctx, req.ContenidoId); err != nil {
+	if err := h.svc.Delete(ctx, req.ContenidoId, ""); err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			return nil, status.Error(codes.NotFound, "contenido no encontrado")
 		}
@@ -274,6 +274,9 @@ func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 	if h.alerts == nil || content == nil {
 		return
 	}
+	if !isReleased(content.ReleaseDate) {
+		return
+	}
 
 	contentCopy := *content
 	go func() {
@@ -282,6 +285,24 @@ func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 
 		if err := h.alerts.DispatchNewContentAlert(ctx, contentCopy); err != nil {
 			log.Printf("[catalogo] fallo al despachar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
+			return
+		}
+		if err := h.svc.MarkPublicationAlertSent(ctx, contentCopy.ID); err != nil {
+			log.Printf("[catalogo] no se pudo marcar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
 		}
 	}()
+}
+
+func isReleased(releaseDate *time.Time) bool {
+	if releaseDate == nil {
+		return true
+	}
+
+	now := time.Now()
+	releaseYear, releaseMonth, releaseDay := releaseDate.Date()
+	todayYear, todayMonth, todayDay := now.Date()
+	releaseOnlyDate := time.Date(releaseYear, releaseMonth, releaseDay, 0, 0, 0, 0, now.Location())
+	todayOnlyDate := time.Date(todayYear, todayMonth, todayDay, 0, 0, 0, 0, now.Location())
+
+	return !releaseOnlyDate.After(todayOnlyDate)
 }

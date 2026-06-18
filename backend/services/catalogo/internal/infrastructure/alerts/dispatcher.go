@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -20,10 +21,11 @@ import (
 )
 
 type Dispatcher struct {
-	httpClient               *http.Client
-	subscriptionAPIURL       string
-	userAPIURL               string
-	notificationsGRPCTarget  string
+	httpClient              *http.Client
+	subscriptionAPIURL      string
+	userAPIURL              string
+	notificationsGRPCTarget string
+	jwtSecret               []byte
 }
 
 type activeAccountsResponse struct {
@@ -42,17 +44,19 @@ func NewDispatcherFromEnv() *Dispatcher {
 	subscriptionAPIURL := strings.TrimRight(strings.TrimSpace(os.Getenv("SUBSCRIPCION_API_URL")), "/")
 	userAPIURL := strings.TrimRight(strings.TrimSpace(os.Getenv("USUARIO_API_URL")), "/")
 	notificationsGRPCTarget := strings.TrimSpace(os.Getenv("NOTIFICACIONES_GRPC_TARGET"))
+	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 
-	if subscriptionAPIURL == "" || userAPIURL == "" || notificationsGRPCTarget == "" {
+	if subscriptionAPIURL == "" || userAPIURL == "" || notificationsGRPCTarget == "" || jwtSecret == "" {
 		log.Println("[catalogo] alerta de nuevo contenido deshabilitada por configuracion incompleta")
 		return nil
 	}
 
 	return &Dispatcher{
-		httpClient: &http.Client{Timeout: 8 * time.Second},
+		httpClient:              &http.Client{Timeout: 8 * time.Second},
 		subscriptionAPIURL:      subscriptionAPIURL,
 		userAPIURL:              userAPIURL,
 		notificationsGRPCTarget: notificationsGRPCTarget,
+		jwtSecret:               []byte(jwtSecret),
 	}
 }
 
@@ -88,6 +92,12 @@ func (d *Dispatcher) fetchActiveAccountIDs(ctx context.Context) ([]string, error
 	if err != nil {
 		return nil, err
 	}
+
+	token, err := d.createServiceToken()
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo crear token interno para suscripciones: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	res, err := d.httpClient.Do(req)
 	if err != nil {
@@ -178,8 +188,8 @@ func (d *Dispatcher) sendNotification(ctx context.Context, content domain.Conten
 		description = fmt.Sprintf("Nuevo %s disponible en Quetzal TV.", contentTypeLabel(content.Type))
 	}
 
-	_, err = stub.EnviarAlertaNuevaPublicacion(ctx, &notificacionesv1.AlertaPublicacionRequest{
-		CorreosDestino: emails,
+	response, err := stub.EnviarAlertaNuevaPublicacion(ctx, &notificacionesv1.AlertaPublicacionRequest{
+		CorreosDestino:  emails,
 		TituloContenido: content.Title,
 		TipoContenido:   string(content.Type),
 		Descripcion:     description,
@@ -187,9 +197,24 @@ func (d *Dispatcher) sendNotification(ctx context.Context, content domain.Conten
 	if err != nil {
 		return fmt.Errorf("no se pudo enviar la alerta de publicacion: %w", err)
 	}
+	if !response.GetEnviado() {
+		return fmt.Errorf("notificaciones-service no envio la alerta: %s", response.GetMensaje())
+	}
 
 	log.Printf("[catalogo] alerta de nuevo contenido enviada a %d cuenta(s) por %q", len(emails), content.Title)
 	return nil
+}
+
+func (d *Dispatcher) createServiceToken() (string, error) {
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub":  "catalogo-service",
+		"role": "administrador",
+		"iat":  now.Unix(),
+		"exp":  now.Add(2 * time.Minute).Unix(),
+	}
+
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(d.jwtSecret)
 }
 
 func contentTypeLabel(contentType domain.ContentType) string {

@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: divisas-service
+  namespace: quetzaltv-prod
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: divisas-service
+  template:
+    metadata:
+      labels:
+        app: divisas-service
+    spec:
+      containers:
+        - name: divisas-service
+          image: $AR_REGISTRY/divisas:$VERSION
+          ports:
+            - containerPort: 8005
+            - containerPort: 5005
+          env:
+            - name: GRPC_PORT
+              value: "5005"
+            - name: HTTP_PORT
+              value: "8005"
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: quetzaltv-config
+                  key: REDIS_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: quetzaltv-secrets
+                  key: DATABASE_URL_DIVISAS
+          resources:
+            requests:
+              cpu: 30m
+              memory: 48Mi
+            limits:
+              cpu: 150m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: divisas-service
+  namespace: quetzaltv-prod
+spec:
+  selector:
+    app: divisas-service
+  ports:
+    - name: http
+      port: 8005
+      targetPort: 8005
+    - name: grpc
+      port: 5005
+      targetPort: 5005

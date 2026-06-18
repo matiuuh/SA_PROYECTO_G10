@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Clapperboard, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clapperboard, Film, Pencil, Plus, Save, Trash2, Upload, X } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
-import { createSeriesEpisodeBatch, getCatalogDetail, getCatalogSeasons } from '@/lib/catalogo-api'
+import { createSeriesEpisodeBatch, getAdminCatalogDetail, getCatalogSeasons, getUploadEpisodeVideoUrl } from '@/lib/catalogo-api'
 import type { CatalogSeason, CreateSeriesEpisodePayload } from '@/types/catalog'
 
 interface EpisodeDraft {
@@ -13,6 +13,12 @@ interface EpisodeDraft {
   duracion_minutos: string
   url_video: string
 }
+
+type EpisodeUploadState =
+  | { phase: 'idle' }
+  | { phase: 'uploading'; progress: number }
+  | { phase: 'done'; objectName: string }
+  | { phase: 'error'; message: string }
 
 type FeedbackState =
   | { type: 'success'; message: string }
@@ -50,11 +56,15 @@ export function UploadSeriesEpisodesPage() {
   const [seasonTitle, setSeasonTitle] = useState('')
   const [seasonDescription, setSeasonDescription] = useState('')
   const [episodes, setEpisodes] = useState<EpisodeDraft[]>([{ ...EMPTY_EPISODE }])
+  const [episodeUploadStates, setEpisodeUploadStates] = useState<EpisodeUploadState[]>([{ phase: 'idle' }])
+  const [episodeFiles, setEpisodeFiles] = useState<(File | null)[]>([null])
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([])
   const [existingSeasons, setExistingSeasons] = useState<CatalogSeason[]>([])
   const [editingSeasonId, setEditingSeasonId] = useState('')
   const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const isAnyUploading = episodeUploadStates.some((s) => s.phase === 'uploading')
 
   useEffect(() => {
     async function bootstrap() {
@@ -65,8 +75,13 @@ export function UploadSeriesEpisodesPage() {
       }
 
       try {
+        if (!session?.accessToken) {
+          setFeedback({ type: 'error', message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente.' })
+          setIsLoading(false)
+          return
+        }
         const [detail, seasons] = await Promise.all([
-          getCatalogDetail(id),
+          getAdminCatalogDetail(session.accessToken, id),
           getCatalogSeasons(id),
         ])
         setSeriesTitle(detail.titulo)
@@ -84,12 +99,18 @@ export function UploadSeriesEpisodesPage() {
     }
 
     void bootstrap()
-  }, [id])
+  }, [id, session?.accessToken])
 
   const existingSeasonNumbers = useMemo(
     () => new Set(existingSeasons.map((season) => season.numero)),
     [existingSeasons],
   )
+
+  function setEpisodeUploadState(index: number, state: EpisodeUploadState) {
+    setEpisodeUploadStates((current) =>
+      current.map((s, i) => (i === index ? state : s)),
+    )
+  }
 
   function updateEpisode(index: number, field: keyof EpisodeDraft, value: string) {
     setEpisodes((current) =>
@@ -102,15 +123,61 @@ export function UploadSeriesEpisodesPage() {
   function addEpisode() {
     setEpisodes((current) => [
       ...current,
-      {
-        ...EMPTY_EPISODE,
-        numero: String(current.length + 1),
-      },
+      { ...EMPTY_EPISODE, numero: String(current.length + 1) },
     ])
+    setEpisodeUploadStates((current) => [...current, { phase: 'idle' }])
+    setEpisodeFiles((current) => [...current, null])
   }
 
   function removeEpisode(index: number) {
-    setEpisodes((current) => (current.length === 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)))
+    if (episodes.length === 1) return
+    setEpisodes((current) => current.filter((_, i) => i !== index))
+    setEpisodeUploadStates((current) => current.filter((_, i) => i !== index))
+    setEpisodeFiles((current) => current.filter((_, i) => i !== index))
+  }
+
+  function handleFileSelect(index: number, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      setEpisodeUploadState(index, { phase: 'error', message: 'Solo se aceptan archivos de video (mp4, webm, etc.).' })
+      return
+    }
+    setEpisodeFiles((current) => current.map((f, i) => (i === index ? file : f)))
+    setEpisodeUploadState(index, { phase: 'idle' })
+  }
+
+  async function uploadEpisodeToGCS(token: string, episodeKey: string, file: File, index: number): Promise<string> {
+    setEpisodeUploadState(index, { phase: 'uploading', progress: 0 })
+    try {
+      const { upload_url, object_name } = await getUploadEpisodeVideoUrl(token, episodeKey)
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', upload_url)
+        xhr.setRequestHeader('Content-Type', 'video/mp4')
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setEpisodeUploadState(index, { phase: 'uploading', progress: Math.round((event.loaded / event.total) * 100) })
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve()
+          else reject(new Error(`Error al subir el archivo: HTTP ${xhr.status}`))
+        }
+        xhr.onerror = () => reject(new Error('Error de red al subir el video.'))
+        xhr.send(file)
+      })
+
+      setEpisodeUploadState(index, { phase: 'done', objectName: object_name })
+      return object_name
+    } catch (error) {
+      setEpisodeUploadState(index, {
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo subir el video.',
+      })
+      throw error
+    }
   }
 
   function resetForm(nextSeasonNumber?: number) {
@@ -118,6 +185,8 @@ export function UploadSeriesEpisodesPage() {
     setSeasonTitle('')
     setSeasonDescription('')
     setEpisodes([{ ...EMPTY_EPISODE }])
+    setEpisodeUploadStates([{ phase: 'idle' }])
+    setEpisodeFiles([null])
     if (nextSeasonNumber) {
       setSeasonNumber(String(nextSeasonNumber))
     }
@@ -128,7 +197,10 @@ export function UploadSeriesEpisodesPage() {
     setSeasonNumber(String(season.numero))
     setSeasonTitle(season.titulo ?? '')
     setSeasonDescription(season.descripcion ?? '')
-    setEpisodes(mapSeasonEpisodesToDrafts(season))
+    const drafts = mapSeasonEpisodesToDrafts(season)
+    setEpisodes(drafts)
+    setEpisodeUploadStates(drafts.map((d) => (d.url_video ? { phase: 'done', objectName: d.url_video } : { phase: 'idle' })))
+    setEpisodeFiles(drafts.map(() => null))
     setFeedback(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -147,41 +219,63 @@ export function UploadSeriesEpisodesPage() {
       return
     }
 
-    const payloadEpisodes: CreateSeriesEpisodePayload[] = []
-    for (const episode of episodes) {
+    for (let i = 0; i < episodes.length; i++) {
+      const episode = episodes[i]
+      const uploadState = episodeUploadStates[i]
       const numero = Number(episode.numero)
       const duracion = Number(episode.duracion_minutos)
       if (!Number.isFinite(numero) || numero <= 0) {
-        setFeedback({ type: 'error', message: 'Cada episodio debe tener un numero valido.' })
+        setFeedback({ type: 'error', message: `Episodio ${i + 1}: numero invalido.` })
         return
       }
       if (!episode.titulo.trim()) {
-        setFeedback({ type: 'error', message: 'Cada episodio debe incluir titulo.' })
+        setFeedback({ type: 'error', message: `Episodio ${i + 1}: falta el titulo.` })
         return
       }
       if (!Number.isFinite(duracion) || duracion <= 0) {
-        setFeedback({ type: 'error', message: 'Cada episodio debe incluir una duracion valida en minutos.' })
+        setFeedback({ type: 'error', message: `Episodio ${i + 1}: duracion invalida.` })
         return
       }
-      if (!episode.url_video.trim()) {
-        setFeedback({ type: 'error', message: 'Cada episodio debe incluir la URL del video.' })
+      const hasFile = Boolean(episodeFiles[i])
+      const hasDoneUrl = uploadState.phase === 'done'
+      if (!hasFile && !hasDoneUrl) {
+        setFeedback({ type: 'error', message: `Episodio ${i + 1}: sube el archivo de video.` })
         return
       }
-
-      payloadEpisodes.push({
-        numero,
-        titulo: episode.titulo.trim(),
-        sinopsis: episode.sinopsis.trim(),
-        duracion_minutos: duracion,
-        url_video: episode.url_video.trim(),
-      })
     }
 
     setIsSaving(true)
     setFeedback(null)
 
     try {
-      await createSeriesEpisodeBatch(session.accessToken, id, {
+      const token = session.accessToken
+      const resolvedUrls: string[] = []
+
+      for (let i = 0; i < episodes.length; i++) {
+        const episode = episodes[i]
+        const file = episodeFiles[i]
+        const uploadState = episodeUploadStates[i]
+
+        if (file) {
+          const episodeKey = `${id}-s${parsedSeasonNumber}-e${episode.numero}`
+          const objectName = await uploadEpisodeToGCS(token, episodeKey, file, i)
+          resolvedUrls.push(objectName)
+        } else if (uploadState.phase === 'done') {
+          resolvedUrls.push(uploadState.objectName)
+        } else {
+          resolvedUrls.push(episode.url_video)
+        }
+      }
+
+      const payloadEpisodes: CreateSeriesEpisodePayload[] = episodes.map((episode, i) => ({
+        numero: Number(episode.numero),
+        titulo: episode.titulo.trim(),
+        sinopsis: episode.sinopsis.trim(),
+        duracion_minutos: Number(episode.duracion_minutos),
+        url_video: resolvedUrls[i],
+      }))
+
+      await createSeriesEpisodeBatch(token, id, {
         numero_temporada: parsedSeasonNumber,
         titulo_temporada: seasonTitle.trim() || undefined,
         descripcion_temporada: seasonDescription.trim() || undefined,
@@ -348,15 +442,77 @@ export function UploadSeriesEpisodesPage() {
                         className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#09101d] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <Input
-                        label="URL del video *"
-                        type="url"
-                        placeholder="https://..."
-                        value={episode.url_video}
-                        onChange={(event) => updateEpisode(index, 'url_video', event.target.value)}
-                        required
-                      />
+                    <div className="md:col-span-2 flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-[var(--color-denim-200)]">Video del episodio *</label>
+                      <div className="flex flex-col gap-2 rounded-lg border border-white/[0.07] bg-[#09101d] p-3">
+                        {episodeUploadStates[index]?.phase === 'done' ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <CheckCircle2 size={15} className="shrink-0 text-[var(--color-success)]" />
+                            <span className="truncate text-[var(--color-denim-300)]">
+                              {(episodeUploadStates[index] as { phase: 'done'; objectName: string }).objectName}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEpisodeUploadState(index, { phase: 'idle' })
+                                setEpisodeFiles((current) => current.map((f, i) => (i === index ? null : f)))
+                              }}
+                              className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : episodeUploadStates[index]?.phase === 'uploading' ? (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-[var(--color-primary)]" />
+                              Subiendo al bucket... {(episodeUploadStates[index] as { phase: 'uploading'; progress: number }).progress}%
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-[var(--color-primary)] transition-all duration-200"
+                                style={{ width: `${(episodeUploadStates[index] as { phase: 'uploading'; progress: number }).progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {episodeFiles[index] ? (
+                              <div className="flex items-center gap-2 text-sm text-[var(--color-denim-300)]">
+                                <Film size={14} className="shrink-0" />
+                                <span className="truncate">{episodeFiles[index]!.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEpisodeFiles((current) => current.map((f, i) => (i === index ? null : f)))}
+                                  className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[var(--color-denim-500)]">
+                                Selecciona un archivo .mp4 para subir al bucket de GCS.
+                              </p>
+                            )}
+                            {episodeUploadStates[index]?.phase === 'error' && (
+                              <p className="text-xs text-[var(--color-error)]">
+                                {(episodeUploadStates[index] as { phase: 'error'; message: string }).message}
+                              </p>
+                            )}
+                            <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[var(--color-denim-300)] transition-colors hover:bg-white/[0.10] hover:text-white">
+                              <Upload size={12} />
+                              Elegir archivo
+                              <input
+                                ref={(el) => { fileInputRefs.current[index] = el }}
+                                type="file"
+                                accept="video/mp4,video/webm,video/*"
+                                className="sr-only"
+                                onChange={(event) => handleFileSelect(index, event)}
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -364,28 +520,35 @@ export function UploadSeriesEpisodesPage() {
             </div>
           </section>
 
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() => navigate('/admin/catalog')}>
+          <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/[0.08] bg-[#080c14]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-[var(--color-denim-400)]">
+                {editingSeasonId ? 'Actualiza la temporada cargada.' : 'Guarda la temporada cuando los episodios esten completos.'}
+              </p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <Button type="button" variant="ghost" onClick={() => navigate('/admin/catalog')} className="w-full sm:w-auto">
               Volver al catalogo
-            </Button>
-            {editingSeasonId ? (
-              <Button type="button" variant="ghost" onClick={() => resetForm()}>
-                Crear nueva temporada
-              </Button>
-            ) : null}
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Guardando...
-                </span>
-              ) : (
-                <>
-                  <Save size={15} />
-                  {editingSeasonId ? 'Actualizar capitulos' : 'Guardar capitulos'}
-                </>
-              )}
-            </Button>
+                </Button>
+                {editingSeasonId ? (
+                  <Button type="button" variant="ghost" onClick={() => resetForm()} className="w-full sm:w-auto">
+                    Crear nueva temporada
+                  </Button>
+                ) : null}
+                <Button type="submit" disabled={isSaving || isAnyUploading} className="w-full sm:w-auto">
+                  {isSaving || isAnyUploading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      {isAnyUploading ? 'Subiendo videos...' : 'Guardando...'}
+                    </span>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      {editingSeasonId ? 'Actualizar capitulos' : 'Guardar capitulos'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </form>
 

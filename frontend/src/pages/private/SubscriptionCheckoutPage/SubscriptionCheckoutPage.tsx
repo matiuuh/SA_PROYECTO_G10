@@ -170,7 +170,12 @@ export function SubscriptionCheckoutPage() {
         ) : (
           <div className="grid gap-8 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <CheckoutForm onSubmit={handleSubmit} isLoading={isLoading} />
+              <CheckoutForm
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                initialEmail={accountEmail}
+                initialName={accountName}
+              />
             </div>
 
             <div className="lg:col-span-1">

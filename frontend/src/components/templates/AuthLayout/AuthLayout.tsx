@@ -1,9 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { getActiveSession } from '@/lib/auth'
-
-function getHomeRouteByRole(role: string): string {
-  return role === 'administrador' ? '/admin' : '/panel'
-}
+import { getActiveSession, getHomeRouteByRole } from '@/lib/auth'
 
 export function AuthLayout() {
   const session = getActiveSession()

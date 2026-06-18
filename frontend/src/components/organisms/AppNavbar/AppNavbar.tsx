@@ -9,7 +9,7 @@ import {
   X,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
-import { clearSession, getActiveSession, getStoredActiveProfile } from '@/lib/auth'
+import { clearSession, getActiveSession, getStoredActiveProfile, isAdminRole } from '@/lib/auth'
 import { logoutUser } from '@/lib/usuario-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 
@@ -52,6 +52,7 @@ export function AppNavbar() {
   const accountName = session?.account.nombre ?? 'Usuario'
   const accountEmail = session?.account.correo ?? 'usuario@quetzal.tv'
   const accountInitial = accountName.charAt(0).toUpperCase() || 'U'
+  const isAdmin = session ? isAdminRole(session.account.rol) : false
 
   const shouldForceLogout = (message: string) => {
     const normalized = message.toLowerCase()
@@ -124,7 +125,7 @@ export function AppNavbar() {
           </Link>
 
           <div className="flex items-center gap-2">
-            {session?.account.rol !== 'administrador' && (
+            {!isAdmin && (
               <Link
                 to="/subscription/plans"
                 aria-label="Planes"

@@ -63,6 +63,23 @@ services:
       timeout: 5s
       retries: 10
 
+  catalogo-migrations:
+    image: postgres:16-alpine
+    container_name: quetzal-catalogo-migrations-local
+    restart: "no"
+    environment:
+      PGPASSWORD: postgres
+    volumes:
+      - ../../services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+      - ../../services/catalogo/database/sql/04_migrate_alertas_publicacion.sql:/migrations/04_migrate_alertas_publicacion.sql:ro
+    command:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql && psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/04_migrate_alertas_publicacion.sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     container_name: quetzal-redis-local
@@ -163,12 +180,18 @@ services:
       SUBSCRIPCION_API_URL: http://api-gateway:4000/api/suscripcion
       USUARIO_API_URL: http://api-gateway:4000/api/usuario
       API_GATEWAY_URL: http://api-gateway:4000
+      NOTIFICACIONES_GRPC_TARGET: notificaciones-service:5007
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ../../secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5003:5003"
       - "8003:8003"
     depends_on:
-      postgres:
-        condition: service_healthy
+      catalogo-migrations:
+        condition: service_completed_successfully
 
   # ════════════════════════════════════════════════════════════════════════════
   # STREAMING  (Go · gRPC + HTTP)
@@ -184,6 +207,11 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/quetzal_streaming?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ../../secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "5004:5004"
       - "8004:8004"

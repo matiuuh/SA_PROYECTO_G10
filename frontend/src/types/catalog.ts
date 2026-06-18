@@ -125,3 +125,18 @@ export interface CreateSeriesEpisodeBatchPayload {
   descripcion_temporada?: string
   episodios: CreateSeriesEpisodePayload[]
 }
+
+export interface CatalogAuditEntry {
+  id: string
+  tabla_origen: string
+  entidad_id: string
+  evento: 'insercion' | 'actualizacion' | 'eliminacion' | string
+  estado_anterior: Record<string, unknown> | null
+  estado_nuevo: Record<string, unknown> | null
+  usuario_accion?: string
+  fecha_evento: string
+}
+
+export interface CatalogAuditResponse {
+  eventos: CatalogAuditEntry[]
+}

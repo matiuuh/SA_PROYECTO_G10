@@ -64,6 +64,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-usuario-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -119,6 +120,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-suscripcion-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -145,6 +147,7 @@ services:
       APP_ENV: development
       APP_PORT: 8002
       GRPC_PORT: 50052
+      STORAGE_BACKEND: postgres
       DB_HOST: postgres-suscripcion
       DB_PORT: 5432
       DB_NAME: suscripcion_db
@@ -171,6 +174,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-catalogo-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -186,6 +190,22 @@ services:
       timeout: 5s
       retries: 10
 
+  catalogo-migrations:
+    image: postgres:16-alpine
+    container_name: quetzal-catalogo-migrations-local
+    restart: "no"
+    environment:
+      PGPASSWORD: quetzal
+    volumes:
+      - ./backend/services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+    command:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/03_migrate_auditoria.sql
+    depends_on:
+      postgres-catalogo:
+        condition: service_healthy
+
   catalogo:
     build:
       context: ./backend
@@ -194,6 +214,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://quetzal:quetzal@postgres-catalogo:5432/catalogo_db?sslmode=disable
+      USUARIO_DATABASE_URL: postgres://quetzal:quetzal@postgres-usuario:5432/usuario_db?sslmode=disable
       GRPC_PORT: 5003
       HTTP_PORT: 8003
       JWT_SECRET: quetzal-dev-secret
@@ -201,11 +222,18 @@ services:
       USUARIO_API_URL: http://api-gateway:80/api/usuario
       API_GATEWAY_URL: http://api-gateway:80
       NOTIFICACIONES_GRPC_TARGET: notificaciones:5007
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ./backend/secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "8003:8003"
       - "5003:5003"
     depends_on:
-      postgres-catalogo:
+      catalogo-migrations:
+        condition: service_completed_successfully
+      postgres-usuario:
         condition: service_healthy
       api-gateway:
         condition: service_started
@@ -220,6 +248,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-streaming-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -245,6 +274,11 @@ services:
       DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      GCS_BUCKET: quetzal-tv-streaming
+      GCS_TRAILERS_FOLDER: trailers
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+    volumes:
+      - ./backend/secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
       - "8004:8004"
       - "5004:5004"
@@ -260,6 +294,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-divisas-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -303,6 +338,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-cobros-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal
@@ -348,6 +384,7 @@ services:
     image: postgres:16-alpine
     container_name: quetzal-pg-notificaciones-local
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
     environment:
       POSTGRES_USER: quetzal
       POSTGRES_PASSWORD: quetzal

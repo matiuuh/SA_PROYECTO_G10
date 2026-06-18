@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Film, Info, List, Tv2, Upload } from 'lucide-react'
+import { Film, List, Tv2 } from 'lucide-react'
 import { Button, ScrollReveal } from '@/components/atoms'
 import { MediaCard } from '@/components/molecules'
-import { listCatalogContent } from '@/lib/catalogo-api'
+import { getActiveSession } from '@/lib/auth'
+import { listAdminCatalogContent } from '@/lib/catalogo-api'
 import type { CatalogContent } from '@/types/catalog'
-import dashboardSvg from '@/assets/Admin/dashboard.svg'
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
+  const session = getActiveSession()
   const [catalog, setCatalog] = useState<CatalogContent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -16,7 +17,11 @@ export function AdminDashboardPage() {
   useEffect(() => {
     async function loadCatalog() {
       try {
-        const contents = await listCatalogContent()
+        if (!session?.accessToken) {
+          setErrorMessage('Tu sesion ya no esta activa. Inicia sesion nuevamente.')
+          return
+        }
+        const contents = await listAdminCatalogContent(session.accessToken)
         setCatalog(contents)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'No se pudo cargar el catalogo administrativo.')
@@ -26,16 +31,21 @@ export function AdminDashboardPage() {
     }
 
     void loadCatalog()
-  }, [])
+  }, [session?.accessToken])
 
   const stats = useMemo(() => {
     const movies = catalog.filter((item) => item.tipo === 'pelicula')
     const series = catalog.filter((item) => item.tipo === 'serie')
+    const scheduled = catalog.filter((item) => {
+      if (!item.fecha_lanzamiento) return false
+      return new Date(`${item.fecha_lanzamiento}T00:00:00`).getTime() > Date.now()
+    })
 
     return {
       total: catalog.length,
       movies: movies.length,
       series: series.length,
+      scheduled: scheduled.length,
       latest: [...catalog]
         .sort((a, b) => {
           const left = a.fecha_lanzamiento ? new Date(a.fecha_lanzamiento).getTime() : 0
@@ -70,22 +80,7 @@ export function AdminDashboardPage() {
       </ScrollReveal>
 
       <ScrollReveal variant="fade-up" delay={40}>
-        <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 p-5 mb-8">
-          <div className="flex items-start gap-3">
-            <Info size={18} className="text-[var(--color-denim-300)] shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-white">Vista sincronizada con backend</p>
-              <p className="text-sm text-[var(--color-denim-300)] mt-1">
-                Este dashboard ya no muestra usuarios, reproducciones ni rankings simulados. Solo presenta acciones y
-                datos que hoy existen en el backend del catalogo.
-              </p>
-            </div>
-          </div>
-        </div>
-      </ScrollReveal>
-
-      <ScrollReveal variant="fade-up" delay={80}>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
           <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
             <p className="text-sm text-[var(--color-denim-400)]">Contenido total</p>
             <p className="mt-2 text-3xl font-bold text-white">{stats.total}</p>
@@ -98,10 +93,14 @@ export function AdminDashboardPage() {
             <p className="text-sm text-[var(--color-denim-400)]">Series</p>
             <p className="mt-2 text-3xl font-bold text-white">{stats.series}</p>
           </div>
+          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] p-5">
+            <p className="text-sm text-[var(--color-denim-400)]">Programados</p>
+            <p className="mt-2 text-3xl font-bold text-white">{stats.scheduled}</p>
+          </div>
         </div>
       </ScrollReveal>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6 mb-8">
+      <div className="mb-8">
         <ScrollReveal variant="fade-up" delay={120}>
           <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
@@ -142,36 +141,6 @@ export function AdminDashboardPage() {
                 ))}
               </div>
             )}
-          </div>
-        </ScrollReveal>
-
-        <ScrollReveal variant="fade-up" delay={160}>
-          <div className="rounded-xl border border-white/[0.07] bg-[#0a0f1c] overflow-hidden h-full">
-            <div className="flex flex-col md:flex-row items-center gap-6 px-6 py-6 h-full">
-              <div className="flex-1">
-                <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-500)] mb-1">
-                  Acciones disponibles
-                </p>
-                <h3 className="text-xl font-bold text-white mb-2">Registrar contenido nuevo</h3>
-                <p className="text-sm text-[var(--color-denim-400)] mb-5">
-                  El backend actual permite registrar peliculas y la ficha general de series. Las demas funciones
-                  administrativas se iran activando cuando existan endpoints reales.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button onClick={() => navigate('/admin/upload/movie')}>
-                    <Upload size={15} />
-                    Subir pelicula
-                  </Button>
-                  <Button variant="outline" onClick={() => navigate('/admin/upload/series')}>
-                    <Upload size={15} />
-                    Subir serie
-                  </Button>
-                </div>
-              </div>
-              <div className="w-full md:w-64 shrink-0 opacity-80">
-                <img src={dashboardSvg} alt="Dashboard illustration" className="w-full h-auto" />
-              </div>
-            </div>
           </div>
         </ScrollReveal>
       </div>

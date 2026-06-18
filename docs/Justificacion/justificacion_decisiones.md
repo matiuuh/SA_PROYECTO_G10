@@ -1,388 +1,460 @@
-# Toma y justificacion de decisiones
+# Toma y Justificación de Decisiones
 
-Este documento justifica las decisiones principales de tecnologia para el proyecto **Quetzal TV**, respondiendo las preguntas: **¿Que se eligio?**, **¿por que se eligio?** y **¿para que se eligio?**
+Este documento describe las decisiones tecnológicas de **Quetzal TV** respondiendo, para
+cada categoría solicitada, las preguntas **¿qué se utilizó?**, **¿por qué se eligió?** y
+**¿para qué se utiliza?**. La información corresponde a la implementación actual del
+repositorio.
 
-El proyecto esta construido con una arquitectura de microservicios, separando responsabilidades por dominio: usuarios, suscripciones, catalogo, streaming, cobros, divisas y notificaciones. Cada servicio mantiene su propia logica, su propia base de datos y se comunica con otros servicios mediante contratos HTTP/gRPC.
+## 1. Lenguajes de programación utilizados
 
-## 1. Lenguaje de programacion
+### ¿Qué?
 
-### ¿Que?
+Se utiliza un enfoque políglota con tres lenguajes principales:
 
-Se utilizaron varios lenguajes de programacion segun la necesidad de cada parte del sistema:
+- **Python:** microservicios de Usuarios y Suscripción.
+- **Go:** microservicios de Catálogo y Streaming.
+- **TypeScript:** frontend, API Gateway y microservicios de Cobros, Divisas y
+  Notificaciones.
 
-- **TypeScript** para el frontend y para servicios backend como `cobros`, `notificaciones` y `divisas`.
-- **Python** para los servicios `usuario` y `suscripcion`.
-- **Go** para los servicios `catalogo` y `streaming`.
+### ¿Por qué?
 
-### ¿Por que?
+La arquitectura de microservicios permite seleccionar el lenguaje más adecuado para cada
+dominio:
 
-Se eligio una estrategia poliglota porque el proyecto esta basado en microservicios. Esto permite que cada servicio use el lenguaje que mejor se adapta a su responsabilidad.
+- **Usuarios — Python:** se eligió porque este servicio concentra autenticación,
+  validación de credenciales, sesiones y administración de perfiles. Python, junto con
+  FastAPI y Pydantic, permite implementar y validar rápidamente estas reglas de negocio.
+  Su ecosistema de seguridad facilita trabajar con JWT, hashing de contraseñas y modelos
+  de entrada tipados.
 
-**TypeScript** se utilizo porque permite trabajar con tipado estatico sobre JavaScript, reduciendo errores en tiempo de desarrollo. En el frontend facilita construir interfaces con React y en backend permite crear servicios de integracion con gRPC, PostgreSQL, correo y llamadas HTTP de forma ordenada.
+- **Suscripción — Python:** administra planes, estados de suscripción y cambios de plan,
+  operaciones que contienen numerosas validaciones y reglas de negocio. Python permite
+  expresar estas reglas de forma clara y mantener una estructura legible, mientras
+  FastAPI facilita exponerlas mediante HTTP y gRPC.
 
-**Python** se eligio para `usuario` y `suscripcion` porque permite desarrollar APIs rapidamente, tiene buena integracion con FastAPI, Pydantic, JWT, validaciones y conexion a PostgreSQL. Es adecuado para servicios con reglas de negocio claras como autenticacion, sesiones, perfiles, planes y suscripciones.
+- **Catálogo — Go:** el catálogo debe responder búsquedas, filtros, detalles, temporadas,
+  episodios y operaciones administrativas. Go ofrece ejecución rápida, bajo consumo de
+  memoria y concurrencia eficiente, características apropiadas para un servicio con gran
+  cantidad de solicitudes de lectura. Su tipado estático también ayuda a mantener
+  consistentes los modelos del contenido.
 
-**Go** se eligio para `catalogo` y `streaming` porque ofrece buen rendimiento, binarios livianos, concurrencia nativa y una integracion fuerte con gRPC. Esto es util para servicios que pueden recibir muchas consultas, como busqueda de catalogo, detalles de contenido y progreso de reproduccion.
+- **Streaming — Go:** gestiona historial de reproducción, progreso y generación de URLs
+  para videos. Se eligió Go por su rendimiento, tiempos de respuesta predecibles y buen
+  manejo de operaciones concurrentes. También produce binarios pequeños, convenientes
+  para construir imágenes Docker ligeras y ejecutar múltiples instancias.
 
-### ¿Para que?
+- **Cobros — TypeScript:** procesa transacciones, recibos y comunicación con Divisas y
+  Notificaciones. TypeScript permite modelar montos, estados y respuestas con tipos
+  explícitos, reduciendo errores asociados con datos financieros. Node.js resulta
+  adecuado para coordinar varias operaciones de red y llamadas gRPC.
 
-La seleccion de lenguajes permite que el sistema sea modular, escalable y mantenible. Cada microservicio puede evolucionar de forma independiente, sin obligar a que todo el backend use una sola tecnologia.
+- **Divisas — TypeScript:** integra una API externa, PostgreSQL y Redis. Este servicio
+  realiza principalmente operaciones de entrada/salida, por lo que el modelo asíncrono de
+  Node.js permite esperar respuestas HTTP o accesos a caché sin bloquear el proceso.
+  TypeScript define claramente las monedas, tasas y resultados de conversión.
 
-Tambien facilita distribuir el trabajo del equipo, ya que cada grupo puede enfocarse en el lenguaje y estructura mas adecuada para su servicio:
+- **Notificaciones — TypeScript:** se conecta con un proveedor SMTP y recibe solicitudes
+  gRPC desde otros servicios. Node.js dispone de librerías maduras como Nodemailer y es
+  apropiado para tareas de red. TypeScript ayuda a validar las distintas estructuras de
+  correos, recibos y alertas.
 
-- Python para servicios de negocio y autenticacion.
-- Go para servicios de alto rendimiento y consulta.
-- TypeScript para frontend, integraciones y servicios orientados a eventos o comunicacion externa.
+- **API Gateway — TypeScript:** concentra validación JWT, reglas de rutas y proxy HTTP.
+  Se eligió TypeScript porque permite definir de forma segura los destinos y la
+  configuración del gateway. El modelo asíncrono de Node.js es adecuado para reenviar
+  numerosas solicitudes de red con poca lógica computacional.
 
-## 2. Framework de desarrollo
+- **Frontend — TypeScript:** la interfaz maneja cuentas, perfiles, planes, contenido,
+  pagos y respuestas de múltiples APIs. El tipado permite detectar durante la compilación
+  inconsistencias entre los datos esperados y los datos recibidos, mejorando la
+  mantenibilidad de los componentes React.
 
-## 2.1 Frontend
+El uso combinado de los tres lenguajes también satisface el requisito de construir un
+backend políglota sin perder interoperabilidad, debido a que la comunicación se define
+mediante contratos Protocol Buffers.
 
-### ¿Que?
+### ¿Para qué?
 
-En el frontend se utilizo:
+Esta distribución permite que cada microservicio evolucione y se despliegue de forma
+independiente. También ayuda a separar responsabilidades, reducir el acoplamiento y
+aprovechar las fortalezas particulares de cada lenguaje.
 
-- **React** como libreria principal de interfaz.
-- **Vite** como herramienta de desarrollo y construccion.
-- **TypeScript** para tipado.
-- **React Router** para navegacion.
-- **Tailwind CSS** como soporte de estilos.
+## 2. Frameworks y herramientas de desarrollo
 
-### ¿Por que?
+### ¿Qué?
 
-React se eligio porque facilita construir interfaces basadas en componentes reutilizables. Esto es importante en una plataforma como Quetzal TV, donde se necesitan vistas como login, catalogo, perfiles, planes, pagos y paneles de usuario.
+Las principales herramientas utilizadas son:
 
-Vite se eligio porque ofrece un entorno de desarrollo rapido, recarga agil y un proceso de build simple. Esto mejora la productividad durante el desarrollo.
+- **React:** construcción de la interfaz web.
+- **Vite:** servidor de desarrollo y empaquetado del frontend.
+- **React Router:** navegación entre vistas públicas, privadas y administrativas.
+- **Tailwind CSS:** estilos y diseño visual del frontend.
+- **FastAPI:** APIs HTTP de los servicios Python.
+- **Pydantic:** validación y configuración en los servicios Python.
+- **Node.js:** entorno de ejecución del API Gateway y servicios TypeScript.
+- **API HTTP nativa de Node.js:** implementación del API Gateway, sin Express o NestJS.
+- **net/http:** endpoints HTTP de Catálogo y Streaming en Go.
+- **gRPC y Protocol Buffers:** comunicación tipada entre microservicios.
+- **Docker y Docker Compose:** construcción y ejecución reproducible de contenedores.
+- **Kubernetes:** orquestación del entorno de `release`.
 
-TypeScript ayuda a detectar errores antes de ejecutar la aplicacion, especialmente al consumir respuestas del backend o manejar estructuras como usuarios, planes, pagos y contenido.
+### ¿Por qué?
 
-React Router permite organizar la navegacion entre pantallas del sistema, y Tailwind CSS permite crear estilos de forma rapida y consistente.
+React permite dividir la interfaz en componentes reutilizables. Vite reduce el tiempo de
+compilación durante el desarrollo y genera los archivos optimizados del frontend.
+FastAPI y Pydantic permiten crear APIs tipadas y validar solicitudes con poco código
+repetitivo.
 
-### ¿Para que?
+El API Gateway utiliza las librerías HTTP nativas de Node.js porque sus responsabilidades
+principales son validar JWT, reescribir rutas y actuar como proxy, sin requerir un
+framework web adicional. Los servicios Go también utilizan herramientas estándar junto
+con gRPC para conservar una implementación ligera.
 
-Estas herramientas permiten construir una interfaz web moderna, mantenible y facil de escalar. El frontend puede comunicarse con el API Gateway y consumir los servicios del backend sin depender directamente de la implementacion interna de cada microservicio.
+Docker normaliza los entornos de Python, Go, Node.js, PostgreSQL y Redis. Kubernetes se
+utiliza en `release` para administrar pods, servicios, recursos, sondas de salud,
+actualizaciones progresivas y recuperación automática.
 
-La combinacion React + Vite + TypeScript ayuda a entregar una experiencia de usuario fluida y a mantener el codigo organizado por componentes.
+### ¿Para qué?
 
-## 2.2 Backend
+Estas herramientas permiten construir, probar y desplegar la plataforma con componentes
+modulares. El frontend consume un único API Gateway; los microservicios mantienen
+contratos claros; y los mismos artefactos Docker pueden ejecutarse en Compute Engine o
+GKE.
 
-### ¿Que?
+## 3. Mapeo de lenguajes y frameworks
 
-En el backend se utilizaron distintos frameworks y herramientas segun el lenguaje:
+| Componente | Lenguaje | Frameworks o librerías principales | Responsabilidad |
+| --- | --- | --- | --- |
+| Frontend | TypeScript | React, Vite, React Router, Tailwind CSS | Interfaces de usuario y administración |
+| API Gateway | TypeScript | Node.js HTTP, `jsonwebtoken` | Punto de entrada, validación JWT y proxy |
+| Usuarios | Python | FastAPI, Pydantic, PyJWT, gRPC, psycopg | Cuentas, autenticación, sesiones y perfiles |
+| Suscripción | Python | FastAPI, Pydantic, PyJWT, gRPC, psycopg | Planes, suscripciones y cambios de plan |
+| Catálogo | Go | gRPC, `net/http`, pgx, Google Cloud Storage SDK | Catálogo, calificaciones, CRUD y archivos multimedia |
+| Streaming | Go | gRPC, `net/http`, pgx, Google Cloud Storage SDK | Historial, progreso y URLs de reproducción |
+| Cobros | TypeScript | Node.js, gRPC, PostgreSQL `pg` | Transacciones, pagos y recibos |
+| Divisas | TypeScript | Node.js, gRPC, Axios, PostgreSQL `pg`, Redis | Tasas de cambio y caché con TTL |
+| Notificaciones | TypeScript | Node.js, gRPC, Nodemailer, PostgreSQL `pg` | Correos y registro de notificaciones |
 
-- **FastAPI** en los servicios Python `usuario` y `suscripcion`.
-- **gRPC** para comunicacion entre microservicios.
-- **Node.js con TypeScript** para `cobros`, `notificaciones` y `divisas`.
-- **Go con gRPC y net/http** para `catalogo` y `streaming`.
-- **Docker Compose** para levantar el entorno local y preparar despliegues por contenedores.
+### ¿Por qué?
 
-### ¿Por que?
+El mapeo asigna Python a servicios con validaciones y reglas de cuenta; Go a dominios que
+gestionan consultas y recursos multimedia; y TypeScript a la capa de presentación,
+enrutamiento e integraciones.
 
-FastAPI se eligio porque permite crear APIs HTTP de forma rapida, con validacion automatica mediante Pydantic y soporte claro para dependencias, configuracion, autenticacion y documentacion.
+### ¿Para qué?
 
-gRPC se eligio porque permite definir contratos estrictos entre microservicios mediante archivos `.proto`. Esto reduce errores de integracion y facilita que servicios escritos en diferentes lenguajes se comuniquen de forma consistente.
+La matriz documenta con precisión dónde se utiliza cada tecnología y permite demostrar
+que la distribución políglota no es arbitraria, sino que responde a las responsabilidades
+de cada componente.
 
-Node.js con TypeScript se uso en servicios donde era necesario integrar comunicacion HTTP, gRPC, correo, conversion de divisas y procesamiento de pagos. TypeScript mejora la seguridad del codigo al trabajar con tipos para transacciones, recibos y notificaciones.
+## 4. Herramienta de automatización CI/CD
 
-Go se uso en servicios donde se busca eficiencia y bajo consumo de recursos. Su integracion con gRPC permite crear servicios rapidos y faciles de desplegar como binarios dentro de contenedores.
+### ¿Qué?
 
-Docker Compose se eligio porque permite levantar todo el ecosistema de microservicios, bases de datos y dependencias con comandos reproducibles.
+Se utiliza **GitHub Actions** mediante tres workflows:
 
-### ¿Para que?
+- `ci.yml`: pruebas unitarias y cobertura.
+- `cd-develop.yml`: construcción y despliegue de `develop` en Compute Engine.
+- `cd-release.yml`: versionamiento semántico y despliegue de `release` en GKE.
 
-Estas herramientas permiten implementar una arquitectura de microservicios donde cada servicio tiene responsabilidades claras:
+El pipeline utiliza además Docker Buildx, Google Artifact Registry, GCS, SSH y `kubectl`.
 
-- `usuario`: autenticacion, cuentas, sesiones y perfiles.
-- `suscripcion`: planes y suscripciones.
-- `catalogo`: contenido, busqueda, generos, episodios y calificaciones.
-- `streaming`: progreso e historial de reproduccion.
-- `cobros`: pagos, transacciones y recibos.
-- `notificaciones`: envio y registro de correos.
-- `divisas`: conversion de monedas y cache.
+### ¿Por qué?
 
-El uso de gRPC, HTTP y Docker permite que el sistema sea integrable, desplegable y mantenible en entornos locales o en nube.
+GitHub Actions se integra directamente con el repositorio, Pull Requests, ramas y
+secretos. Permite ejecutar pruebas de Python, Go y TypeScript en jobs independientes y
+aplicar una puerta de calidad con cobertura mínima del **75 %**.
 
-## 3. Sistema de bases de datos
+También centraliza el proceso de construcción y despliegue, evitando que cada integrante
+publique imágenes o modifique manualmente la infraestructura con configuraciones
+diferentes.
 
-### ¿Que?
+### ¿Para qué?
 
-Se utilizo **PostgreSQL** como sistema principal de base de datos relacional. Ademas, el proyecto contempla el uso de **Redis** como cache en el servicio de divisas.
+El pipeline automatiza:
 
-La arquitectura aplica el patron **Database per Microservice**, por lo que cada microservicio posee su propia base de datos o esquema separado:
+1. Descarga del código.
+2. Instalación de dependencias.
+3. Pruebas unitarias y validación de cobertura.
+4. Backup de las siete bases PostgreSQL hacia GCS.
+5. Construcción de nueve imágenes Docker.
+6. Publicación en Artifact Registry.
+7. Despliegue de `develop` en cuatro VMs de Compute Engine.
+8. Creación de tags `v2.x.0` y despliegue de `release` en GKE.
+9. Verificación del rollout y rollback automático en Kubernetes.
+
+Docker Hub no funciona como registro del proyecto. Solo se autentica durante el build
+para evitar límites al descargar imágenes base. Las imágenes propias se almacenan en
+**Artifact Registry**.
+
+> **Observación técnica:** los workflows actuales de CD se disparan directamente con el
+> `push` a `develop` o `release`. Para garantizar completamente el cortocircuito exigido,
+> deben condicionarse al resultado exitoso del workflow de CI o proteger las ramas para
+> impedir el merge cuando falle la puerta de calidad.
+
+## 5. Ecosistema de base de datos
+
+### ¿Qué?
+
+Se utiliza **PostgreSQL** como base de datos relacional y **Redis** como caché. La
+arquitectura aplica el patrón **Database per Microservice** con siete bases:
 
 - `quetzal_usuario`
 - `quetzal_suscripcion`
 - `quetzal_catalogo`
 - `quetzal_streaming`
 - `quetzal_cobros`
+- `quetzal_divisas`
 - `quetzal_notificaciones`
 
-### ¿Por que?
+Cada base PostgreSQL contiene triggers y una tabla propia de auditoría. Redis se utiliza
+únicamente como caché del servicio de Divisas y se excluye de los backups.
 
-PostgreSQL se eligio porque es un motor relacional robusto, estable y ampliamente usado en sistemas transaccionales. Permite manejar relaciones, restricciones, llaves foraneas, indices, tipos personalizados, procedimientos almacenados y transacciones.
+### ¿Por qué?
 
-Esto es importante para Quetzal TV porque el sistema maneja datos sensibles y estructurados, como cuentas de usuario, sesiones, perfiles, planes, suscripciones, pagos, recibos, contenido y progreso de reproduccion.
+PostgreSQL proporciona transacciones, integridad referencial, índices, funciones,
+procedimientos, vistas y triggers. Estas capacidades son necesarias para cuentas,
+suscripciones, pagos, contenido, historial y auditoría.
 
-El patron **Database per Microservice** se eligio para evitar que los servicios compartan tablas directamente. Cada servicio es dueno de sus datos y se comunica con otros servicios usando identificadores y contratos, no accediendo a sus bases internas.
+El patrón Database per Microservice evita que un servicio modifique directamente las
+tablas de otro. Redis se eligió porque las tasas de cambio son consultadas repetidamente y
+pueden conservarse temporalmente mediante TTL.
 
-Redis se contempla para `divisas` porque las tasas de cambio pueden consultarse muchas veces y no siempre necesitan ir directamente a la API externa. Un cache reduce latencia y evita llamadas innecesarias.
+### ¿Para qué?
 
-### ¿Para que?
+PostgreSQL mantiene la información operacional y registra los cambios de `INSERT`,
+`UPDATE` y `DELETE` en tablas de auditoría. Redis reduce la latencia y el consumo del
+proveedor externo de divisas.
 
-PostgreSQL permite garantizar integridad, consistencia y persistencia de la informacion principal del sistema. Por ejemplo:
+En ambos entornos cloud, las bases PostgreSQL se ejecutan en contenedores dentro de una VM
+de Compute Engine. GitHub Actions ejecuta `pg_dump` sobre las siete bases y guarda los
+respaldos comprimidos en un bucket privado de GCS.
 
-- Usuarios conserva cuentas, sesiones y perfiles.
-- Suscripcion conserva planes y suscripciones activas.
-- Catalogo conserva peliculas, series, generos, episodios y calificaciones.
-- Streaming conserva el historial y progreso de reproduccion.
-- Cobros conserva transacciones y recibos.
-- Notificaciones conserva el historial de correos enviados o fallidos.
+## 6. Servicios de nube utilizados
 
-La separacion de bases por microservicio permite escalar y desplegar servicios de forma independiente. Tambien reduce el acoplamiento: si un servicio cambia su estructura interna de datos, los demas no deben modificarse mientras se mantengan los contratos de comunicacion.
+### ¿Qué?
 
-En despliegue local, PostgreSQL puede ejecutarse como contenedor. En nube, la documentacion del proyecto plantea usar instancias administradas como Cloud SQL por microservicio o contenedores PostgreSQL separados por servicio dentro de la red privada de GCP, manteniendo secretos fuera del repositorio mediante variables de entorno o Secret Manager.
+La plataforma utiliza los siguientes servicios de **Google Cloud Platform**:
 
+- **Compute Engine:** cuatro VMs para el entorno `develop` y una VM para las bases de
+  datos utilizadas por `release`.
+- **Google Kubernetes Engine:** clúster Kubernetes para la rama `release`.
+- **Artifact Registry:** registro privado de imágenes Docker.
+- **Google Cloud Storage:** bucket multimedia y bucket de backups.
+- **VPC y reglas de firewall:** comunicación privada y restricción de puertos.
+- **Service Accounts / Workload Identity:** acceso de los servicios a recursos de GCP.
+- **Ingress de GKE:** único acceso externo al clúster.
 
-## 4. Autenticacion y seguridad con JWT
+### ¿Por qué?
 
-### ¿Que?
+GCP es el proveedor obligatorio del proyecto y ofrece los servicios necesarios para
+ejecutar los dos entornos. Compute Engine permite demostrar un despliegue distribuido
+basado en VMs y Docker Compose. GKE añade orquestación, descubrimiento interno,
+RollingUpdate, probes y rollback.
 
-Se utilizo **JWT (JSON Web Token)** como mecanismo principal para autenticar solicitudes protegidas. El servicio `usuario` genera el token al iniciar sesion o registrarse, y el **API Gateway** lo valida antes de permitir el acceso a rutas protegidas.
+Artifact Registry mantiene las imágenes privadas y versionadas. GCS desacopla los videos
+y portadas del sistema de archivos de los contenedores y conserva respaldos fuera de la
+VM de bases de datos.
 
-En el proyecto se configura mediante variables como:
+### ¿Para qué?
 
-- `JWT_SECRET`
-- `JWT_ALGORITHM`
-- `JWT_EXPIRE_MINUTES`
+- `develop` se despliega en Compute Engine con imágenes `develop-SHA`.
+- `release` se despliega en GKE con tags semánticos `v2.x.0`.
+- Artifact Registry distribuye las mismas imágenes verificadas a ambos entornos.
+- El bucket multimedia almacena portadas, trailers y episodios.
+- El bucket de backups protege las copias de las bases operacionales.
+- La VPC evita exponer directamente microservicios y PostgreSQL.
+- Ingress concentra el tráfico público hacia frontend y API Gateway.
 
-### ¿Por que?
+## 7. Seguridad: autenticación y autorización
 
-JWT se eligio porque encaja bien con una arquitectura de microservicios. En lugar de que cada servicio tenga que consultar constantemente la base de datos de usuarios para saber quien hace una peticion, el token transporta informacion firmada, como el identificador de cuenta, correo, rol y sesion.
+### ¿Qué?
 
-Tambien permite que el **API Gateway** actue como primera capa de seguridad. En el codigo del gateway, las rutas publicas como login y registro no requieren token, pero las rutas protegidas validan el encabezado `Authorization: Bearer <token>` antes de reenviar la solicitud al microservicio correspondiente.
+La implementación utiliza:
 
-Esto reduce acoplamiento porque los microservicios no necesitan compartir tablas de sesiones o usuarios. Solo necesitan confiar en un token firmado con el mismo secreto configurado.
+- **JWT firmado con HS256** para autenticación.
+- Encabezado `Authorization: Bearer <token>` para solicitudes protegidas.
+- **API Gateway** como punto central de validación para rutas externas.
+- Claims como `sub`, `role` y `session_id`.
+- Control de acceso por roles para diferenciar usuarios y administradores.
+- Hash de contraseñas antes de almacenarlas.
+- Variables de entorno, GitHub Secrets y Kubernetes Secrets para datos sensibles.
+- ConfigMaps para configuración no sensible.
+- URLs firmadas de GCS para cargar o consumir archivos.
+- Red privada y reglas de firewall para los servicios internos.
 
-### ¿Para que?
+### ¿Por qué?
 
-JWT se usa para:
+JWT permite propagar identidad entre componentes sin compartir directamente las tablas de
+Usuarios. La firma evita que el cliente modifique los claims y el rol permite aplicar
+autorización sobre operaciones administrativas.
 
-- Proteger rutas privadas del sistema.
-- Propagar identidad del usuario entre frontend, API Gateway y servicios internos.
-- Diferenciar acciones de usuarios y administradores mediante claims como `role`.
-- Evitar que el cliente acceda directamente a microservicios internos.
-- Mantener una autenticacion compatible con HTTP y con una arquitectura distribuida.
+El API Gateway reduce la superficie pública porque actúa como punto único de entrada.
+Separar configuración y secretos evita almacenar contraseñas, llaves JWT y credenciales
+en el código o en los manifiestos versionados.
 
-Con esta decision, el sistema puede validar usuarios de forma centralizada y mantener los microservicios desacoplados.
+Las URLs firmadas permiten acceder temporalmente a objetos privados de GCS sin hacer
+público el bucket ni compartir credenciales con el navegador.
 
+### ¿Para qué?
 
-## 5. Docker y Docker Compose
+Estos mecanismos sirven para:
 
-### ¿Que?
+- autenticar al usuario;
+- proteger las rutas privadas;
+- permitir acciones administrativas únicamente al rol autorizado;
+- propagar la identidad hacia los servicios;
+- proteger credenciales de PostgreSQL, SMTP, JWT y GCS;
+- evitar acceso público directo a microservicios y bases de datos;
+- limitar temporalmente el acceso a videos, portadas y cargas multimedia.
 
-Se utilizo **Docker** para contenerizar el frontend, el API Gateway, los microservicios y las bases de datos. Se uso **Docker Compose** para levantar el entorno completo en local y para organizar despliegues en nube por VM.
+Actualmente la aplicación utiliza JWT Bearer como mecanismo implementado. No se encontró
+un flujo OAuth ni una sesión basada en cookies `HttpOnly`; por tanto, no se documentan
+como mecanismos activos.
 
-El proyecto maneja archivos como:
+## 8. GitHub Actions — Automatización CI/CD
 
-- `docker-compose.local.yml` para desarrollo local.
-- `docker-compose.cloud-vm1.yml`, `docker-compose.cloud-vm2.yml`, `docker-compose.cloud-vm3.yml` y `docker-compose.cloud-vm4.yml` para despliegue distribuido en GCP.
-- `Dockerfile` por servicio para definir como construir cada contenedor.
+### ¿Qué?
 
-### ¿Por que?
+Se utiliza **GitHub Actions** como herramienta de automatización para el pipeline de
+Integración y Despliegue Continuo. La configuración se encuentra versionada en
+`.github/workflows/` y se divide en:
 
-Docker se eligio porque cada microservicio usa tecnologias distintas: Python, Go, TypeScript, PostgreSQL, Redis y Nginx. Si se instalaran todas directamente en una maquina, el entorno seria dificil de replicar y propenso a errores de configuracion.
+- `ci.yml`: ejecuta las pruebas unitarias de los ocho componentes backend y valida una
+  cobertura mínima del 75 %.
+- `cd-develop.yml`: construye las nueve imágenes y despliega la rama `develop` en las
+  VMs de Compute Engine.
+- `cd-release.yml`: genera el tag semántico, construye las imágenes, realiza el backup,
+  despliega en GKE y ejecuta rollback cuando el rollout falla.
 
-Con Docker, cada servicio viaja con sus dependencias, version de runtime y configuracion base. Esto ayuda a que el sistema se ejecute igual en diferentes computadoras o servidores.
+### ¿Por qué?
 
-Docker Compose se eligio porque simplifica la ejecucion de varios contenedores relacionados. En una arquitectura de microservicios no se levanta solo una aplicacion, sino varios servicios, bases de datos, gateway, cache y frontend.
+Se eligió porque el código ya se administra en GitHub y la automatización puede mantenerse
+en el mismo repositorio mediante archivos YAML. Esto permite revisar los cambios del
+pipeline mediante Pull Requests y evita depender de un servidor de integración externo.
 
-### ¿Para que?
+GitHub Actions también dispone de acciones oficiales para autenticarse con Google Cloud,
+configurar Docker, obtener credenciales de GKE y publicar artefactos de cobertura.
 
-Docker y Docker Compose sirven para:
+### ¿Para qué?
 
-- Ejecutar el proyecto completo con comandos reproducibles.
-- Aislar dependencias por servicio.
-- Evitar conflictos entre versiones de Python, Node.js, Go o PostgreSQL.
-- Facilitar el despliegue en GCP usando los mismos contenedores.
-- Separar el entorno local del entorno de produccion mediante archivos Compose distintos.
-- Definir variables de entorno, puertos, volumenes y redes de forma declarativa.
+GitHub Actions automatiza las pruebas, la validación de cobertura, los backups, la
+construcción y publicación de imágenes y el despliegue de los dos entornos. También
+centraliza el uso de secretos para evitar que las credenciales de GCP, PostgreSQL, SMTP y
+SSH se almacenen en el repositorio.
 
-Ademas, los Dockerfiles de servicios Go usan un contexto de build basado en `backend/` porque necesitan acceder tanto al codigo del servicio como a los contratos `proto/`.
+## 9. Kubernetes y Google Kubernetes Engine
 
+### ¿Qué?
 
-## 6. Despliegue en Google Cloud Platform (GCP)
+Se utiliza **Google Kubernetes Engine (GKE)** para orquestar el entorno de la rama
+`release`. Los recursos se despliegan dentro del namespace `quetzaltv-prod` mediante
+manifiestos YAML almacenados en `k8s/`.
 
-### ¿Que?
+El clúster ejecuta diez componentes:
 
-Se decidio desplegar la solucion en **Google Cloud Platform (GCP)** usando maquinas virtuales y contenedores Docker. La documentacion del proyecto plantea una separacion por responsabilidades:
+- frontend;
+- API Gateway;
+- siete microservicios;
+- Redis.
 
-- VM para servicios principales.
-- VM para servicios complementarios.
-- VM para bases de datos.
-- VM publica para frontend y API Gateway.
+Las bases PostgreSQL permanecen fuera del clúster, en una VM de Compute Engine.
 
-En el despliegue cloud, el **API Gateway** es el unico punto de entrada publico. Los microservicios y bases de datos quedan comunicados por IPs internas dentro de la red de GCP.
+### ¿Por qué?
 
-### ¿Por que?
+Kubernetes proporciona capacidades que Docker Compose no ofrece por sí solo:
 
-GCP se eligio porque permite desplegar una arquitectura distribuida de forma realista, usando recursos de nube y separacion de red. Para un proyecto de microservicios, no basta con ejecutar todo localmente; es importante demostrar que la solucion puede operar en un ambiente similar a produccion.
+- actualización progresiva mediante `RollingUpdate`;
+- recuperación de contenedores;
+- sondas `liveness` y `readiness`;
+- servicios internos para descubrimiento;
+- aislamiento mediante namespaces;
+- límites y solicitudes de CPU y memoria;
+- configuración declarativa versionada.
 
-La separacion en VMs permite organizar la carga:
+Todos los Deployments están configurados con `maxUnavailable: 0` y `maxSurge: 1`, de
+modo que se crea una instancia nueva antes de retirar la anterior. No se afirma que el
+clúster use modalidad Autopilot porque esa configuración no está registrada en el
+repositorio.
 
-- El frontend y API Gateway concentran el trafico externo.
-- Los microservicios quedan detras del gateway.
-- Las bases de datos se mantienen aisladas y accesibles solo desde la red interna.
+### ¿Para qué?
 
-Tambien se justifica porque GCP ofrece servicios que pueden fortalecer la arquitectura:
+GKE se utiliza para ejecutar la versión de `release` con actualizaciones sin interrupción,
+supervisar la salud de los pods y restaurar la versión anterior cuando el rollout falla.
+El recurso Ingress constituye el único acceso externo y dirige el tráfico al API Gateway,
+sin exponer individualmente los microservicios.
 
-- **Compute Engine** para ejecutar VMs con Docker.
-- **Cloud SQL** como alternativa administrada para PostgreSQL.
-- **Artifact Registry** para almacenar imagenes Docker preconstruidas.
-- **Secret Manager** para manejar secretos sin guardarlos en el repositorio.
-- **VPC y reglas de firewall** para restringir acceso a servicios internos.
+## 10. Google Artifact Registry
 
-### ¿Para que?
+### ¿Qué?
 
-GCP se usa para demostrar que Quetzal TV puede ejecutarse fuera del ambiente local y cumplir con un despliegue en nube. Esto permite:
+Se utiliza **Google Artifact Registry** como registro privado para las nueve imágenes
+Docker del proyecto. El repositorio se denomina `quetzaltv` y su dirección se construye
+durante el pipeline con:
 
-- Publicar el frontend y API Gateway en una direccion accesible.
-- Mantener los microservicios protegidos dentro de la red privada.
-- Restringir los puertos de bases de datos para que no esten expuestos a internet.
-- Separar secretos de configuracion del codigo fuente.
-- Escalar servicios de forma independiente si aumenta la demanda.
-- Preparar una futura migracion hacia servicios administrados como Cloud SQL o Artifact Registry.
+```text
+<región>-docker.pkg.dev/<proyecto-gcp>/quetzaltv/<servicio>:<versión>
+```
 
-La decision tambien ayuda a cumplir el criterio de una arquitectura preparada para produccion, con separacion entre entorno local y entorno cloud.
+En `develop` se utilizan tags `develop-<SHA>` y en `release` tags semánticos `v2.x.0`.
 
+### ¿Por qué?
 
-## 7. Comunicacion interna con gRPC
+Artifact Registry se integra de forma nativa con Compute Engine, GKE y las cuentas de
+servicio de Google Cloud. Permite mantener las imágenes privadas, versionadas y cercanas
+a la infraestructura que las consume.
 
-### ¿Que?
+También evita utilizar Docker Hub como registro de las imágenes propias. Docker Hub se
+consulta únicamente para descargar imágenes base durante la construcción.
 
-Se eligio **gRPC** para la comunicacion interna entre microservicios. Los contratos se definen mediante archivos `.proto`, ubicados en `backend/proto/<servicio>/v1/`.
+### ¿Para qué?
 
-### ¿Por que?
+Artifact Registry almacena las imágenes producidas por GitHub Actions y funciona como
+fuente para los despliegues de Compute Engine y GKE. Los tags inmutables permiten
+identificar qué versión se ejecuta y recuperar imágenes anteriores durante un rollback.
 
-gRPC se eligio porque permite crear contratos estrictos entre servicios escritos en diferentes lenguajes. En Quetzal TV hay servicios en Python, Go y TypeScript, por lo que era necesario un mecanismo de comunicacion independiente del lenguaje.
+## 11. Google Cloud Storage
 
-Al definir mensajes y operaciones en `.proto`, cada servicio sabe exactamente que datos debe enviar y recibir. Esto evita errores comunes de integracion y facilita generar codigo cliente/servidor.
+### ¿Qué?
 
-Tambien es mas eficiente que usar solo JSON/REST para llamadas internas frecuentes, especialmente en servicios que pueden tener consultas recurrentes como catalogo, streaming, suscripcion o pagos.
+Se utiliza **Google Cloud Storage (GCS)** mediante dos propósitos separados:
 
-### ¿Para que?
+- bucket multimedia `quetzal-tv-streaming`, para portadas, trailers y videos de
+  episodios;
+- bucket privado de backups, cuyo nombre se configura mediante el secreto
+  `GCS_BACKUP_BUCKET`.
 
-gRPC se usa para:
+Catálogo y Streaming utilizan el SDK de Cloud Storage y URLs firmadas. El pipeline utiliza
+`gsutil` para almacenar los respaldos comprimidos.
 
-- Comunicar microservicios de forma tipada.
-- Mantener contratos claros entre equipos.
-- Evitar dependencia directa entre bases de datos.
-- Permitir que servicios escritos en distintos lenguajes colaboren.
-- Separar la comunicacion interna del API publico consumido por el frontend.
+### ¿Por qué?
 
-Con esta decision, el sistema mantiene una integracion ordenada entre microservicios sin compartir logica de negocio ni tablas.
+Los contenedores y pods son reemplazables, por lo que su sistema de archivos no es
+adecuado para conservar archivos multimedia. GCS desacopla esos objetos del ciclo de vida
+de la aplicación y permite que varias instancias consulten la misma fuente persistente.
 
-[Volver a Documentación](../Documentación.md)
+Las URLs firmadas permiten transferir archivos directamente entre el navegador y GCS
+durante un periodo limitado, sin hacer público el bucket ni enviar todo el contenido
+binario a través del microservicio.
 
+El bucket de backups mantiene las copias fuera de la VM que aloja PostgreSQL, reduciendo
+el riesgo de perder simultáneamente la base operacional y su respaldo.
 
-# Redis
+### ¿Para qué?
 
-## ¿Qué?
+GCS se utiliza para:
 
-Se utilizó **Redis** como sistema de caché principalmente en el microservicio `divisas`.
+- almacenar portadas, trailers y episodios;
+- generar URLs firmadas de carga para administradores;
+- generar URLs temporales de lectura para el reproductor;
+- conservar los `pg_dump` de las siete bases PostgreSQL;
+- mantener disponibles los archivos aunque los contenedores o pods sean reemplazados.
 
-Redis es una base de datos en memoria extremadamente rápida, diseñada para almacenar datos temporales como sesiones, tokens, resultados frecuentes o información que cambia constantemente.
+## Conclusión
 
-En Quetzal TV, Redis se contempla para guardar temporalmente las tasas de cambio obtenidas desde APIs externas de divisas.
-
----
-
-## ¿Por qué?
-
-Redis se eligió porque las conversiones de moneda pueden ser consultadas muchas veces en poco tiempo y no es eficiente hacer solicitudes repetidas a una API externa cada vez que un usuario consulta precios o realiza pagos.
-
-Al trabajar en memoria:
-
-* Las respuestas son mucho más rápidas.
-* Se reduce la latencia del sistema.
-* Se disminuye la carga sobre APIs externas.
-* Se evitan límites de consumo o bloqueos del proveedor de divisas.
-* Se mejora el rendimiento general del microservicio.
-
-Además, Redis encaja muy bien en arquitecturas de microservicios porque funciona como un componente desacoplado y ligero.
-
-En la estructura del proyecto también se especifica que Redis solo debe utilizarse donde realmente sea necesario, como en `divisas`.
-
----
-
-## ¿Para qué?
-
-Redis se utiliza para:
-
-* Guardar temporalmente tasas de cambio de monedas.
-* Evitar consultas repetitivas hacia APIs externas.
-* Mejorar tiempos de respuesta en conversiones monetarias.
-* Reducir costos y consumo de servicios externos.
-* Mantener información temporal de acceso frecuente.
-
-Por ejemplo:
-
-1. El servicio `divisas` consulta una tasa USD → GTQ.
-2. Guarda el resultado en Redis durante cierto tiempo (TTL).
-3. Las siguientes solicitudes reutilizan el valor almacenado.
-4. Cuando expira el tiempo, el servicio vuelve a consultar la API externa y actualiza el caché.
-
-Esto permite que Quetzal TV tenga conversiones de moneda rápidas y eficientes sin depender constantemente de servicios externos.
-
-
-
-# Despliegue en la nube con 4 VMs
-
-## ¿Qué?
-
-Se implementó una arquitectura distribuida utilizando **4 máquinas virtuales (VMs)** en Google Cloud Platform (GCP).
-
-Cada VM fue diseñada para cumplir responsabilidades específicas dentro del sistema:
-
-* **VM1:** servicios principales (`usuario`, `suscripcion`, `catalogo`)
-* **VM2:** servicios complementarios (`divisas`, `cobros`, `notificaciones`, `streaming`, `Redis`)
-* **VM3:** bases de datos PostgreSQL
-* **VM4:** API Gateway y frontend React
-
-La comunicación entre VMs se realiza mediante una red privada interna de GCP.
-
----
-
-## ¿Por qué?
-
-Se eligió una distribución en múltiples VMs para evitar concentrar todo el sistema en un único servidor, lo cual podría generar cuellos de botella, problemas de seguridad y mayor impacto ante fallos.
-
-La separación por responsabilidades permite:
-
-* Mejor organización de la infraestructura.
-* Aislamiento entre servicios.
-* Mayor seguridad en la red.
-* Escalabilidad independiente por componente.
-* Mejor control del tráfico interno y externo.
-
-También se decidió mantener únicamente el API Gateway y el frontend expuestos públicamente, mientras que los microservicios y bases de datos permanecen dentro de la red privada de GCP.
-
-Además, esta arquitectura se aproxima más a un entorno real de producción basado en microservicios distribuidos.
-
----
-
-## ¿Para qué?
-
-La separación en 4 VMs se utiliza para:
-
-* Distribuir la carga del sistema.
-* Proteger servicios internos y bases de datos.
-* Permitir despliegues independientes.
-* Facilitar mantenimiento y monitoreo.
-* Reducir el impacto de fallos en un solo componente.
-* Mantener comunicación privada entre microservicios mediante VPC interna.
-* Exponer únicamente el API Gateway al internet público.
-
-Esta arquitectura permite que Quetzal TV tenga una infraestructura más organizada, segura y preparada para escalar en un entorno cloud real.
-
+Las decisiones adoptadas mantienen coherencia entre desarrollo, persistencia, seguridad y
+despliegue. La arquitectura políglota aprovecha las fortalezas de Python, Go y TypeScript;
+PostgreSQL y Redis separan persistencia y caché; GitHub Actions automatiza las entregas; y
+GCP proporciona Compute Engine, GKE, Artifact Registry y Cloud Storage para ejecutar la
+plataforma en dos entornos diferenciados.
 
 [Volver a Documentación](../Documentación.md)

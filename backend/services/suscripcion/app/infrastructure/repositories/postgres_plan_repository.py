@@ -9,9 +9,14 @@ class PostgresPlanRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
 
-    def create(self, plan: Plan) -> Plan:
+    def create(self, plan: Plan, actor_account_id: str = "") -> Plan:
         with self._database.connection() as connection:
             with connection.cursor() as cursor:
+                if actor_account_id:
+                    cursor.execute(
+                        "SELECT set_config('app.usuario_accion', %s, true)",
+                        (actor_account_id,),
+                    )
                 cursor.execute(
                     """
                     INSERT INTO suscripciones.planes (

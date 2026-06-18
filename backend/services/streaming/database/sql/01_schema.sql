@@ -24,7 +24,7 @@ CREATE TABLE historial_reproduccion (
     progreso_segundos INTEGER NOT NULL DEFAULT 0,
     creado_en         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_historial_perfil_recurso UNIQUE (perfil_id, contenido_id, episodio_id),
+    CONSTRAINT uq_historial_perfil_recurso UNIQUE NULLS NOT DISTINCT (perfil_id, contenido_id, episodio_id),
     CONSTRAINT ck_progreso_segundos CHECK (progreso_segundos >= 0)
 );
 
@@ -33,6 +33,7 @@ CREATE TABLE instantaneas (
     tabla_origen   VARCHAR(100) NOT NULL,
     entidad_id     UUID NOT NULL,
     evento         evento_instantanea NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo   JSONB,
     usuario_accion UUID,
     fecha_evento   TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -52,18 +53,32 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NULL, v_actor);
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'perfil_id', to_jsonb(OLD)->>'perfil_id'), '')::UUID
+        );
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(OLD), to_jsonb(NEW), v_actor);
         RETURN NEW;
     ELSE
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', NULL, to_jsonb(NEW), v_actor);
         RETURN NEW;
     END IF;
 END;

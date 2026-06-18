@@ -42,6 +42,7 @@ CREATE TABLE contenidos (
     url_portada          TEXT,
     url_trailer          TEXT,
     creado_por_cuenta_id UUID,
+    alerta_publicacion_enviada_en TIMESTAMPTZ,
     creado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     eliminado_en         TIMESTAMPTZ,
@@ -105,6 +106,7 @@ CREATE TABLE instantaneas (
     tabla_origen  VARCHAR(100) NOT NULL,
     entidad_id    UUID NOT NULL,
     evento        evento_instantanea NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo  JSONB,
     usuario_accion UUID,
     fecha_evento  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -124,18 +126,70 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            OLD.id,
+            'eliminacion',
+            to_jsonb(OLD),
+            NULL,
+            v_actor
+        );
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'creado_por_cuenta_id', to_jsonb(OLD)->>'creado_por_cuenta_id'), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'perfil_id', to_jsonb(OLD)->>'perfil_id'), '')::UUID
+        );
+        IF to_jsonb(OLD)->>'eliminado_en' IS NULL
+           AND to_jsonb(NEW)->>'eliminado_en' IS NOT NULL THEN
+            INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+            VALUES (
+                TG_TABLE_NAME,
+                NEW.id,
+                'eliminacion',
+                to_jsonb(OLD),
+                NULL,
+                v_actor
+            );
+            RETURN NEW;
+        END IF;
+
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            NEW.id,
+            'actualizacion',
+            to_jsonb(OLD),
+            to_jsonb(NEW),
+            v_actor
+        );
         RETURN NEW;
     ELSE
-        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_nuevo)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW));
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (
+            TG_TABLE_NAME,
+            NEW.id,
+            'insercion',
+            NULL,
+            to_jsonb(NEW),
+            v_actor
+        );
         RETURN NEW;
     END IF;
 END;
@@ -184,7 +238,8 @@ SELECT
     c.fecha_lanzamiento,
     fn_porcentaje_recomendacion(c.id) AS porcentaje_recomendacion
 FROM contenidos c
-WHERE c.eliminado_en IS NULL;
+WHERE c.eliminado_en IS NULL
+  AND (c.fecha_lanzamiento IS NULL OR c.fecha_lanzamiento <= CURRENT_DATE);
 
 CREATE VIEW v_detalle_contenido AS
 SELECT
@@ -276,8 +331,12 @@ CREATE TRIGGER trg_snap_calificaciones
 -- =========================================================
 
 CREATE INDEX idx_contenidos_titulo     ON contenidos(titulo);
+CREATE INDEX idx_contenidos_alerta_publicacion
+    ON contenidos(fecha_lanzamiento)
+    WHERE eliminado_en IS NULL AND alerta_publicacion_enviada_en IS NULL;
 CREATE INDEX idx_temporadas_contenido  ON temporadas(contenido_id);
 CREATE INDEX idx_episodios_temporada   ON episodios(temporada_id);
 CREATE INDEX idx_calif_contenido       ON calificaciones(contenido_id);
 CREATE INDEX idx_calif_perfil          ON calificaciones(perfil_id);
 CREATE INDEX idx_snap_tabla            ON instantaneas(tabla_origen, entidad_id);
+CREATE INDEX idx_snap_fecha            ON instantaneas(fecha_evento DESC);

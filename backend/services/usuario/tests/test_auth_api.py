@@ -1,9 +1,39 @@
-from fastapi.testclient import TestClient
+import os
+
+import anyio
+import httpx
+
+os.environ["APP_ENV"] = "test"
+os.environ["NOTIFICATIONS_ENABLED"] = "false"
 
 from app.main import app
 
 
-client = TestClient(app)
+class ASGITestClient:
+    def request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        async def send() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+                response = await async_client.request(method, url, **kwargs)
+                await response.aread()
+                return response
+
+        return anyio.run(send)
+
+    def get(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("POST", url, **kwargs)
+
+    def patch(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("PATCH", url, **kwargs)
+
+    def delete(self, url: str, **kwargs) -> httpx.Response:
+        return self.request("DELETE", url, **kwargs)
+
+
+client = ASGITestClient()
 
 
 def test_register_login_and_me_flow() -> None:

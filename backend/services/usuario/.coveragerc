@@ -1,0 +1,13 @@
+[run]
+source = app
+omit =
+    # Repositorios postgres requieren DB real — no se pueden ejercitar en CI sin DB
+    app/infrastructure/repositories/postgres_*.py
+    app/infrastructure/database.py
+    # Código generado por protoc — no es código de la aplicación
+    app/interfaces/grpc/generated/**
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
