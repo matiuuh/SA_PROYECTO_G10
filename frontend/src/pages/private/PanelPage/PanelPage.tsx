@@ -320,7 +320,7 @@ export function PanelPage() {
   }, [catalogFilter, genreFilter])
 
   const searchPlaceholder = useMemo(() => {
-    if (genreFilter !== 'all') return `Buscar en ${genreFilter}...`
+    if (genreFilter !== 'all') return `Buscar por título`
     if (catalogFilter === 'pelicula') return 'Buscar peliculas por titulo o genero...'
     if (catalogFilter === 'serie') return 'Buscar series por titulo o genero...'
     return 'Buscar por titulo, categoria o genero...'
