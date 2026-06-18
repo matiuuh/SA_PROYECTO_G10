@@ -933,9 +933,9 @@ func (h *Handler) handleUploadTrailer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"upload_url":  uploadURL,
-		"object_name": objectName,
-		"method":      "PUT",
+		"upload_url":   uploadURL,
+		"object_name":  objectName,
+		"method":       "PUT",
 		"content_type": "video/mp4",
 	})
 }
@@ -1001,8 +1001,8 @@ func (h *Handler) handleUploadPoster(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"upload_url":   uploadURL,
-		"object_name": objectName,
-		"method":      "PUT",
+		"object_name":  objectName,
+		"method":       "PUT",
 		"content_type": req.ContentType,
 	})
 }
@@ -1050,14 +1050,17 @@ func (h *Handler) handleUploadEpisodeVideo(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"upload_url":   uploadURL,
-		"object_name": objectName,
-		"method":      "PUT",
+		"object_name":  objectName,
+		"method":       "PUT",
 		"content_type": "video/mp4",
 	})
 }
 
 func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 	if h.alerts == nil || content == nil {
+		return
+	}
+	if !isReleased(content.ReleaseDate) {
 		return
 	}
 
@@ -1068,6 +1071,10 @@ func (h *Handler) dispatchNewContentAlert(content *domain.Content) {
 
 		if err := h.alerts.DispatchNewContentAlert(ctx, contentCopy); err != nil {
 			log.Printf("[catalogo] fallo al despachar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
+			return
+		}
+		if err := h.svc.MarkPublicationAlertSent(ctx, contentCopy.ID); err != nil {
+			log.Printf("[catalogo] no se pudo marcar alerta de nuevo contenido para %q: %v", contentCopy.Title, err)
 		}
 	}()
 }

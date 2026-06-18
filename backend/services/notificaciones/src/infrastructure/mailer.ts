@@ -19,13 +19,15 @@ export const transporter = nodemailer.createTransport({
 });
 
 export async function sendMail(opts: {
-  to: string | string[];
+  to?: string | string[];
+  bcc?: string | string[];
   subject: string;
   html: string;
 }): Promise<void> {
   await transporter.sendMail({
     from: emailFrom,
     to: Array.isArray(opts.to) ? opts.to.join(', ') : opts.to,
+    bcc: Array.isArray(opts.bcc) ? opts.bcc.join(', ') : opts.bcc,
     subject: opts.subject,
     html: opts.html,
   });

@@ -359,25 +359,12 @@ async function registrarNotificacion(opts: {
   estado: 'enviado' | 'fallido';
   error_mensaje: string | null;
 }): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
+  const { rows } = await pool.query<{ p_id: string }>(
     `CALL sp_registrar_notificacion($1, $2, $3, $4, $5, NULL)`,
     [opts.tipo, opts.correo_destino, opts.asunto, opts.estado, opts.error_mensaje],
   );
-  // El procedimiento devuelve el id por parámetro OUT; si no hay fila, usamos query directo.
-  if (rows.length > 0 && rows[0]?.id) return rows[0].id;
-  const { rows: r2 } = await pool.query<{ id: string }>(
-    `INSERT INTO notificaciones(tipo, correo_destino, asunto, estado, error_mensaje, enviado_en)
-     VALUES($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [
-      opts.tipo,
-      opts.correo_destino,
-      opts.asunto,
-      opts.estado,
-      opts.error_mensaje,
-      opts.estado === 'enviado' ? new Date() : null,
-    ],
-  );
-  return r2[0]!.id;
+  // PostgreSQL devuelve el UUID usando el nombre del parámetro OUT: p_id.
+  return rows[0]!.p_id;
 }
 
 // ── Casos de uso ──────────────────────────────────────────────────────────────
@@ -472,7 +459,7 @@ export async function enviarAlertaPublicacion(opts: {
 
   try {
     // Se envía como BCC para no exponer los correos entre suscriptores.
-    await sendMail({ to: opts.correos_destino, subject: asunto, html });
+    await sendMail({ bcc: opts.correos_destino, subject: asunto, html });
   } catch (err) {
     estado = 'fallido';
     errorMsg = err instanceof Error ? err.message : String(err);
