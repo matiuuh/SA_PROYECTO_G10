@@ -19,8 +19,9 @@ const API_BASE_URL = import.meta.env.VITE_CATALOGO_API_URL ?? 'http://localhost:
 
 async function parseError(response: Response): Promise<string> {
   try {
-    const data = (await response.json()) as { detail?: string }
+    const data = (await response.json()) as { detail?: string; error?: string }
     if (typeof data.detail === 'string') return data.detail
+    if (typeof data.error === 'string') return data.error
   } catch {
     // Ignore parse errors and use fallback.
   }
@@ -63,6 +64,10 @@ export async function listCatalogAudit(
       Authorization: `Bearer ${accessToken}`,
     },
   })
+
+  if (response.status === 401) {
+    throw new Error('Tu sesion expiro. Cierra sesion e ingresa nuevamente.')
+  }
 
   if (!response.ok) {
     throw new Error(await parseError(response))
