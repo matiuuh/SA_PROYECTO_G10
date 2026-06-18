@@ -312,14 +312,11 @@ jobs:
 
             cd /opt/quetzaltv
 
-            # Actualizar AR_REGISTRY e IMAGE_TAG en el .env (upsert: actualiza o agrega)
-            ENV_FILE="backend/deploy/compose/.env"
-            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
-              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
-              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
-            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
-              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
-              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
+            # Construir env file explícito: vars del .env de la VM + imagen actualizada
+            DEPLOY_ENV="/tmp/quetzaltv-vm1-$$.env"
+            grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
+            echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
 
             # Key de quetzal-tv-storage para que catalogo-service firme URLs V4 de GCS
             mkdir -p secrets
@@ -327,9 +324,12 @@ jobs:
             chmod 600 secrets/gcs-key.json
 
             # Pull de nuevas imágenes y reinicio de servicios
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml up -d --force-recreate
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
+              --env-file "${DEPLOY_ENV}" pull
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
+              --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
+            rm -f "${DEPLOY_ENV}"
             echo "✓ VM1 actualizada con imagen ${IMAGE_TAG}"
 
   deploy-vm2:
@@ -376,22 +376,22 @@ jobs:
 
             cd /opt/quetzaltv
 
-            ENV_FILE="backend/deploy/compose/.env"
-            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
-              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
-              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
-            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
-              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
-              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
+            DEPLOY_ENV="/tmp/quetzaltv-vm2-$$.env"
+            grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
+            echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
 
             # Key de quetzal-tv-storage para que streaming-service firme URLs V4 de GCS
             mkdir -p secrets
             echo "${GCS_SA_KEY}" > secrets/gcs-key.json
             chmod 600 secrets/gcs-key.json
 
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml up -d --force-recreate
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml \
+              --env-file "${DEPLOY_ENV}" pull
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml \
+              --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
+            rm -f "${DEPLOY_ENV}"
             echo "✓ VM2 actualizada con imagen ${IMAGE_TAG}"
 
   deploy-vm4:
@@ -437,15 +437,15 @@ jobs:
 
             cd /opt/quetzaltv
 
-            ENV_FILE="backend/deploy/compose/.env"
-            grep -q "^AR_REGISTRY=" "${ENV_FILE}" \
-              && sed -i "s|^AR_REGISTRY=.*|AR_REGISTRY=${AR_REGISTRY}|" "${ENV_FILE}" \
-              || echo "AR_REGISTRY=${AR_REGISTRY}" >> "${ENV_FILE}"
-            grep -q "^IMAGE_TAG=" "${ENV_FILE}" \
-              && sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" "${ENV_FILE}" \
-              || echo "IMAGE_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
+            DEPLOY_ENV="/tmp/quetzaltv-vm4-$$.env"
+            grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
+            echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
 
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml pull
-            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml up -d --force-recreate
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml \
+              --env-file "${DEPLOY_ENV}" pull
+            docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml \
+              --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
+            rm -f "${DEPLOY_ENV}"
             echo "✓ VM4 actualizada con imagen ${IMAGE_TAG}"
