@@ -21,8 +21,8 @@ const FAKE_ID = 'notif-uuid-1';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // registrarNotificacion siempre devuelve una fila con id
-  mockQuery.mockResolvedValue({ rows: [{ id: FAKE_ID }], rowCount: 1 });
+  // El procedimiento devuelve una fila con su parametro OUT p_id.
+  mockQuery.mockResolvedValue({ rows: [{ p_id: FAKE_ID }], rowCount: 1 });
 });
 
 // ── enviarConfirmacionRegistro ────────────────────────────────────────────────
@@ -145,6 +145,8 @@ describe('enviarAlertaPublicacion', () => {
 
     expect(mockSendMail).toHaveBeenCalledTimes(1);
     const [mailOpts] = mockSendMail.mock.calls[0];
+    expect(mailOpts.to).toBeUndefined();
+    expect(mailOpts.bcc).toEqual(baseOpts.correos_destino);
     expect(mailOpts.subject).toContain('El Señor de los Anillos');
     expect(mailOpts.html).toContain('Película');
     expect(result.enviado).toBe(true);
@@ -176,6 +178,15 @@ describe('enviarAlertaPublicacion', () => {
 
     const callArgs = mockQuery.mock.calls[0];
     expect(callArgs[1]).toContain('a@example.com');
+  });
+
+  it('registra una sola vez cuando el procedimiento devuelve p_id', async () => {
+    mockSendMail.mockResolvedValueOnce(undefined as never);
+
+    await enviarAlertaPublicacion(baseOpts);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockQuery.mock.calls[0][0]).toContain('CALL sp_registrar_notificacion');
   });
 
   it('maneja lista de correos vacia sin lanzar excepcion', async () => {
