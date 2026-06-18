@@ -25,5 +25,8 @@
 | RF-21 | Alta | Notificaciones | Correo de confirmación de registro | El sistema debe enviar automáticamente un correo electrónico de bienvenida al usuario al completar el proceso de registro. |
 | RF-22 | Alta | Notificaciones | Correo de recibo de compra | El sistema debe enviar automáticamente un correo electrónico con el detalle del recibo al usuario al confirmar la contratación o modificación de un plan de suscripción. |
 | RF-23 | Media | Notificaciones | Alerta de nuevas publicaciones | El sistema debe enviar notificaciones por correo electrónico a los usuarios suscritos cuando se publique nuevo contenido en la plataforma. |
+| RF-24 | Media | Catalogo | Administración de contenido | El sistema debe permitir a los administradores agregar, editar y eliminar películas y series en el catálogo, gestionando su ficha técnica completa. |
+| RF-25 | Media | Catalogo | Programación de publicaciones | El sistema debe permitir a los administradores programar la fecha de publicación de nuevos contenidos en el catálogo. |
+| RF-26 | Media | Auditoría | Visualización de triggers | El sistema debe registrar en un log centralizado los eventos críticos de la base de datos y mostrarlos al administrador además de permitir descagarlos en csv y pdf. |
 
 [Volver a Documentación](../Documentación.md)
