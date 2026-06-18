@@ -29,9 +29,6 @@ services:
 
   usuario-service:
     image: ${AR_REGISTRY:-quetzaltv}/usuario:${IMAGE_TAG:-latest}
-    build:
-      context: ../../services/usuario
-      dockerfile: Dockerfile
     container_name: quetzal-usuario-service
     restart: unless-stopped
     environment:
@@ -61,9 +58,6 @@ services:
 
   suscripcion-service:
     image: ${AR_REGISTRY:-quetzaltv}/suscripcion:${IMAGE_TAG:-latest}
-    build:
-      context: ../../services/suscripcion
-      dockerfile: Dockerfile
     container_name: quetzal-suscripcion-service
     restart: unless-stopped
     environment:
@@ -90,9 +84,6 @@ services:
 
   catalogo-service:
     image: ${AR_REGISTRY:-quetzaltv}/catalogo:${IMAGE_TAG:-latest}
-    build:
-      context: ../..
-      dockerfile: services/catalogo/Dockerfile
     container_name: quetzal-catalogo-service
     restart: unless-stopped
     environment:

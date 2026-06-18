@@ -46,16 +46,6 @@ services:
 
   frontend:
     image: ${AR_REGISTRY:-quetzaltv}/frontend:${IMAGE_TAG:-latest}
-    build:
-      context: ../../../../frontend
-      dockerfile: Dockerfile
-      args:
-        # URLs relativas → el api-gateway las intercepta sin exponer IPs de VM1/VM2
-        VITE_USUARIO_API_URL: /api/usuario
-        VITE_SUSCRIPCION_API_URL: /api/suscripcion
-        VITE_CATALOGO_API_URL: /api/catalogo
-        VITE_STREAMING_API_URL: /api/streaming
-        VITE_COBROS_API_URL: /api/cobros
     container_name: quetzal-frontend
     restart: unless-stopped
     # Sin puertos externos — solo el api-gateway le habla internamente
@@ -66,9 +56,6 @@ services:
 
   api-gateway:
     image: ${AR_REGISTRY:-quetzaltv}/api-gateway:${IMAGE_TAG:-latest}
-    build:
-      context: ../../../api-gateway
-      dockerfile: Dockerfile
     container_name: quetzal-api-gateway
     restart: unless-stopped
     environment:
