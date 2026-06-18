@@ -150,7 +150,8 @@ BEGIN
             NULLIF(COALESCE(to_jsonb(NEW)->>'creado_por_cuenta_id', to_jsonb(OLD)->>'creado_por_cuenta_id'), '')::UUID,
             NULLIF(COALESCE(to_jsonb(NEW)->>'perfil_id', to_jsonb(OLD)->>'perfil_id'), '')::UUID
         );
-        IF OLD.eliminado_en IS NULL AND NEW.eliminado_en IS NOT NULL THEN
+        IF to_jsonb(OLD)->>'eliminado_en' IS NULL
+           AND to_jsonb(NEW)->>'eliminado_en' IS NOT NULL THEN
             INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
             VALUES (
                 TG_TABLE_NAME,
