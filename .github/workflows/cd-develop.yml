@@ -292,18 +292,21 @@ jobs:
       - name: SSH a VM1 → pull + restart
         uses: appleboy/ssh-action@v1
         env:
-          AR_REGISTRY: ${{ needs.build-and-push.outputs.ar_registry }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GCS_SA_KEY: ${{ secrets.GCS_SA_KEY }}
         with:
           host: ${{ secrets.VM1_HOST }}
           username: ${{ secrets.VM_USER }}
           key_path: /tmp/deploy_key
-          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCS_SA_KEY
+          envs: IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCP_PROJECT_ID,GCS_SA_KEY
           script: |
             set -e
+
+            # Reconstruir la URL del registry a partir de partes simples
+            AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
             # Autenticar Docker con Artifact Registry
             echo "${GCP_SA_KEY}" | docker login \
@@ -312,25 +315,24 @@ jobs:
 
             cd /opt/quetzaltv
 
-            # Construir env file explícito: vars del .env de la VM + imagen actualizada
+            # Env file explícito con la URL del registry y el tag actuales
             DEPLOY_ENV="/tmp/quetzaltv-vm1-$$.env"
             grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
             echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
-            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"     >> "${DEPLOY_ENV}"
 
             # Key de quetzal-tv-storage para que catalogo-service firme URLs V4 de GCS
             mkdir -p secrets
             echo "${GCS_SA_KEY}" > secrets/gcs-key.json
             chmod 600 secrets/gcs-key.json
 
-            # Pull de nuevas imágenes y reinicio de servicios
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
               --env-file "${DEPLOY_ENV}" pull
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
               --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
             rm -f "${DEPLOY_ENV}"
-            echo "✓ VM1 actualizada con imagen ${IMAGE_TAG}"
+            echo "✓ VM1 actualizada: ${AR_REGISTRY}/usuario:${IMAGE_TAG}"
 
   deploy-vm2:
     name: "Deploy → VM2 (streaming · cobros · divisas · notificaciones)"
@@ -357,18 +359,20 @@ jobs:
       - name: SSH a VM2 → pull + restart
         uses: appleboy/ssh-action@v1
         env:
-          AR_REGISTRY: ${{ needs.build-and-push.outputs.ar_registry }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GCS_SA_KEY: ${{ secrets.GCS_SA_KEY }}
         with:
           host: ${{ secrets.VM2_HOST }}
           username: ${{ secrets.VM_USER }}
           key_path: /tmp/deploy_key
-          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCS_SA_KEY
+          envs: IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCP_PROJECT_ID,GCS_SA_KEY
           script: |
             set -e
+
+            AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
             echo "${GCP_SA_KEY}" | docker login \
               -u _json_key --password-stdin \
@@ -379,7 +383,7 @@ jobs:
             DEPLOY_ENV="/tmp/quetzaltv-vm2-$$.env"
             grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
             echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
-            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"     >> "${DEPLOY_ENV}"
 
             # Key de quetzal-tv-storage para que streaming-service firme URLs V4 de GCS
             mkdir -p secrets
@@ -392,7 +396,7 @@ jobs:
               --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
             rm -f "${DEPLOY_ENV}"
-            echo "✓ VM2 actualizada con imagen ${IMAGE_TAG}"
+            echo "✓ VM2 actualizada: ${AR_REGISTRY}/streaming:${IMAGE_TAG}"
 
   deploy-vm4:
     name: "Deploy → VM4 (api-gateway · frontend)"
@@ -419,17 +423,19 @@ jobs:
       - name: SSH a VM4 → pull + restart
         uses: appleboy/ssh-action@v1
         env:
-          AR_REGISTRY: ${{ needs.build-and-push.outputs.ar_registry }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         with:
           host: ${{ secrets.VM4_HOST }}
           username: ${{ secrets.VM_USER }}
           key_path: /tmp/deploy_key
-          envs: AR_REGISTRY,IMAGE_TAG,GCP_SA_KEY,AR_REGION
+          envs: IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCP_PROJECT_ID
           script: |
             set -e
+
+            AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
             echo "${GCP_SA_KEY}" | docker login \
               -u _json_key --password-stdin \
@@ -440,7 +446,7 @@ jobs:
             DEPLOY_ENV="/tmp/quetzaltv-vm4-$$.env"
             grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
             echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
-            echo "IMAGE_TAG=${IMAGE_TAG}" >> "${DEPLOY_ENV}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"     >> "${DEPLOY_ENV}"
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml \
               --env-file "${DEPLOY_ENV}" pull
@@ -448,4 +454,4 @@ jobs:
               --env-file "${DEPLOY_ENV}" up -d --force-recreate
 
             rm -f "${DEPLOY_ENV}"
-            echo "✓ VM4 actualizada con imagen ${IMAGE_TAG}"
+            echo "✓ VM4 actualizada: ${AR_REGISTRY}/frontend:${IMAGE_TAG}"
