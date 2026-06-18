@@ -576,6 +576,42 @@ func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.
 	return entries, nil
 }
 
+func (r *ContentRepository) ListPendingPublicationAlerts(ctx context.Context, limit int) ([]domain.Content, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, titulo, tipo::text, sinopsis, idioma,
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, fn_porcentaje_recomendacion(id) AS porcentaje_recomendacion
+		FROM contenidos
+		WHERE eliminado_en IS NULL
+		  AND alerta_publicacion_enviada_en IS NULL
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		ORDER BY fecha_lanzamiento NULLS FIRST, creado_en
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanContentRows(rows)
+}
+
+func (r *ContentRepository) MarkPublicationAlertSent(ctx context.Context, contentID string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE contenidos
+		SET alerta_publicacion_enviada_en = COALESCE(alerta_publicacion_enviada_en, NOW())
+		WHERE id = $1
+		  AND eliminado_en IS NULL
+		  AND alerta_publicacion_enviada_en IS NULL
+	`, contentID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrContentNotFound
+	}
+	return nil
+}
+
 func (r *ContentRepository) resolveAuditUserEmails(ctx context.Context, entries []domain.AuditEntry) {
 	if r.userDB == nil || len(entries) == 0 {
 		return

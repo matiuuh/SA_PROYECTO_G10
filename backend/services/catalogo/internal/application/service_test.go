@@ -12,19 +12,21 @@ import (
 // ─── Mock repository ──────────────────────────────────────────────────────────
 
 type mockContentRepo struct {
-	listFn                  func(ctx context.Context) ([]domain.Content, error)
-	listAllFn               func(ctx context.Context) ([]domain.Content, error)
-	searchFn                func(ctx context.Context, query string) ([]domain.Content, error)
-	filterByGenresFn        func(ctx context.Context, genreIDs []int64) ([]domain.Content, error)
-	getDetailFn             func(ctx context.Context, id string) (*domain.ContentDetail, error)
-	existsByTitleAndTypeFn  func(ctx context.Context, title string, contentType domain.ContentType) (bool, error)
-	createFn                func(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error)
-	updateFn                func(ctx context.Context, id string, c *domain.Content, actorAccountID string) error
-	deleteFn                func(ctx context.Context, id string, actorAccountID string) error
-	rateFn                  func(ctx context.Context, r *domain.Rating) (float64, error)
-	listSeasonsByContentFn  func(ctx context.Context, contentID string) ([]domain.Season, error)
-	createEpisodeBatchFn    func(ctx context.Context, contentID string, batch domain.EpisodeBatch, actorAccountID string) ([]domain.Episode, error)
-	listAuditFn             func(ctx context.Context, limit int) ([]domain.AuditEntry, error)
+	listFn                 func(ctx context.Context) ([]domain.Content, error)
+	listAllFn              func(ctx context.Context) ([]domain.Content, error)
+	searchFn               func(ctx context.Context, query string) ([]domain.Content, error)
+	filterByGenresFn       func(ctx context.Context, genreIDs []int64) ([]domain.Content, error)
+	getDetailFn            func(ctx context.Context, id string) (*domain.ContentDetail, error)
+	existsByTitleAndTypeFn func(ctx context.Context, title string, contentType domain.ContentType) (bool, error)
+	createFn               func(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error)
+	updateFn               func(ctx context.Context, id string, c *domain.Content, actorAccountID string) error
+	deleteFn               func(ctx context.Context, id string, actorAccountID string) error
+	rateFn                 func(ctx context.Context, r *domain.Rating) (float64, error)
+	listSeasonsByContentFn func(ctx context.Context, contentID string) ([]domain.Season, error)
+	createEpisodeBatchFn   func(ctx context.Context, contentID string, batch domain.EpisodeBatch, actorAccountID string) ([]domain.Episode, error)
+	listAuditFn            func(ctx context.Context, limit int) ([]domain.AuditEntry, error)
+	listPendingAlertsFn    func(ctx context.Context, limit int) ([]domain.Content, error)
+	markAlertSentFn        func(ctx context.Context, contentID string) error
 }
 
 func (m *mockContentRepo) List(ctx context.Context) ([]domain.Content, error) {
@@ -65,6 +67,12 @@ func (m *mockContentRepo) CreateEpisodeBatch(ctx context.Context, contentID stri
 }
 func (m *mockContentRepo) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
 	return m.listAuditFn(ctx, limit)
+}
+func (m *mockContentRepo) ListPendingPublicationAlerts(ctx context.Context, limit int) ([]domain.Content, error) {
+	return m.listPendingAlertsFn(ctx, limit)
+}
+func (m *mockContentRepo) MarkPublicationAlertSent(ctx context.Context, contentID string) error {
+	return m.markAlertSentFn(ctx, contentID)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -471,5 +479,43 @@ func TestListAudit_BoundaryLimit500(t *testing.T) {
 	svc.ListAudit(context.Background(), 500)
 	if capturedLimit != 500 {
 		t.Errorf("expected limit 500 to be accepted, got %d", capturedLimit)
+	}
+}
+
+// ─── Alertas de publicacion ──────────────────────────────────────────────────
+
+func TestListPendingPublicationAlerts_DefaultLimit(t *testing.T) {
+	var capturedLimit int
+	repo := &mockContentRepo{
+		listPendingAlertsFn: func(_ context.Context, limit int) ([]domain.Content, error) {
+			capturedLimit = limit
+			return sampleContents(), nil
+		},
+	}
+	svc := application.New(repo)
+	_, err := svc.ListPendingPublicationAlerts(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedLimit != 50 {
+		t.Errorf("expected default limit 50, got %d", capturedLimit)
+	}
+}
+
+func TestMarkPublicationAlertSent_TrimsContentID(t *testing.T) {
+	var capturedID string
+	repo := &mockContentRepo{
+		markAlertSentFn: func(_ context.Context, contentID string) error {
+			capturedID = contentID
+			return nil
+		},
+	}
+	svc := application.New(repo)
+	err := svc.MarkPublicationAlertSent(context.Background(), "  content-1  ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedID != "content-1" {
+		t.Errorf("expected trimmed content ID, got %q", capturedID)
 	}
 }

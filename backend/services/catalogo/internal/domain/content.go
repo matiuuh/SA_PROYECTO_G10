@@ -134,4 +134,6 @@ type ContentRepository interface {
 	ListSeasonsByContent(ctx context.Context, contentID string) ([]Season, error)
 	CreateEpisodeBatch(ctx context.Context, contentID string, batch EpisodeBatch, actorAccountID string) ([]Episode, error)
 	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
+	ListPendingPublicationAlerts(ctx context.Context, limit int) ([]Content, error)
+	MarkPublicationAlertSent(ctx context.Context, contentID string) error
 }

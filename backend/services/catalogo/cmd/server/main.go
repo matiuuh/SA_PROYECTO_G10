@@ -76,6 +76,7 @@ func main() {
 	repo := postgres.NewContentRepositoryWithUserDB(pool, userPool)
 	svc := application.New(repo)
 	alertDispatcher := alerts.NewDispatcherFromEnv()
+	alerts.StartPublicationAlertScheduler(ctx, svc, alertDispatcher, time.Minute)
 	handler := grpchandler.NewHandler(svc, alertDispatcher)
 	httpHandler := httphandler.NewHandler(svc, alertDispatcher, uploader)
 
