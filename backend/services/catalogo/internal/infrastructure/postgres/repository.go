@@ -14,11 +14,16 @@ import (
 )
 
 type ContentRepository struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	userDB *pgxpool.Pool
 }
 
 func NewContentRepository(db *pgxpool.Pool) *ContentRepository {
 	return &ContentRepository{db: db}
+}
+
+func NewContentRepositoryWithUserDB(db *pgxpool.Pool, userDB *pgxpool.Pool) *ContentRepository {
+	return &ContentRepository{db: db, userDB: userDB}
 }
 
 func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) {
@@ -512,12 +517,24 @@ func (r *ContentRepository) CreateEpisodeBatch(ctx context.Context, contentID st
 func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			id,
+			id::text,
 			tabla_origen,
-			entidad_id,
-			evento::text,
+			entidad_id::text,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN 'eliminacion'
+				ELSE evento::text
+			END AS evento,
 			estado_anterior,
-			estado_nuevo,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN NULL
+				ELSE estado_nuevo
+			END AS estado_nuevo,
 			COALESCE(usuario_accion::text, ''),
 			fecha_evento
 		FROM instantaneas
@@ -551,7 +568,99 @@ func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.
 		entries = append(entries, entry)
 	}
 
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	r.resolveAuditUserEmails(ctx, entries)
+	return entries, nil
+}
+
+func (r *ContentRepository) ListPendingPublicationAlerts(ctx context.Context, limit int) ([]domain.Content, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, titulo, tipo::text, sinopsis, idioma,
+		       url_portada, url_trailer,
+		       fecha_lanzamiento, fn_porcentaje_recomendacion(id) AS porcentaje_recomendacion
+		FROM contenidos
+		WHERE eliminado_en IS NULL
+		  AND alerta_publicacion_enviada_en IS NULL
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		ORDER BY fecha_lanzamiento NULLS FIRST, creado_en
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanContentRows(rows)
+}
+
+func (r *ContentRepository) MarkPublicationAlertSent(ctx context.Context, contentID string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE contenidos
+		SET alerta_publicacion_enviada_en = COALESCE(alerta_publicacion_enviada_en, NOW())
+		WHERE id = $1
+		  AND eliminado_en IS NULL
+		  AND alerta_publicacion_enviada_en IS NULL
+	`, contentID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrContentNotFound
+	}
+	return nil
+}
+
+func (r *ContentRepository) resolveAuditUserEmails(ctx context.Context, entries []domain.AuditEntry) {
+	if r.userDB == nil || len(entries) == 0 {
+		return
+	}
+
+	userIDs := make([]string, 0, len(entries))
+	seen := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.UserID == "" {
+			continue
+		}
+		if _, ok := seen[entry.UserID]; ok {
+			continue
+		}
+		seen[entry.UserID] = struct{}{}
+		userIDs = append(userIDs, entry.UserID)
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	rows, err := r.userDB.Query(ctx, `
+		SELECT id::text, correo
+		FROM usuarios.cuentas
+		WHERE id::text = ANY($1)
+	`, userIDs)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	emailsByID := make(map[string]string)
+	for rows.Next() {
+		var id string
+		var email string
+		if err := rows.Scan(&id, &email); err != nil {
+			return
+		}
+		emailsByID[id] = email
+	}
+	if rows.Err() != nil {
+		return
+	}
+
+	for i := range entries {
+		if email := emailsByID[entries[i].UserID]; email != "" {
+			entries[i].UserID = email
+		}
+	}
 }
 
 func setAuditUser(ctx context.Context, tx pgx.Tx, actorAccountID string) error {

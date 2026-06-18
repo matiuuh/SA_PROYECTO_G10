@@ -9,6 +9,10 @@
 -- TABLAS
 -- =========================================================
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TYPE evento_instantanea AS ENUM ('insercion', 'actualizacion', 'eliminacion');
+
 CREATE TABLE cache_divisas (
     moneda_base    CHAR(3)        NOT NULL,
     moneda_destino CHAR(3)        NOT NULL,
@@ -30,6 +34,17 @@ CREATE TABLE historial_consultas (
     consultado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE instantaneas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tabla_origen VARCHAR(100) NOT NULL,
+    entidad_id TEXT NOT NULL,
+    evento evento_instantanea NOT NULL,
+    estado_anterior JSONB,
+    estado_nuevo JSONB,
+    usuario_accion UUID,
+    fecha_evento TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =========================================================
 -- ÍNDICES
 -- =========================================================
@@ -45,6 +60,12 @@ CREATE INDEX idx_historial_monedas
 
 CREATE INDEX idx_historial_fecha
     ON historial_consultas (consultado_en DESC);
+
+CREATE INDEX idx_divisas_instantaneas_tabla
+    ON instantaneas (tabla_origen, entidad_id);
+
+CREATE INDEX idx_divisas_instantaneas_fecha
+    ON instantaneas (fecha_evento DESC);
 
 -- =========================================================
 -- FUNCIONES
@@ -117,6 +138,52 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION fn_auditoria_entidad_id(p_row JSONB)
+RETURNS TEXT AS $$
+BEGIN
+    IF p_row ? 'id' THEN
+        RETURN p_row->>'id';
+    END IF;
+
+    IF p_row ? 'moneda_base' AND p_row ? 'moneda_destino' THEN
+        RETURN TRIM(p_row->>'moneda_base') || '-' || TRIM(p_row->>'moneda_destino');
+    END IF;
+
+    RETURN md5(p_row::TEXT);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
+BEGIN
+    v_actor := NULLIF(current_setting('app.usuario_accion', true), '')::UUID;
+
+    IF TG_OP = 'DELETE' THEN
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, fn_auditoria_entidad_id(to_jsonb(OLD)), 'eliminacion', to_jsonb(OLD), NULL, v_actor);
+        RETURN OLD;
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, fn_auditoria_entidad_id(to_jsonb(NEW)), 'actualizacion', to_jsonb(OLD), to_jsonb(NEW), v_actor);
+        RETURN NEW;
+    ELSE
+        INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+        VALUES (TG_TABLE_NAME, fn_auditoria_entidad_id(to_jsonb(NEW)), 'insercion', NULL, to_jsonb(NEW), v_actor);
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER trg_ts_cache_divisas
     BEFORE UPDATE ON cache_divisas
     FOR EACH ROW EXECUTE FUNCTION fn_actualizar_ts_cache();
+
+CREATE TRIGGER trg_snapshot_cache_divisas
+    AFTER INSERT OR UPDATE OR DELETE ON cache_divisas
+    FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();
+
+CREATE TRIGGER trg_snapshot_historial_consultas
+    AFTER INSERT OR UPDATE OR DELETE ON historial_consultas
+    FOR EACH ROW EXECUTE FUNCTION fn_registrar_instantanea();

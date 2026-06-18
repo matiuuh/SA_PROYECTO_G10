@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CreditCard, Crown, KeyRound, Save, Settings, Users } from 'lucide-react'
+import { CreditCard, Crown, KeyRound, Settings, Users } from 'lucide-react'
 import { Button, Card } from '@/components/atoms'
-import { getActiveSession, updateStoredSessionAccount } from '@/lib/auth'
-import { changePassword, updateCurrentAccount } from '@/lib/usuario-api'
+import { getActiveSession } from '@/lib/auth'
+import { changePassword } from '@/lib/usuario-api'
 import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
 import type { UiSubscriptionPlan } from '@/types/subscription'
@@ -14,16 +14,11 @@ export function UserSettingsPage() {
   const accountId = session?.account.id ?? ''
   const [activePlan, setActivePlan] = useState<UiSubscriptionPlan | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
-  const [accountName, setAccountName] = useState(session?.account.nombre ?? '')
-  const [country, setCountry] = useState(session?.account.pais ?? '')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [accountFeedback, setAccountFeedback] = useState('')
   const [passwordFeedback, setPasswordFeedback] = useState('')
-  const [accountError, setAccountError] = useState('')
   const [passwordError, setPasswordError] = useState('')
-  const [isSavingAccount, setIsSavingAccount] = useState(false)
   const [isSavingPassword, setIsSavingPassword] = useState(false)
 
   useEffect(() => {
@@ -61,27 +56,6 @@ export function UserSettingsPage() {
 
   const handleManagePayment = () => {
     navigate(hasSubscription ? '/subscription/manage' : '/subscription/plans?setup=1')
-  }
-
-  const handleSaveAccount = async () => {
-    if (!session?.accessToken) return
-
-    setAccountFeedback('')
-    setAccountError('')
-    setIsSavingAccount(true)
-
-    try {
-      const updatedAccount = await updateCurrentAccount(session.accessToken, {
-        nombre: accountName,
-        pais: country,
-      })
-      updateStoredSessionAccount(updatedAccount)
-      setAccountFeedback('Cuenta actualizada correctamente.')
-    } catch (error) {
-      setAccountError(error instanceof Error ? error.message : 'No se pudo actualizar la cuenta.')
-    } finally {
-      setIsSavingAccount(false)
-    }
   }
 
   const handleChangePassword = async () => {
@@ -173,55 +147,6 @@ export function UserSettingsPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="p-6">
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
-                <Settings className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-white">Editar cuenta</h2>
-                <p className="text-sm text-[var(--color-denim-400)]">Actualiza tu nombre y pais.</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Nombre</label>
-                <input
-                  value={accountName}
-                  onChange={(event) => setAccountName(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Correo</label>
-                <input
-                  value={session?.account.correo ?? ''}
-                  disabled
-                  className="h-11 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-[var(--color-denim-400)] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-[var(--color-denim-200)]">Pais</label>
-                <input
-                  value={country}
-                  onChange={(event) => setCountry(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#0d1220] px-4 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
-                />
-              </div>
-
-              {accountError ? <p className="text-sm text-red-300">{accountError}</p> : null}
-              {accountFeedback ? <p className="text-sm text-emerald-300">{accountFeedback}</p> : null}
-
-              <Button type="button" onClick={handleSaveAccount} disabled={isSavingAccount} className="gap-2">
-                <Save size={16} />
-                {isSavingAccount ? 'Guardando...' : 'Guardar cambios'}
-              </Button>
-            </div>
-          </Card>
-
           <Card className="p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">

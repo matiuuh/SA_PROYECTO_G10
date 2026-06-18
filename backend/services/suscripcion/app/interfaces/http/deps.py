@@ -12,7 +12,7 @@ class TokenData:
     role: str
 
 
-def get_bearer_token(authorization: str = Header(...)) -> str:
+async def get_bearer_token(authorization: str = Header(...)) -> str:
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(
@@ -22,7 +22,7 @@ def get_bearer_token(authorization: str = Header(...)) -> str:
     return token
 
 
-def get_token_data(token: str = Depends(get_bearer_token)) -> TokenData:
+async def get_token_data(token: str = Depends(get_bearer_token)) -> TokenData:
     settings = get_settings()
     try:
         payload = pyjwt.decode(
@@ -42,12 +42,12 @@ def get_token_data(token: str = Depends(get_bearer_token)) -> TokenData:
     return TokenData(account_id=account_id, role=payload.get("role", "usuario"))
 
 
-def require_user(token_data: TokenData = Depends(get_token_data)) -> TokenData:
+async def require_user(token_data: TokenData = Depends(get_token_data)) -> TokenData:
     """Cualquier usuario autenticado."""
     return token_data
 
 
-def require_admin(token_data: TokenData = Depends(get_token_data)) -> TokenData:
+async def require_admin(token_data: TokenData = Depends(get_token_data)) -> TokenData:
     """Solo administradores."""
     if token_data.role != "administrador":
         raise HTTPException(

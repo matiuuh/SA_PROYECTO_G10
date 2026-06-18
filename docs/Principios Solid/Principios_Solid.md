@@ -66,7 +66,7 @@ Ambas clases pueden sustituir al contrato `AccountRepository` porque exponen los
 
 **Ejemplo:** `AuthService` puede recibir `PostgresAccountRepository` o `InMemoryAccountRepository` y seguir funcionando porque ambos respetan el contrato de creacion, busqueda y actualizacion de cuentas.
 
-![alt text](image-1.png)
+![alt text](img/image-1.png)
 ```python
 if settings.storage_backend == "postgres":
     account_repository = PostgresAccountRepository(database)
@@ -82,7 +82,7 @@ Los contratos estan separados por responsabilidad: cuentas, sesiones y perfiles.
 
 **Ejemplo:** `SessionRepository` solo define `create`, `get_by_id` y `update`; no obliga a implementar metodos de cuentas o perfiles.
 
-![alt text](image-2.png)
+![alt text](img/image-2.png)
 ```python
 class SessionRepository(Protocol):
     def create(self, session: Session) -> None: ...
@@ -98,7 +98,7 @@ class SessionRepository(Protocol):
 
 **Ejemplo:** `build_container` decide si usar repositorios PostgreSQL o en memoria y despues construye `AuthService` con esas dependencias.
 
-![alt text](image-3.png)
+![alt text](img/image-3.png)
 ```python
 auth_service = AuthService(
     account_repository=account_repository,
@@ -119,7 +119,7 @@ auth_service = AuthService(
 `SubscriptionService` concentra las reglas de planes y suscripciones: crear planes, listar planes activos, cotizar precios, crear suscripciones, cambiar plan y cancelar suscripcion.
 
 **Ejemplo:** `create_subscription` valida que el plan exista, verifica que la cuenta no tenga otra suscripcion activa y luego crea la suscripcion.
-![alt text](image-4.png)
+![alt text](img/image-4.png)
 ```python
 def create_subscription(self, request: CreateSubscriptionRequest) -> Subscription:
     plan = self._plan_repository.get_by_id(request.plan_id)
@@ -140,7 +140,7 @@ def create_subscription(self, request: CreateSubscriptionRequest) -> Subscriptio
 El servicio depende de abstracciones (`PlanRepository` y `SubscriptionRepository`), por lo que se pueden agregar nuevas implementaciones sin cambiar la logica de negocio.
 
 **Ejemplo:** si se quisiera guardar planes en otra base de datos, bastaria con crear otra clase que implemente `PlanRepository`.
-![alt text](image-5.png)
+![alt text](img/image-5.png)
 ```python
 class PlanRepository(Protocol):
     def create(self, plan: Plan) -> Plan: ...
@@ -156,7 +156,7 @@ class PlanRepository(Protocol):
 
 **Ejemplo:** `SubscriptionService` llama `get_by_id` y `list_active` sin conocer si el repositorio usa PostgreSQL u otra tecnologia.
 
-![alt text](image-6.png)
+![alt text](img/image-6.png)
 ```python
 def list_active_plans(self) -> list[Plan]:
     return self._plan_repository.list_active()
@@ -170,7 +170,7 @@ Las operaciones de planes y suscripciones estan divididas en interfaces distinta
 
 **Ejemplo:** `PlanRepository` solo maneja planes, mientras `SubscriptionRepository` maneja suscripciones activas, busqueda por cuenta y actualizacion.
 
-![alt text](image-7.png)
+![alt text](img/image-7.png)
 ```python
 class SubscriptionRepository(Protocol):
     def create(self, subscription: Subscription) -> Subscription: ...
@@ -188,7 +188,7 @@ El contenedor crea las dependencias concretas y las entrega a `SubscriptionServi
 
 **Ejemplo:** `SubscriptionService` recibe `PostgresPlanRepository`, `PostgresSubscriptionRepository` y `DivisasClient` desde `build_container`.
 
-![alt text](image-8.png)
+![alt text](img/image-8.png)
 ```python
 subscription_service = SubscriptionService(
     plan_repository=PostgresPlanRepository(database),
@@ -210,7 +210,7 @@ subscription_service = SubscriptionService(
 
 **Ejemplo:** `Create` normaliza datos del contenido, valida duplicados y delega la persistencia al repositorio.
 
-![alt text](image-9.png)
+![alt text](img/image-9.png)
 ```go
 func (s *CatalogoService) Create(ctx context.Context, c *domain.Content, genreIDs []int64) (string, error) {
     c.Title = strings.TrimSpace(c.Title)
@@ -235,7 +235,7 @@ La capa de aplicacion depende de la interfaz `ContentRepository`. Esto permite e
 
 **Ejemplo:** se podria agregar un repositorio basado en otro motor de datos mientras mantenga los metodos de `ContentRepository`.
 
-![alt text](image-10.png)
+![alt text](img/img/image-10.png)
 ```go
 type CatalogoService struct {
     repo domain.ContentRepository
@@ -254,7 +254,7 @@ El repositorio PostgreSQL puede sustituir a `ContentRepository` porque implement
 
 **Ejemplo:** `CatalogoService` usa `s.repo.List`, `s.repo.Search` y `s.repo.Create` sin depender del tipo concreto del repositorio.
 
-![alt text](image-11.png)
+![alt text](img/image-11.png)
 ```go
 func (s *CatalogoService) Search(ctx context.Context, query string) ([]domain.Content, error) {
     if query == "" {
@@ -272,7 +272,7 @@ El contrato `ContentRepository` agrupa solo operaciones relacionadas con catalog
 
 **Ejemplo:** la interfaz incluye metodos como `List`, `Search`, `FilterByGenres`, `Rate` y `CreateEpisodeBatch`, todos relacionados con el dominio de catalogo.
 
-![alt text](image-12.png)
+![alt text](img/image-12.png)
 ```go
 type ContentRepository interface {
     List(ctx context.Context) ([]Content, error)
@@ -291,7 +291,7 @@ El servicio de aplicacion recibe un repositorio ya construido. La funcion `main`
 
 **Ejemplo:** `repo := postgres.NewContentRepository(pool)` y despues `svc := application.New(repo)`.
 
-![alt text](image-13.png)
+![alt text](img/image-13.png)
 ```go
 repo := postgres.NewContentRepository(pool)
 svc := application.New(repo)
@@ -309,7 +309,7 @@ El servicio de aplicacion se encarga de los casos de uso de notificaciones: conf
 
 **Ejemplo:** `enviarRecibo` prepara el correo de recibo, intenta enviarlo y registra el resultado de la notificacion.
 
-![alt text](image-14.png)
+![alt text](img/image-14.png)
 ```ts
 export async function enviarRecibo(opts: {
   correo_destino: string;
@@ -338,7 +338,7 @@ Los tipos de dominio permiten extender los casos de notificacion de forma contro
 
 **Ejemplo:** para agregar una nueva notificacion se puede extender `TipoNotificacion` y crear un nuevo caso de uso sin alterar la estructura base de `Notificacion`.
 
-![alt text](image-15.png)
+![alt text](img/image-15.png)
 ```ts
 export type TipoNotificacion =
   | 'confirmacion_registro'
@@ -355,7 +355,7 @@ La funcion `sendMail` expone una forma estable de enviar correos. Mientras otra 
 **Ejemplo:** un mailer SMTP diferente o un proveedor externo podria reemplazar `transporter.sendMail` manteniendo la firma de `sendMail`.
 
 
-![alt text](image-16.png)
+![alt text](img/image-16.png)
 ```ts
 export async function sendMail(opts: {
   to: string | string[];
@@ -379,7 +379,7 @@ Los handlers gRPC estan separados por operacion: confirmacion de registro, recib
 
 **Ejemplo:** `handleEnviarRecibo` valida `id_transaccion` y llama `enviarRecibo`; no procesa confirmaciones de registro ni alertas.
 
-![alt text](image-17.png)
+![alt text](img/image-17.png)
 ```ts
 async function handleEnviarRecibo(call: AnyCall, callback: AnyCallback): Promise<void> {
   const req = call.request as {
@@ -403,7 +403,7 @@ El servidor de entrada no implementa la logica de notificacion. Solo registra ru
 
 **Ejemplo:** para `/api/v1/recibo`, el servidor lee el cuerpo HTTP y delega el caso de uso a `enviarRecibo`.
 
-![alt text](image-18.png)
+![alt text](img/image-18.png)
 ```ts
 if (method === 'POST' && url === '/api/v1/recibo') {
   const body = await readBody(req);
@@ -429,7 +429,7 @@ if (method === 'POST' && url === '/api/v1/recibo') {
 
 **Ejemplo:** `UpdateProgress` solo coordina la actualizacion del historial y delega la persistencia a `PlaybackRepository`.
 
-![alt text](image-19.png)
+![alt text](img/image-19.png)
 ```go
 func (s *StreamingService) UpdateProgress(
     ctx context.Context,
@@ -448,7 +448,7 @@ El servicio depende de la interfaz `PlaybackRepository`, lo que permite extender
 
 **Ejemplo:** se podria agregar otro repositorio para almacenar progreso en otra base de datos manteniendo `Upsert`, `GetProgress` y `GetHistory`.
 
-![alt text](image-20.png)
+![alt text](img/image-20.png)
 ```go
 type StreamingService struct {
     repo domain.PlaybackRepository
@@ -467,7 +467,7 @@ El repositorio PostgreSQL puede sustituir a `PlaybackRepository` porque cumple c
 
 **Ejemplo:** `StreamingService` invoca `s.repo.GetHistory` sin conocer la implementacion concreta.
 
-![alt text](image-21.png)
+![alt text](img/image-21.png)
 ```go
 func (s *StreamingService) GetHistory(
     ctx context.Context,
@@ -486,7 +486,7 @@ func (s *StreamingService) GetHistory(
 
 **Ejemplo:** solo define `Upsert`, `GetProgress` y `GetHistory`; no obliga a implementar operaciones de catalogo, usuarios o pagos.
 
-![alt text](image-22.png)
+![alt text](img/image-22.png)
 ```go
 type PlaybackRepository interface {
     Upsert(ctx context.Context, h *PlaybackHistory, totalDuration int) (PlaybackState, error)
@@ -503,7 +503,7 @@ La funcion `main` crea la infraestructura concreta y luego inyecta el repositori
 
 **Ejemplo:** `repo := postgres.NewPlaybackRepository(pool)` y despues `svc := application.New(repo)`.
 
-![alt text](image-23.png)
+![alt text](img/image-23.png)
 ```go
 repo := postgres.NewPlaybackRepository(pool)
 svc := application.New(repo)
@@ -521,7 +521,7 @@ El servicio de cobros se encarga del caso de uso de pagos: procesar transaccione
 
 **Ejemplo:** `procesarPago` coordina la conversion de monto, registra la compra, recupera la transaccion y gestiona el envio del recibo.
 
-![alt text](image-24.png)
+![alt text](img/image-24.png)
 ```ts
 export async function procesarPago(input: ProcesarPagoInput): Promise<ProcesarPagoResult> {
   const referencia = `SIM-${randomUUID()}`;
@@ -545,7 +545,7 @@ Los tipos de dominio separan estados, operaciones, transacciones, recibos y entr
 
 **Ejemplo:** `TipoOperacion` diferencia `contratacion` y `modificacion_plan`; se puede agregar otra operacion sin cambiar la forma base de `Transaccion`.
 
-![alt text](image-25.png)
+![alt text](img/image-25.png)
 ```ts
 export type EstadoPago = 'pendiente' | 'aprobado' | 'rechazado' | 'cancelado';
 export type TipoOperacion = 'contratacion' | 'modificacion_plan';
@@ -567,7 +567,7 @@ export interface Transaccion {
 
 **Ejemplo:** `convertirMontoDesdeBase(montoBase, monedaDestino)` devuelve un `Promise<number>`; puede sustituirse por un cliente gRPC o un mock en pruebas si conserva esa firma.
 
-![alt text](image-26.png)
+![alt text](img/image-26.png)
 ```ts
 export async function convertirMontoDesdeBase(
   montoBase: number,
@@ -588,7 +588,7 @@ Los handlers gRPC estan separados por caso de uso: procesar pago, obtener transa
 
 **Ejemplo:** `handleObtenerRecibo` solo recibe `transaccion_id` y devuelve el recibo; no necesita conocer datos de procesamiento de pago.
 
-![alt text](image-27.png)
+![alt text](img/image-27.png)
 ```ts
 async function handleObtenerRecibo(call: AnyCall, callback: AnyCallback): Promise<void> {
   const req = call.request as { transaccion_id: string };
@@ -605,7 +605,7 @@ El servidor HTTP/gRPC actua como capa de entrada y delega la logica a la capa de
 
 **Ejemplo:** la ruta `/api/v1/payments/process` valida el request y luego llama `procesarPago`, en lugar de implementar el procesamiento directamente en el servidor.
 
-![alt text](image-28.png)
+![alt text](img/image-28.png)
 ```ts
 if (req.method === 'POST' && parsedUrl.pathname === '/api/v1/payments/process') {
   const result = await procesarPago({
@@ -620,6 +620,184 @@ if (req.method === 'POST' && parsedUrl.pathname === '/api/v1/payments/process') 
 }
 ```
 
+## 7. Auditoría
+
+La auditoría no es un microservicio independiente, sino una funcionalidad transversal que se implementa en el microservicio de catálogo y se extiende a través de toda la arquitectura. Demuestra cómo los principios SOLID se aplican incluso en componentes de infraestructura
+
+### S - Single Responsibility Principle
+**Ruta**: [service.go](../../backend/services/catalogo/internal/application/service.go)
+
+La función ListAudit en CatalogoService tiene una única responsabilidad: orquestar la consulta de registros de auditoría. No se encarga de formatear la respuesta, ni de aplicar filtros complejos, ni de manejar la persistencia directamente.
+
+Ejemplo: ListAudit simplemente valida el límite de registros y delega la consulta al repositorio.
+
+```go
+func (s *CatalogoService) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
+    if limit <= 0 || limit > 500 {
+        limit = 100
+    }
+    return s.repo.ListAudit(ctx, limit)
+}
+```
+
+### O - Open/Closed Principle
+
+**Ruta**: [Content.go](../../backend/services/catalogo/internal/domain/content.go)
+
+El contrato ContentRepository incluye el método ListAudit, pero está abierto a nuevas implementaciones de auditoría. Se puede extender el repositorio para agregar más funcionalidades (filtros por fecha, por usuario, por tabla, etc.) sin modificar la capa de aplicación.
+
+Ejemplo: el método ListAudit en la interfaz permite que cualquier implementación de repositorio proporcione su propia lógica de consulta de auditoría.
+
+```go
+type ContentRepository interface {
+	List(ctx context.Context) ([]Content, error)
+	ListAll(ctx context.Context) ([]Content, error)
+	Search(ctx context.Context, query string) ([]Content, error)
+	FilterByGenres(ctx context.Context, genreIDs []int64) ([]Content, error)
+	GetDetail(ctx context.Context, id string) (*ContentDetail, error)
+	ExistsByTitleAndType(ctx context.Context, title string, contentType ContentType) (bool, error)
+	Create(ctx context.Context, c *Content, genreIDs []int64) (string, error)
+	Update(ctx context.Context, id string, c *Content, actorAccountID string) error
+	Delete(ctx context.Context, id string, actorAccountID string) error
+	Rate(ctx context.Context, r *Rating) (float64, error)
+	ListSeasonsByContent(ctx context.Context, contentID string) ([]Season, error)
+	CreateEpisodeBatch(ctx context.Context, contentID string, batch EpisodeBatch, actorAccountID string) ([]Episode, error)
+	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
+}
+```
+
+### L - Liskov Substitution Principle
+
+**Ruta**: [repository.go](../../backend/services/catalogo/internal/infrastructure/postgres/repository.go)
+
+El repositorio PostgreSQL implementa ListAudit de manera que puede sustituir a ContentRepository sin afectar el comportamiento esperado por CatalogoService. La consulta SQL puede cambiar (por ejemplo, agregar joins, filtros o paginación) sin romper la lógica del servicio.
+
+Ejemplo: la implementación actual convierte UUIDs a texto y maneja valores nulos, pero podría reemplazarse por otra implementación que consulte una tabla diferente o un sistema externo.
+
+
+```go
+func (r *ContentRepository) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			id::text,
+			tabla_origen,
+			entidad_id::text,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN 'eliminacion'
+				ELSE evento::text
+			END AS evento,
+			estado_anterior,
+			CASE
+				WHEN evento = 'actualizacion'
+				 AND estado_anterior->>'eliminado_en' IS NULL
+				 AND estado_nuevo->>'eliminado_en' IS NOT NULL
+				THEN NULL
+				ELSE estado_nuevo
+			END AS estado_nuevo,
+			COALESCE(usuario_accion::text, ''),
+			fecha_evento
+		FROM instantaneas
+		ORDER BY fecha_evento DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]domain.AuditEntry, 0)
+	for rows.Next() {
+		var entry domain.AuditEntry
+		var previousState []byte
+		var newState []byte
+		if err := rows.Scan(
+			&entry.ID,
+			&entry.TableName,
+			&entry.EntityID,
+			&entry.Event,
+			&previousState,
+			&newState,
+			&entry.UserID,
+			&entry.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		entry.PreviousState = normalizeJSON(previousState)
+		entry.NewState = normalizeJSON(newState)
+		entries = append(entries, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	r.resolveAuditUserEmails(ctx, entries)
+	return entries, nil
+}
+```
+
+### I - Interface Segregation Principle
+
+**Ruta**: [Content.go](../../backend/services/catalogo/internal/domain/content.go)
+
+
+```go
+type ContentRepository interface {
+    // Lectura
+    List(ctx context.Context) ([]Content, error)
+    Search(ctx context.Context, query string) ([]Content, error)
+    GetDetail(ctx context.Context, id string) (*ContentDetail, error)
+    
+    // Escritura
+    Create(ctx context.Context, c *Content, genreIDs []int64) (string, error)
+    Update(ctx context.Context, id string, c *Content, actorAccountID string) error
+    Delete(ctx context.Context, id string, actorAccountID string) error
+    
+    // Auditoría
+    ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
+}
+```
+
+### D - Dependency Inversion Principle
+
+El handler HTTP depende de la abstracción CatalogoService, no de la implementación concreta de auditoría. La inyección de dependencias permite que el handler reciba el servicio ya construido con todas sus dependencias (incluyendo el repositorio con ListAudit).
+
+Ejemplo: el handler handleAdminAudit invoca h.svc.ListAudit sin conocer los detalles de implementación del repositorio.
+
+
+**Ruta**: [handler.go](../../backend/services/catalogo/internal/interfaces/http/handler.go)
+
+```go
+func (h *Handler) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
+    if _, err := h.requireAdmin(r); err != nil {
+        writeAuthError(w, err)
+        return
+    }
+
+    limit := 100
+    if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+        parsedLimit, err := strconv.Atoi(rawLimit)
+        if err != nil || parsedLimit <= 0 {
+            writeError(w, http.StatusBadRequest, "El parametro limit no es valido.")
+            return
+        }
+        limit = parsedLimit
+    }
+
+    entries, err := h.svc.ListAudit(r.Context(), limit)
+    if err != nil {
+        writeError(w, http.StatusInternalServerError, "No se pudo consultar la auditoria del catalogo.")
+        return
+    }
+
+    writeJSON(w, http.StatusOK, map[string]any{
+        "eventos": toAuditEntryResponseList(entries),
+    })
+}
+```
 ## Resumen
 
 Cada microservicio aplica los principios SOLID con una separacion general entre:

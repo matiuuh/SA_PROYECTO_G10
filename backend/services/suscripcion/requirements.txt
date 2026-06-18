@@ -5,6 +5,7 @@ grpcio==1.74.0
 grpcio-tools==1.74.0
 pydantic==2.11.7
 pydantic-settings==2.10.1
-psycopg[binary]==3.2.9
-pytest==8.4.1
+psycopg[binary]==3.2.13
+pytest
+pytest-cov==6.0.0
 httpx==0.28.1

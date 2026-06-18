@@ -76,6 +76,20 @@ function buildTechnicalSheet(form: MovieForm): string {
   return sections.join(' | ')
 }
 
+function normalizePosterObjectName(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('posters/')) return trimmed
+
+  try {
+    const parsed = new URL(trimmed)
+    const objectPath = parsed.pathname.split('/').filter(Boolean).slice(1).join('/')
+    return objectPath.startsWith('posters/') ? objectPath : trimmed
+  } catch {
+    return trimmed
+  }
+}
+
 export function UploadMoviePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -253,6 +267,7 @@ export function UploadMoviePage() {
         }
         const detail = await getAdminCatalogDetail(session.accessToken, editingId)
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
+        const posterObjectName = normalizePosterObjectName(detail.url_portada)
         setForm({
           titulo: detail.titulo,
           sinopsis: detail.sinopsis,
@@ -265,13 +280,13 @@ export function UploadMoviePage() {
           duracionMinutos: detail.duracion_minutos ? String(detail.duracion_minutos) : '',
           idioma: detail.idioma,
           clasificacionEdad: detail.clasificacion_edad || 'PG-13',
-          urlPortada: detail.url_portada,
+          urlPortada: posterObjectName,
         })
         if (detail.url_trailer) {
           setUploadState({ phase: 'done', objectName: detail.url_trailer })
         }
-        if (detail.url_portada?.startsWith('posters/')) {
-          setPosterUploadState({ phase: 'done', objectName: detail.url_portada })
+        if (posterObjectName.startsWith('posters/')) {
+          setPosterUploadState({ phase: 'done', objectName: posterObjectName })
         }
       } catch (error) {
         setFeedback({

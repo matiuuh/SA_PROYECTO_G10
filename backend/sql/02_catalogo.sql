@@ -101,6 +101,7 @@ CREATE TABLE instantaneas (
     tabla_origen VARCHAR(100) NOT NULL,
     entidad_id UUID NOT NULL,
     evento evento_instantanea NOT NULL,
+    estado_anterior JSONB,
     estado_nuevo JSONB,
     usuario_accion UUID,
     fecha_evento TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -120,18 +121,41 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NOW());
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, OLD.id, 'eliminacion', to_jsonb(OLD), NULL, v_actor, NOW());
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(NEW), NOW());
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'creado_por_cuenta_id', to_jsonb(OLD)->>'creado_por_cuenta_id'), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'perfil_id', to_jsonb(OLD)->>'perfil_id'), '')::UUID
+        );
+        IF OLD.eliminado_en IS NULL AND NEW.eliminado_en IS NOT NULL THEN
+            INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+            VALUES (TG_TABLE_NAME, NEW.id, 'eliminacion', to_jsonb(OLD), NULL, v_actor, NOW());
+            RETURN NEW;
+        END IF;
+
+        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'actualizacion', to_jsonb(OLD), to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     ELSE
-        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_nuevo, fecha_evento)
-        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', to_jsonb(NEW), NOW());
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'perfil_id', '')::UUID
+        );
+        INSERT INTO catalogo.instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion, fecha_evento)
+        VALUES (TG_TABLE_NAME, NEW.id, 'insercion', NULL, to_jsonb(NEW), v_actor, NOW());
         RETURN NEW;
     END IF;
 END;

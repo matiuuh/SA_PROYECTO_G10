@@ -42,6 +42,7 @@ CREATE TABLE contenidos (
     url_portada          TEXT,
     url_trailer          TEXT,
     creado_por_cuenta_id UUID,
+    alerta_publicacion_enviada_en TIMESTAMPTZ,
     creado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     eliminado_en         TIMESTAMPTZ,
@@ -125,8 +126,15 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fn_registrar_instantanea()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_actor UUID;
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(OLD)->>'perfil_id', '')::UUID
+        );
         INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
         VALUES (
             TG_TABLE_NAME,
@@ -134,10 +142,29 @@ BEGIN
             'eliminacion',
             to_jsonb(OLD),
             NULL,
-            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+            v_actor
         );
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'creado_por_cuenta_id', to_jsonb(OLD)->>'creado_por_cuenta_id'), '')::UUID,
+            NULLIF(COALESCE(to_jsonb(NEW)->>'perfil_id', to_jsonb(OLD)->>'perfil_id'), '')::UUID
+        );
+        IF to_jsonb(OLD)->>'eliminado_en' IS NULL
+           AND to_jsonb(NEW)->>'eliminado_en' IS NOT NULL THEN
+            INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
+            VALUES (
+                TG_TABLE_NAME,
+                NEW.id,
+                'eliminacion',
+                to_jsonb(OLD),
+                NULL,
+                v_actor
+            );
+            RETURN NEW;
+        END IF;
+
         INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
         VALUES (
             TG_TABLE_NAME,
@@ -145,10 +172,15 @@ BEGIN
             'actualizacion',
             to_jsonb(OLD),
             to_jsonb(NEW),
-            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+            v_actor
         );
         RETURN NEW;
     ELSE
+        v_actor := COALESCE(
+            NULLIF(current_setting('app.usuario_accion', true), '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'creado_por_cuenta_id', '')::UUID,
+            NULLIF(to_jsonb(NEW)->>'perfil_id', '')::UUID
+        );
         INSERT INTO instantaneas (tabla_origen, entidad_id, evento, estado_anterior, estado_nuevo, usuario_accion)
         VALUES (
             TG_TABLE_NAME,
@@ -156,7 +188,7 @@ BEGIN
             'insercion',
             NULL,
             to_jsonb(NEW),
-            NULLIF(current_setting('app.usuario_accion', true), '')::UUID
+            v_actor
         );
         RETURN NEW;
     END IF;
@@ -299,6 +331,9 @@ CREATE TRIGGER trg_snap_calificaciones
 -- =========================================================
 
 CREATE INDEX idx_contenidos_titulo     ON contenidos(titulo);
+CREATE INDEX idx_contenidos_alerta_publicacion
+    ON contenidos(fecha_lanzamiento)
+    WHERE eliminado_en IS NULL AND alerta_publicacion_enviada_en IS NULL;
 CREATE INDEX idx_temporadas_contenido  ON temporadas(contenido_id);
 CREATE INDEX idx_episodios_temporada   ON episodios(temporada_id);
 CREATE INDEX idx_calif_contenido       ON calificaciones(contenido_id);
