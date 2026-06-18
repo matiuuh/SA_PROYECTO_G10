@@ -190,6 +190,22 @@ services:
       timeout: 5s
       retries: 10
 
+  catalogo-migrations:
+    image: postgres:16-alpine
+    container_name: quetzal-catalogo-migrations-local
+    restart: "no"
+    environment:
+      PGPASSWORD: quetzal
+    volumes:
+      - ./backend/services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+    command:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/03_migrate_auditoria.sql
+    depends_on:
+      postgres-catalogo:
+        condition: service_healthy
+
   catalogo:
     build:
       context: ./backend
@@ -215,8 +231,8 @@ services:
       - "8003:8003"
       - "5003:5003"
     depends_on:
-      postgres-catalogo:
-        condition: service_healthy
+      catalogo-migrations:
+        condition: service_completed_successfully
       postgres-usuario:
         condition: service_healthy
       api-gateway:

@@ -63,6 +63,22 @@ services:
       timeout: 5s
       retries: 10
 
+  catalogo-migrations:
+    image: postgres:16-alpine
+    container_name: quetzal-catalogo-migrations-local
+    restart: "no"
+    environment:
+      PGPASSWORD: postgres
+    volumes:
+      - ../../services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+    command:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     container_name: quetzal-redis-local
@@ -172,8 +188,8 @@ services:
       - "5003:5003"
       - "8003:8003"
     depends_on:
-      postgres:
-        condition: service_healthy
+      catalogo-migrations:
+        condition: service_completed_successfully
 
   # ════════════════════════════════════════════════════════════════════════════
   # STREAMING  (Go · gRPC + HTTP)
