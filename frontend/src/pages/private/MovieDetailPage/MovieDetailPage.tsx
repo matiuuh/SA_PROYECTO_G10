@@ -19,6 +19,7 @@ import {
   ThumbsDown,
   Share2,
   Lock,
+  Users,
 } from 'lucide-react'
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
@@ -29,6 +30,7 @@ import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCata
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { createSala } from '@/lib/watchparty-api'
 import { getProfileRestrictions, verifyProfilePin } from '@/lib/usuario-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent, CatalogDetail, CatalogEpisode, CatalogSeason } from '@/types/catalog'
@@ -825,6 +827,22 @@ export function MovieDetailPage() {
     }
   }
 
+  const handleWatchParty = async () => {
+    if (!detail || !activeProfile || !accountId) return
+    try {
+      const sala = await createSala({
+        perfil_id: activeProfile.id,
+        cuenta_id: accountId,
+        contenido_id: detail.id,
+        tipo_contenido: detail.tipo,
+        duracion_segundos: (detail.duracion_minutos ?? 0) * 60,
+      })
+      navigate(`/watch-party?codigo=${sala.codigoInvite}`)
+    } catch (err) {
+      setPlaybackError(err instanceof Error ? err.message : 'Error al crear sala')
+    }
+  }
+
   const handleToggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) {
@@ -1199,6 +1217,16 @@ export function MovieDetailPage() {
             >
               <Share2 size={15} strokeWidth={1.75} />
             </button>
+
+            {hasSubscription && !isAdmin && (
+              <button
+                onClick={() => { void handleWatchParty() }}
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] transition-colors duration-200 hover:bg-white/[0.10] hover:text-white"
+                aria-label="Watch Party"
+              >
+                <Users size={15} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
           )}
 
