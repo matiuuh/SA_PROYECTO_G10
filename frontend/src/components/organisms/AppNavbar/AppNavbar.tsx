@@ -23,8 +23,6 @@ export function AppNavbar() {
   const [hidden, setHidden] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
-  const [watchPartyOpen, setWatchPartyOpen] = useState(false)
-  const [joinCode, setJoinCode] = useState('')
   const lastScrollY = useRef(0)
 
   useEffect(() => {
@@ -139,56 +137,14 @@ export function AppNavbar() {
               </Link>
             )}
 
-            <div className="relative">
-              <button
-                onClick={() => { setWatchPartyOpen((v) => !v); setJoinCode('') }}
-                className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
-                aria-label="Watch Party"
-              >
-                <Tv size={16} strokeWidth={1.75} />
-                <span className="hidden sm:inline">Watch Party</span>
-              </button>
-
-              {watchPartyOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setWatchPartyOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-20 w-64 rounded-xl border border-white/[0.08] bg-[#0d1220] shadow-2xl shadow-black/60 overflow-hidden">
-                    <div className="p-3">
-                      <p className="mb-2 text-xs font-medium text-[var(--color-denim-400)]">Unirse con codigo</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={joinCode}
-                          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                          placeholder="Codigo"
-                          maxLength={10}
-                          className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.05] px-3 h-9 text-sm text-white outline-none focus:border-[var(--color-primary)]"
-                        />
-                        <button
-                          onClick={() => {
-                            if (joinCode.trim()) {
-                              navigate(`/watch-party?codigo=${joinCode.trim()}`)
-                              setWatchPartyOpen(false)
-                            }
-                          }}
-                          disabled={!joinCode.trim()}
-                          className="rounded-lg bg-[var(--color-primary)] px-3 h-9 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                          Unirse
-                        </button>
-                      </div>
-                      <Link
-                        to="/panel"
-                        onClick={() => setWatchPartyOpen(false)}
-                        className="mt-2 block text-center text-xs text-[var(--color-denim-500)] hover:text-[var(--color-primary)] transition-colors"
-                      >
-                        o crea una sala desde una pelicula
-                      </Link>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <Link
+              to="/watch-party"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+              aria-label="Watch Party"
+            >
+              <Tv size={16} strokeWidth={1.75} />
+              <span className="hidden sm:inline">Watch Party</span>
+            </Link>
 
             {hasSubscription && (
               <>
