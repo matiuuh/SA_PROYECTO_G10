@@ -26,6 +26,5 @@ export const config = {
     cobros:         parseTarget(process.env['COBROS_SERVICE_URL']         ?? 'http://localhost:8006'),
     divisas:        parseTarget(process.env['DIVISAS_SERVICE_URL']        ?? 'http://localhost:8005'),
     notificaciones: parseTarget(process.env['NOTIFICACIONES_SERVICE_URL'] ?? 'http://localhost:8007'),
-    watchparty:     parseTarget(process.env['WATCHPARTY_SERVICE_URL']     ?? 'http://localhost:8008'),
   },
 };

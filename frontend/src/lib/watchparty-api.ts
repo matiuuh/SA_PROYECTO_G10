@@ -1,6 +1,6 @@
 import { getActiveSession } from './auth'
 
-const API_BASE_URL = import.meta.env.VITE_WATCHPARTY_API_URL ?? 'http://localhost:8008'
+const API_BASE_URL = import.meta.env.VITE_STREAMING_API_URL ?? 'http://localhost:8004'
 
 export interface SalaWatchParty {
   id: string
