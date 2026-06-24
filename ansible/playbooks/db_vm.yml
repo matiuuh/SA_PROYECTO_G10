@@ -1,0 +1,199 @@
+---
+# Configura VM3: Docker, estructura de directorios, SQL files, .env y levanta
+# los 7 contenedores PostgreSQL (uno por microservicio).
+- name: Provisionar VM de bases de datos (VM3)
+  hosts: vm_db
+  become: true
+
+  tasks:
+
+    # ── Docker CE ─────────────────────────────────────────────────────────────
+
+    - name: Instalar dependencias de Docker
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: true
+
+    - name: Agregar clave GPG de Docker
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Agregar repositorio de Docker
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+        https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+        > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Instalar Docker CE y Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Habilitar y arrancar Docker
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Agregar usuario ubuntu al grupo docker
+      user:
+        name: "{{ app_user }}"
+        groups: docker
+        append: true
+
+    # ── Estructura de directorios ─────────────────────────────────────────────
+
+    - name: Crear directorios base
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - "{{ quetzaltv_dir }}"
+        - "{{ compose_dir }}"
+
+    - name: Crear directorios SQL por servicio
+      file:
+        path: "{{ quetzaltv_dir }}/backend/services/{{ item }}/database/sql"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - usuario
+        - suscripcion
+        - catalogo
+        - streaming
+        - divisas
+        - cobros
+        - notificaciones
+
+    - name: Crear directorios seed por servicio
+      file:
+        path: "{{ quetzaltv_dir }}/backend/services/{{ item }}/database/seed"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - usuario
+        - suscripcion
+
+    # ── Archivos SQL (copiados desde el control node con el repo) ─────────────
+
+    - name: Copiar SQL de usuario
+      copy:
+        src: "../../backend/services/usuario/database/sql/01_usuarios.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/usuario/database/sql/01_usuarios.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Copiar seed de usuario
+      copy:
+        src: "../../backend/services/usuario/database/seed/01_admin_seed.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/usuario/database/seed/01_admin_seed.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Copiar SQL de suscripcion
+      copy:
+        src: "../../backend/services/suscripcion/database/sql/04_suscripciones.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/suscripcion/database/sql/04_suscripciones.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Copiar seed de suscripcion
+      copy:
+        src: "../../backend/services/suscripcion/database/seed/01_planes_seed.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/suscripcion/database/seed/01_planes_seed.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Copiar SQL de catalogo
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ quetzaltv_dir }}/backend/services/catalogo/database/sql/{{ item.dest }}"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      loop:
+        - { src: "../../backend/services/catalogo/database/sql/01_schema.sql",                     dest: "01_schema.sql" }
+        - { src: "../../backend/services/catalogo/database/sql/02_procedures.sql",                 dest: "02_procedures.sql" }
+        - { src: "../../backend/services/catalogo/database/sql/03_migrate_auditoria.sql",          dest: "03_migrate_auditoria.sql" }
+        - { src: "../../backend/services/catalogo/database/sql/04_migrate_alertas_publicacion.sql",dest: "04_migrate_alertas_publicacion.sql" }
+
+    - name: Copiar SQL de streaming
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ quetzaltv_dir }}/backend/services/streaming/database/sql/{{ item.dest }}"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      loop:
+        - { src: "../../backend/services/streaming/database/sql/01_schema.sql",    dest: "01_schema.sql" }
+        - { src: "../../backend/services/streaming/database/sql/02_procedures.sql",dest: "02_procedures.sql" }
+
+    - name: Copiar SQL de divisas
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ quetzaltv_dir }}/backend/services/divisas/database/sql/{{ item.dest }}"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      loop:
+        - { src: "../../backend/services/divisas/database/sql/01_schema.sql",    dest: "01_schema.sql" }
+        - { src: "../../backend/services/divisas/database/sql/02_procedures.sql",dest: "02_procedures.sql" }
+
+    - name: Copiar SQL de cobros
+      copy:
+        src: "../../backend/services/cobros/database/sql/01_schema.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/cobros/database/sql/01_schema.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Copiar SQL de notificaciones
+      copy:
+        src: "../../backend/services/notificaciones/database/sql/01_schema.sql"
+        dest: "{{ quetzaltv_dir }}/backend/services/notificaciones/database/sql/01_schema.sql"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    # ── Compose file y .env ───────────────────────────────────────────────────
+
+    - name: Copiar compose de VM3
+      copy:
+        src: "../../backend/deploy/compose/docker-compose.cloud-vm3.yml"
+        dest: "{{ compose_dir }}/docker-compose.cloud-vm3.yml"
+        owner: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Crear .env para VM3
+      template:
+        src: "../templates/env_vm3.j2"
+        dest: "{{ compose_dir }}/.env"
+        owner: "{{ app_user }}"
+        mode: "0600"
+
+    # ── Levantar contenedores PostgreSQL ──────────────────────────────────────
+
+    - name: Levantar bases de datos con Docker Compose
+      shell: |
+        docker compose -f {{ compose_dir }}/docker-compose.cloud-vm3.yml up -d
+      args:
+        chdir: "{{ quetzaltv_dir }}"

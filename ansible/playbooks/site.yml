@@ -1,0 +1,8 @@
+---
+# Punto de entrada principal. Ejecutar desde el directorio ansible/:
+#   ansible-playbook playbooks/site.yml -e "db_password=... jwt_secret=..."
+- name: Configurar VMs de aplicación (VM1, VM2, VM4)
+  import_playbook: app_vms.yml
+
+- name: Configurar VM de bases de datos (VM3)
+  import_playbook: db_vm.yml

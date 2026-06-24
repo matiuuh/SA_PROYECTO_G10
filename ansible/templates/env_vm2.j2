@@ -1,0 +1,13 @@
+# .env — VM2 (streaming · cobros · divisas · notificaciones · redis)
+# Generado por Ansible. No editar manualmente.
+
+DB_VM3_HOST={{ hostvars['vm3']['ansible_host'] }}
+VM4_HOST={{ hostvars['vm4']['vm4_internal_ip'] | default(hostvars['vm4']['ansible_host']) }}
+DB_PASSWORD={{ db_password }}
+EMAIL_USER={{ email_user }}
+EMAIL_PASS={{ email_pass }}
+EMAIL_FROM={{ email_from }}
+
+# El CI/CD sobreescribe estos dos en cada despliegue
+AR_REGISTRY=us-central1-docker.pkg.dev/sa-proyecto-g10-500320/quetzaltv
+IMAGE_TAG=latest
