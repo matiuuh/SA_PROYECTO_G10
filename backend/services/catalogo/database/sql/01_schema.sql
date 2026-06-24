@@ -226,7 +226,7 @@ $$ LANGUAGE sql STABLE;
 -- VISTAS
 -- =========================================================
 
-CREATE VIEW v_cartelera_contenido AS
+CREATE OR REPLACE VIEW v_cartelera_contenido AS
 SELECT
     c.id,
     c.titulo,
@@ -239,7 +239,7 @@ SELECT
     fn_porcentaje_recomendacion(c.id) AS porcentaje_recomendacion
 FROM contenidos c
 WHERE c.eliminado_en IS NULL
-  AND (c.fecha_lanzamiento IS NULL OR c.fecha_lanzamiento <= CURRENT_DATE);
+  AND (c.fecha_lanzamiento IS NULL OR c.fecha_lanzamiento <= NOW());  -- ← Cambiado CURRENT_DATE por NOW()
 
 CREATE VIEW v_detalle_contenido AS
 SELECT
