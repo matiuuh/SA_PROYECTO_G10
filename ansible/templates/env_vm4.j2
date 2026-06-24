@@ -1,0 +1,10 @@
+# .env — VM4 (api-gateway · frontend)
+# Generado por Ansible. No editar manualmente.
+
+VM1_HOST={{ hostvars['vm1']['vm1_internal_ip'] | default(hostvars['vm1']['ansible_host']) }}
+VM2_HOST={{ hostvars['vm2']['vm2_internal_ip'] | default(hostvars['vm2']['ansible_host']) }}
+JWT_SECRET={{ jwt_secret }}
+
+# El CI/CD sobreescribe estos dos en cada despliegue
+AR_REGISTRY=us-central1-docker.pkg.dev/sa-proyecto-g10-500320/quetzaltv
+IMAGE_TAG=latest

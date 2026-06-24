@@ -28,5 +28,10 @@
 | RF-24 | Media | Catalogo | Administración de contenido | El sistema debe permitir a los administradores agregar, editar y eliminar películas y series en el catálogo, gestionando su ficha técnica completa. |
 | RF-25 | Media | Catalogo | Programación de publicaciones | El sistema debe permitir a los administradores programar la fecha de publicación de nuevos contenidos en el catálogo. |
 | RF-26 | Media | Auditoría | Visualización de triggers | El sistema debe registrar en un log centralizado los eventos críticos de la base de datos y mostrarlos al administrador además de permitir descagarlos en csv y pdf. |
+| RF-27 | Alta | Recomendaciones | Sistema de recomendación | El sistema debe recomendar contenido a los usuarios basándose en su historial de visualización y calificaciones. |
+| RF-28 | Alta | Perfiles | Control Parental | El sistema debe permitir habilitar/deshabilitar la restricción de edad, lo que limitará el acceso a contenido inapropiado de los perfiles infantiles a menos que introduzca el pin correcto |
+| RF-29 | Alta | Salas | Gestión de salas | El sistema debe permitir a los usuarios premium iniciar la reproducción del contenido con cualquier otro tipo de usuario en la misma sala en tiempo real. |
+| RF-30 | Media | Descargas | Gestión de descargas | El sistema debe permitir a los usuarios estándar descargar contenido. |
+| RF-31 | Media | Auditoría | Automatización de auditoría y purgación | El sistema debe ejecutar un cronjob programado para auditar la base de datos, identificar cuentas inactivas y purgarlas de forma segura, registrando cada acción en el log centralizado. |
 
 [Volver a Documentación](../Documentación.md)

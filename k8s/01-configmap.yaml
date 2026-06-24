@@ -20,4 +20,4 @@ data:
   SUBSCRIPCION_API_URL: "http://api-gateway/api/suscripcion"
   USUARIO_API_URL: "http://api-gateway/api/usuario"
   REDIS_URL: "redis://redis:6379"
-  GCS_BUCKET: "quetzal-tv-streaming"
+  GCS_BUCKET: "quetzaltv-streaming-g10"

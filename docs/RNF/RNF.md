@@ -12,5 +12,9 @@
 | RNF-08 | Portabilidad | Contenedores e infraestructura reproducible | Cada microservicio, base de datos, instancia de Redis y el API Gateway deben contar con su propio `Dockerfile`. El sistema completo debe poder desplegarse mediante `docker-compose.local.yml` en desarrollo y `docker-compose.cloud.yml` en producción, sin modificar el código fuente entre entornos. |
 | RNF-09 | Mantenibilidad | Código modular y documentado | El código de cada microservicio debe estar organizado en módulos claros (controladores, servicios, repositorios) y contar con documentación inline. Las interfaces gRPC deben estar definidas en archivos `.proto` con comentarios explicativos. |
 | RNF-10 | Sostenibilidad | Backups regulares de bases de datos | El sistema debe realizar backups automáticos cuando se hagan nuevos despliegues de las bases de datos PostgreSQL y almacenarlos en un servicio de almacenamiento seguro. En caso de pérdida de datos, el sistema debe poder restaurar la última copia de seguridad sin pérdida significativa de información. |
+| RNF-11 | Seguridad | Control parental y PIN | El PIN de control parental debe almacenarse cifrado y verificarse en el servidor |
+| RNF-12 | Rendimiento | Sincronización de salas en tiempo real | La latencia de sincronización de reproducción entre participantes de una sala debe ser menor a 300 ms en condiciones de red normales. |
+| RNF-13 | Mantenibilidad | Cronjob de auditoría y purgación | El sistema debe ejecutar un cronjob para auditar la base de datos, identificar cuentas inactivas y purgarlas de forma segura, registrando cada ejecución en el log centralizado. |
+| RNF-14 | Usabilidad | Gestión de descargas offline | Las descargas deben estar disponibles para reproducción sin conexión, controlando el acceso para evitar piratería |
 
 [Volver a Documentación](../Documentación.md)

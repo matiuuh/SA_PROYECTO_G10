@@ -353,7 +353,8 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          VM3_HOST: ${{ secrets.VM3_HOST }}
+          # VM3_INTERNAL_IP: IP interna de VM3 (los pods de GKE están en la misma VPC)
+          VM3_INTERNAL_IP: ${{ secrets.VM3_INTERNAL_IP }}
         run: |
           kubectl create secret generic quetzaltv-secrets \
             --namespace=quetzaltv-prod \
@@ -362,11 +363,11 @@ jobs:
             --from-literal=EMAIL_USER="${EMAIL_USER}" \
             --from-literal=EMAIL_PASS="${EMAIL_PASS}" \
             --from-literal=EMAIL_FROM="${EMAIL_FROM}" \
-            --from-literal=DATABASE_URL_CATALOGO="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5433/quetzal_catalogo?sslmode=disable" \
-            --from-literal=DATABASE_URL_STREAMING="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5434/quetzal_streaming?sslmode=disable" \
-            --from-literal=DATABASE_URL_DIVISAS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5435/quetzal_divisas?sslmode=disable" \
-            --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5436/quetzal_cobros?sslmode=disable" \
-            --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5439/quetzal_notificaciones?sslmode=disable" \
+            --from-literal=DATABASE_URL_CATALOGO="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5433/quetzal_catalogo?sslmode=disable" \
+            --from-literal=DATABASE_URL_STREAMING="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5434/quetzal_streaming?sslmode=disable" \
+            --from-literal=DATABASE_URL_DIVISAS="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5435/quetzal_divisas?sslmode=disable" \
+            --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5436/quetzal_cobros?sslmode=disable" \
+            --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5439/quetzal_notificaciones?sslmode=disable" \
             --dry-run=client -o yaml | kubectl apply -f -
           echo "✓ Secret quetzaltv-secrets actualizado"
 
