@@ -310,6 +310,32 @@ func (r *ContentRepository) Rate(ctx context.Context, rating *domain.Rating) (fl
 	return pct, err
 }
 
+func (r *ContentRepository) ListRatingsByProfile(ctx context.Context, profileID string) ([]domain.Rating, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT contenido_id::text, perfil_id::text, reaccion::text
+		FROM calificaciones
+		WHERE perfil_id = $1
+		ORDER BY actualizado_en DESC
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ratings := make([]domain.Rating, 0)
+	for rows.Next() {
+		var rating domain.Rating
+		var reaction string
+		if err := rows.Scan(&rating.ContentID, &rating.ProfileID, &reaction); err != nil {
+			return nil, err
+		}
+		rating.Reaction = domain.ReactionType(reaction)
+		ratings = append(ratings, rating)
+	}
+
+	return ratings, rows.Err()
+}
+
 func (r *ContentRepository) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
 	var contentType string
 	err := r.db.QueryRow(ctx, `

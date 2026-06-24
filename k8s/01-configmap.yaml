@@ -12,6 +12,7 @@ data:
   USUARIO_SERVICE_URL: "http://usuario-service:8001"
   SUSCRIPCION_SERVICE_URL: "http://suscripcion-service:8002"
   CATALOGO_SERVICE_URL: "http://catalogo-service:8003"
+  CATALOGO_API_URL: "http://catalogo-service:8003"
   STREAMING_SERVICE_URL: "http://streaming-service:8004"
   DIVISAS_SERVICE_URL: "http://divisas-service:8005"
   COBROS_SERVICE_URL: "http://cobros-service:8006"

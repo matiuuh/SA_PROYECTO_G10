@@ -80,6 +80,10 @@ func (s *CatalogoService) Rate(ctx context.Context, r *domain.Rating) (float64, 
 	return s.repo.Rate(ctx, r)
 }
 
+func (s *CatalogoService) ListRatingsByProfile(ctx context.Context, profileID string) ([]domain.Rating, error) {
+	return s.repo.ListRatingsByProfile(ctx, strings.TrimSpace(profileID))
+}
+
 func (s *CatalogoService) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
 	return s.repo.ListSeasonsByContent(ctx, strings.TrimSpace(contentID))
 }

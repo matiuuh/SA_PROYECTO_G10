@@ -11,10 +11,20 @@ type StreamingService struct {
 	repo        domain.PlaybackRepository
 	trailerRepo domain.TrailerRepository
 	episodeRepo domain.EpisodeRepository
+	catalogRepo domain.CatalogRecommendationRepository
 }
 
-func New(repo domain.PlaybackRepository, trailerRepo domain.TrailerRepository, episodeRepo domain.EpisodeRepository) *StreamingService {
-	return &StreamingService{repo: repo, trailerRepo: trailerRepo, episodeRepo: episodeRepo}
+func New(
+	repo domain.PlaybackRepository,
+	trailerRepo domain.TrailerRepository,
+	episodeRepo domain.EpisodeRepository,
+	catalogRepos ...domain.CatalogRecommendationRepository,
+) *StreamingService {
+	var catalogRepo domain.CatalogRecommendationRepository
+	if len(catalogRepos) > 0 {
+		catalogRepo = catalogRepos[0]
+	}
+	return &StreamingService{repo: repo, trailerRepo: trailerRepo, episodeRepo: episodeRepo, catalogRepo: catalogRepo}
 }
 
 // UpdateProgress guarda o actualiza el progreso de reproduccion.
@@ -43,6 +53,35 @@ func (s *StreamingService) GetHistory(
 	limit int,
 ) ([]domain.PlaybackHistory, error) {
 	return s.repo.GetHistory(ctx, profileID, limit)
+}
+
+func (s *StreamingService) GetRecommendations(
+	ctx context.Context,
+	profileID string,
+	limit int,
+) ([]domain.Recommendation, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	if s.catalogRepo == nil {
+		return []domain.Recommendation{}, nil
+	}
+
+	history, err := s.repo.GetHistory(ctx, profileID, 25)
+	if err != nil {
+		return nil, err
+	}
+	ratings, err := s.catalogRepo.ListRatingsByProfile(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := s.catalogRepo.ListContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	recommender := contentBasedRecommender{}
+	return recommender.Recommend(ctx, catalog, history, ratings, s.catalogRepo, limit)
 }
 
 // GetTrailerURL devuelve una URL firmada de GCS para reproducir el trailer del contenido.

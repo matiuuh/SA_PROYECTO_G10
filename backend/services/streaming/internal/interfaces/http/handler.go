@@ -16,26 +16,40 @@ type Handler struct {
 }
 
 type progressResponse struct {
-	ID                string `json:"id"`
-	PerfilID          string `json:"perfil_id"`
-	ContenidoID       string `json:"contenido_id"`
-	EpisodioID        string `json:"episodio_id"`
-	Estado            string `json:"estado"`
-	ProgresoSegundos  int    `json:"progreso_segundos"`
-	ActualizadoEn     string `json:"actualizado_en"`
+	ID               string `json:"id"`
+	PerfilID         string `json:"perfil_id"`
+	ContenidoID      string `json:"contenido_id"`
+	EpisodioID       string `json:"episodio_id"`
+	Estado           string `json:"estado"`
+	ProgresoSegundos int    `json:"progreso_segundos"`
+	ActualizadoEn    string `json:"actualizado_en"`
 }
 
 type updateProgressRequest struct {
-	PerfilID               string `json:"perfil_id"`
-	ContenidoID            string `json:"contenido_id"`
-	EpisodioID             string `json:"episodio_id"`
-	ProgresoSegundos       int    `json:"progreso_segundos"`
-	DuracionTotalSegundos  int    `json:"duracion_total_segundos"`
+	PerfilID              string `json:"perfil_id"`
+	ContenidoID           string `json:"contenido_id"`
+	EpisodioID            string `json:"episodio_id"`
+	ProgresoSegundos      int    `json:"progreso_segundos"`
+	DuracionTotalSegundos int    `json:"duracion_total_segundos"`
 }
 
 type updateProgressResponse struct {
 	OK     bool   `json:"ok"`
 	Estado string `json:"estado"`
+}
+
+type recommendationResponse struct {
+	ID                      string  `json:"id"`
+	Titulo                  string  `json:"titulo"`
+	Tipo                    string  `json:"tipo"`
+	Sinopsis                string  `json:"sinopsis"`
+	Idioma                  string  `json:"idioma"`
+	UrlPortada              string  `json:"url_portada"`
+	FechaLanzamiento        string  `json:"fecha_lanzamiento,omitempty"`
+	PorcentajeRecomendacion float64 `json:"porcentaje_recomendacion"`
+	UrlTrailer              string  `json:"url_trailer"`
+	Puntaje                 float64 `json:"puntaje"`
+	Motivo                  string  `json:"motivo"`
 }
 
 func NewHandler(svc *application.StreamingService) *Handler {
@@ -46,6 +60,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/progress", h.handleProgress)
 	mux.HandleFunc("/api/v1/history/", h.handleHistory)
+	mux.HandleFunc("/api/v1/recommendations/", h.handleRecommendations)
 	mux.HandleFunc("/api/v1/trailer/", h.handleTrailer)
 	mux.HandleFunc("/api/v1/episode/", h.handleEpisode)
 }
@@ -180,6 +195,62 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleRecommendations(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	profileID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/recommendations/"))
+	if profileID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el perfil a consultar.")
+		return
+	}
+
+	limit := 10
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil || parsedLimit <= 0 {
+			writeError(w, http.StatusBadRequest, "El parametro limit no es valido.")
+			return
+		}
+		limit = parsedLimit
+	}
+
+	recommendations, err := h.svc.GetRecommendations(r.Context(), profileID, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudieron generar las recomendaciones.")
+		return
+	}
+
+	response := make([]recommendationResponse, 0, len(recommendations))
+	for _, item := range recommendations {
+		response = append(response, recommendationResponse{
+			ID:                      item.ID,
+			Titulo:                  item.Title,
+			Tipo:                    item.Type,
+			Sinopsis:                item.Synopsis,
+			Idioma:                  item.Language,
+			UrlPortada:              item.PosterURL,
+			FechaLanzamiento:        item.ReleaseDate,
+			PorcentajeRecomendacion: item.RecommendationPct,
+			UrlTrailer:              item.TrailerURL,
+			Puntaje:                 item.Score,
+			Motivo:                  normalizeRecommendationReason(item.Reason),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"algoritmo":       "basado_en_contenido_generos",
+		"titulo_seccion":  "Recomendados para ti",
+		"recomendaciones": response,
+	})
+}
+
 func (h *Handler) handleEpisode(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		writePreflight(w)
@@ -248,6 +319,14 @@ func toProgressResponse(progress *domain.PlaybackHistory) progressResponse {
 		ProgresoSegundos: progress.ProgressSeconds,
 		ActualizadoEn:    progress.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+}
+
+func normalizeRecommendationReason(reason string) string {
+	trimmed := strings.TrimSpace(reason)
+	if trimmed == "" {
+		return "Popular en el catalogo"
+	}
+	return strings.ReplaceAll(trimmed, "Popularen el catalogo", "Popular en el catalogo")
 }
 
 func writePreflight(w http.ResponseWriter) {
