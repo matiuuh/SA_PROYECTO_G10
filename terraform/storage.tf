@@ -23,8 +23,8 @@ resource "google_storage_bucket" "streaming" {
 
   cors {
     origin          = ["*"]
-    method          = ["GET", "HEAD"]
-    response_header = ["Content-Type"]
+    method          = ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"]
+    response_header = ["Content-Type", "Access-Control-Allow-Origin", "Authorization"]
     max_age_seconds = 3600
   }
 
