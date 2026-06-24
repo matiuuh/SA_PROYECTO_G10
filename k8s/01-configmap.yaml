@@ -6,7 +6,7 @@ metadata:
   name: quetzaltv-config
   namespace: quetzaltv-prod
 data:
-  DB_HOST: "$VM3_HOST"
+  DB_HOST: "$VM3_INTERNAL_IP"
   API_GATEWAY_URL: "http://api-gateway"
   FRONTEND_URL: "http://frontend:80"
   USUARIO_SERVICE_URL: "http://usuario-service:8001"
