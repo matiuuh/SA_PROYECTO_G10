@@ -1,7 +1,7 @@
 # .env — VM2 (streaming · cobros · divisas · notificaciones · redis)
 # Generado por Ansible. No editar manualmente.
 
-DB_VM3_HOST={{ hostvars['vm3']['ansible_host'] }}
+DB_VM3_HOST={{ vm3_internal_ip }}
 VM4_HOST={{ hostvars['vm4']['vm4_internal_ip'] | default(hostvars['vm4']['ansible_host']) }}
 DB_PASSWORD={{ db_password }}
 EMAIL_USER={{ email_user }}
