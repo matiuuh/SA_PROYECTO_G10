@@ -90,28 +90,28 @@ type episodeResponse struct {
 }
 
 type createContentRequest struct {
-	Titulo            string `json:"titulo"`
-	Tipo              string `json:"tipo"`
-	Sinopsis          string `json:"sinopsis"`
-	FichaTecnica      string `json:"ficha_tecnica"`
-	FechaLanzamiento  string `json:"fecha_lanzamiento"`
-	ClasificacionEdad string `json:"clasificacion_edad"`
-	DuracionMinutos   *int   `json:"duracion_minutos"`
-	Idioma            string `json:"idioma"`
-	UrlPortada        string `json:"url_portada"`
-	UrlTrailer        string `json:"url_trailer"`
+    Titulo            string `json:"titulo"`
+    Tipo              string `json:"tipo"`
+    Sinopsis          string `json:"sinopsis"`
+    FichaTecnica      string `json:"ficha_tecnica"`
+    FechaLanzamiento  string `json:"fecha_lanzamiento"`  // ← Ahora recibe datetime completo
+    ClasificacionEdad string `json:"clasificacion_edad"`
+    DuracionMinutos   *int   `json:"duracion_minutos"`
+    Idioma            string `json:"idioma"`
+    UrlPortada        string `json:"url_portada"`
+    UrlTrailer        string `json:"url_trailer"`
 }
 
 type updateContentRequest struct {
-	Titulo            string `json:"titulo"`
-	Sinopsis          string `json:"sinopsis"`
-	FichaTecnica      string `json:"ficha_tecnica"`
-	FechaLanzamiento  string `json:"fecha_lanzamiento"`
-	ClasificacionEdad string `json:"clasificacion_edad"`
-	DuracionMinutos   *int   `json:"duracion_minutos"`
-	Idioma            string `json:"idioma"`
-	UrlPortada        string `json:"url_portada"`
-	UrlTrailer        string `json:"url_trailer"`
+    Titulo            string `json:"titulo"`
+    Sinopsis          string `json:"sinopsis"`
+    FichaTecnica      string `json:"ficha_tecnica"`
+    FechaLanzamiento  string `json:"fecha_lanzamiento"`  // ← Ahora recibe datetime completo
+    ClasificacionEdad string `json:"clasificacion_edad"`
+    DuracionMinutos   *int   `json:"duracion_minutos"`
+    Idioma            string `json:"idioma"`
+    UrlPortada        string `json:"url_portada"`
+    UrlTrailer        string `json:"url_trailer"`
 }
 
 type createContentResponse struct {
@@ -737,12 +737,8 @@ func isReleased(releaseDate *time.Time) bool {
 	}
 
 	now := time.Now()
-	releaseYear, releaseMonth, releaseDay := releaseDate.Date()
-	todayYear, todayMonth, todayDay := now.Date()
-	releaseOnlyDate := time.Date(releaseYear, releaseMonth, releaseDay, 0, 0, 0, 0, now.Location())
-	todayOnlyDate := time.Date(todayYear, todayMonth, todayDay, 0, 0, 0, 0, now.Location())
-
-	return !releaseOnlyDate.After(todayOnlyDate)
+	// Comparar fecha y hora completa
+	return !releaseDate.After(now)
 }
 
 func parseCreateContentRequest(req createContentRequest, createdByAccountID string) (*domain.Content, error) {
@@ -786,10 +782,18 @@ func parseCreateContentRequest(req createContentRequest, createdByAccountID stri
 		CreatedByAccountID: createdByAccountID,
 	}
 
+	// Parsear fecha y hora en formato ISO 8601
 	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDate, err := time.Parse("2006-01-02", strings.TrimSpace(req.FechaLanzamiento))
+		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
+		
+		// Intentar con formato completo: "2024-01-15T14:30:00"
+		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
 		if err != nil {
-			return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD.")
+			// Intentar con formato sin segundos: "2024-01-15T14:30"
+			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
+			if err != nil {
+				return nil, errors.New("La fecha y hora de lanzamiento debe usar el formato YYYY-MM-DDTHH:mm:ss")
+			}
 		}
 		content.ReleaseDate = &releaseDate
 	}
@@ -834,10 +838,18 @@ func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error
 		TrailerURL:     strings.TrimSpace(req.UrlTrailer),
 	}
 
+	// Parsear fecha y hora en formato ISO 8601
 	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDate, err := time.Parse("2006-01-02", strings.TrimSpace(req.FechaLanzamiento))
+		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
+		
+		// Intentar con formato completo: "2024-01-15T14:30:00"
+		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
 		if err != nil {
-			return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD.")
+			// Intentar con formato sin segundos: "2024-01-15T14:30"
+			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
+			if err != nil {
+				return nil, errors.New("La fecha y hora de lanzamiento debe usar el formato YYYY-MM-DDTHH:mm:ss")
+			}
 		}
 		content.ReleaseDate = &releaseDate
 	}

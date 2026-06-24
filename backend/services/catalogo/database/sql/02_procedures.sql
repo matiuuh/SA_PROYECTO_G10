@@ -21,7 +21,7 @@ CREATE OR REPLACE PROCEDURE sp_registrar_contenido_completo(
     IN  p_tipo                 tipo_contenido,
     IN  p_sinopsis             TEXT,
     IN  p_ficha_tecnica        TEXT,
-    IN  p_fecha_lanzamiento    DATE,
+    IN  p_fecha_lanzamiento    TIMESTAMPTZ,  -- ← Cambiado de DATE a TIMESTAMPTZ
     IN  p_clasificacion_edad   VARCHAR(30),
     IN  p_duracion_minutos     INTEGER,
     IN  p_idioma               VARCHAR(50),

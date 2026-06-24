@@ -14,6 +14,7 @@ interface MovieForm {
   subtitulos: string
   notasTecnicas: string
   fechaLanzamiento: string
+  horaLanzamiento: string
   duracionMinutos: string
   idioma: string
   clasificacionEdad: string
@@ -40,6 +41,7 @@ const INITIAL_FORM: MovieForm = {
   subtitulos: '',
   notasTecnicas: '',
   fechaLanzamiento: '',
+  horaLanzamiento: '',
   duracionMinutos: '',
   idioma: 'es',
   clasificacionEdad: 'PG-13',
@@ -268,6 +270,21 @@ export function UploadMoviePage() {
         const detail = await getAdminCatalogDetail(session.accessToken, editingId)
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
         const posterObjectName = normalizePosterObjectName(detail.url_portada)
+        
+        // Extraer fecha y hora directamente sin conversión de zona horaria
+        let fechaLanzamiento = ''
+        let horaLanzamiento = ''
+        if (detail.fecha_lanzamiento) {
+          const parts = detail.fecha_lanzamiento.split('T')
+          if (parts.length === 2) {
+            fechaLanzamiento = parts[0]
+            const timeParts = parts[1].split(':')
+            if (timeParts.length >= 2) {
+              horaLanzamiento = `${timeParts[0]}:${timeParts[1]}`
+            }
+          }
+        }
+        
         setForm({
           titulo: detail.titulo,
           sinopsis: detail.sinopsis,
@@ -276,7 +293,8 @@ export function UploadMoviePage() {
           reparto: technicalSheet.get('reparto') ?? '',
           subtitulos: technicalSheet.get('subtitulos') ?? '',
           notasTecnicas: technicalSheet.get('notas') ?? detail.ficha_tecnica ?? '',
-          fechaLanzamiento: detail.fecha_lanzamiento ?? '',
+          fechaLanzamiento: fechaLanzamiento,
+          horaLanzamiento: horaLanzamiento,
           duracionMinutos: detail.duracion_minutos ? String(detail.duracion_minutos) : '',
           idioma: detail.idioma,
           clasificacionEdad: detail.clasificacion_edad || 'PG-13',
@@ -314,6 +332,11 @@ export function UploadMoviePage() {
       return
     }
 
+    if (!form.fechaLanzamiento || !form.horaLanzamiento) {
+      setFeedback({ type: 'error', message: 'Debes seleccionar la fecha y hora de publicación.' })
+      return
+    }
+
     const duration = Number(form.duracionMinutos)
     if (!Number.isFinite(duration) || duration <= 0) {
       setFeedback({ type: 'error', message: 'La duracion debe ser un numero mayor que cero.' })
@@ -327,11 +350,14 @@ export function UploadMoviePage() {
       let trailerObjectName = uploadState.phase === 'done' ? uploadState.objectName : undefined
       let posterObjectName = posterUploadState.phase === 'done' ? posterUploadState.objectName : undefined
 
+      // Usar la hora exacta que seleccionó el usuario sin conversión
+      const fechaHoraFormateada = `${form.fechaLanzamiento}T${form.horaLanzamiento}:00`
+
       const payload = {
         titulo: form.titulo.trim(),
         sinopsis: form.sinopsis.trim(),
         ficha_tecnica: buildTechnicalSheet(form),
-        fecha_lanzamiento: form.fechaLanzamiento || undefined,
+        fecha_lanzamiento: fechaHoraFormateada,
         clasificacion_edad: form.clasificacionEdad || undefined,
         duracion_minutos: duration,
         idioma: form.idioma.trim(),
@@ -433,7 +459,42 @@ export function UploadMoviePage() {
             </h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
-              <Input label="Fecha de estreno / publicacion" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                  Fecha y hora de publicación *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={form.fechaLanzamiento && form.horaLanzamiento ? 
+                    `${form.fechaLanzamiento}T${form.horaLanzamiento}` : 
+                    ''
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value) {
+                      const [date, time] = value.split('T')
+                      setForm(prev => ({
+                        ...prev,
+                        fechaLanzamiento: date,
+                        horaLanzamiento: time || ''
+                      }))
+                    } else {
+                      setForm(prev => ({
+                        ...prev,
+                        fechaLanzamiento: '',
+                        horaLanzamiento: ''
+                      }))
+                    }
+                  }}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                  required
+                />
+                <p className="text-xs text-[var(--color-denim-500)]">
+                  Selecciona la fecha y hora exacta de publicación
+                </p>
+              </div>
+              
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea
@@ -500,9 +561,7 @@ export function UploadMoviePage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">
-                  Portada *
-                </label>
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Portada *</label>
                 <div className="flex flex-col gap-2 rounded-lg border border-white/[0.07] bg-[#0d1220] p-3">
                   {posterUploadState.phase === 'done' ? (
                     <div className="flex items-center gap-2 text-sm">
@@ -585,9 +644,7 @@ export function UploadMoviePage() {
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--color-denim-200)]">
-                  Trailer (video mp4)
-                </label>
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">Trailer (video mp4)</label>
                 <div className="flex flex-col gap-2 rounded-lg border border-white/[0.07] bg-[#0d1220] p-3">
                   {uploadState.phase === 'done' ? (
                     <div className="flex items-center gap-2 text-sm">
