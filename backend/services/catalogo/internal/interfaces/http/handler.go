@@ -785,14 +785,15 @@ func parseCreateContentRequest(req createContentRequest, createdByAccountID stri
 	// Parsear fecha y hora en formato ISO 8601
 	if strings.TrimSpace(req.FechaLanzamiento) != "" {
 		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-		
-		// Intentar con formato completo: "2024-01-15T14:30:00"
+
 		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
 		if err != nil {
-			// Intentar con formato sin segundos: "2024-01-15T14:30"
 			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
 			if err != nil {
-				return nil, errors.New("La fecha y hora de lanzamiento debe usar el formato YYYY-MM-DDTHH:mm:ss")
+				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
+				if err != nil {
+					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
+				}
 			}
 		}
 		content.ReleaseDate = &releaseDate
@@ -841,14 +842,15 @@ func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error
 	// Parsear fecha y hora en formato ISO 8601
 	if strings.TrimSpace(req.FechaLanzamiento) != "" {
 		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-		
-		// Intentar con formato completo: "2024-01-15T14:30:00"
+
 		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
 		if err != nil {
-			// Intentar con formato sin segundos: "2024-01-15T14:30"
 			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
 			if err != nil {
-				return nil, errors.New("La fecha y hora de lanzamiento debe usar el formato YYYY-MM-DDTHH:mm:ss")
+				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
+				if err != nil {
+					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
+				}
 			}
 		}
 		content.ReleaseDate = &releaseDate

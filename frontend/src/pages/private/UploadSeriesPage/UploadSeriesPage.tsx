@@ -47,7 +47,7 @@ const INITIAL_FORM: SeriesForm = {
   urlPortada: '',
 }
 
-const AGE_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17']
+const AGE_OPTIONS = ['TP', 'G', 'PG', 'PG-13', 'R', 'NC-17']
 
 function parseTechnicalSheet(sheet: string) {
   const metadata = new Map<string, string>()
