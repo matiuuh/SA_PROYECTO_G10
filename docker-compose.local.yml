@@ -278,6 +278,7 @@ services:
       GCS_BUCKET: quetzaltv-streaming-g10
       GCS_TRAILERS_FOLDER: trailers
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
+      SUSCRIPCION_SERVICE_URL: http://suscripcion:8002
     volumes:
       - ./backend/secrets/gcs-service-account.json:/run/secrets/gcs-key.json:ro
     ports:
