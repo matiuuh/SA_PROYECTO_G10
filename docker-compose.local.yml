@@ -29,6 +29,7 @@ name: quetzaltv-local
 #   divisas           8005    5005   5435
 #   cobros            8006    5006   5436
 #   notificaciones    8007    5007   5439
+#   watchparty        8008    —      5440
 #
 #   Credenciales BD: usuario=quetzal / pass=quetzal
 #   JWT Secret:      quetzal-dev-secret  (solo desarrollo)
@@ -424,6 +425,46 @@ services:
         condition: service_healthy
 
   # ════════════════════════════════════════════════════════════════════════════
+  # WATCH PARTY  (TypeScript · HTTP + WebSocket)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  postgres-watchparty:
+    image: postgres:16-alpine
+    container_name: quetzal-pg-watchparty-local
+    restart: unless-stopped
+    command: ["postgres", "-c", "timezone=America/Guatemala"]
+    environment:
+      POSTGRES_USER: quetzal
+      POSTGRES_PASSWORD: quetzal
+      POSTGRES_DB: watchparty_db
+    volumes:
+      - pg_watchparty_data:/var/lib/postgresql/data
+      - ./backend/services/watchparty/database/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5440:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quetzal -d watchparty_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  watchparty:
+    build:
+      context: ./backend
+      dockerfile: services/watchparty/Dockerfile
+    container_name: quetzal-watchparty-local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://quetzal:quetzal@postgres-watchparty:5432/watchparty_db?sslmode=disable
+      HTTP_PORT: 8008
+      SUSCRIPCION_SERVICE_URL: http://suscripcion:8002
+    ports:
+      - "8008:8008"
+    depends_on:
+      postgres-watchparty:
+        condition: service_healthy
+
+  # ════════════════════════════════════════════════════════════════════════════
   # FRONTEND  (React 19 + Vite — build estático servido por nginx)
   # ════════════════════════════════════════════════════════════════════════════
 
@@ -438,6 +479,7 @@ services:
         VITE_CATALOGO_API_URL: /api/catalogo
         VITE_STREAMING_API_URL: /api/streaming
         VITE_COBROS_API_URL: /api/cobros
+        VITE_WATCHPARTY_API_URL: /api/watchparty
     container_name: quetzal-frontend-local
     restart: unless-stopped
     # Sin puertos externos — solo el api-gateway le habla en :3000 internamente
@@ -463,11 +505,13 @@ services:
       COBROS_SERVICE_URL:         http://cobros:8006
       DIVISAS_SERVICE_URL:        http://divisas:8005
       NOTIFICACIONES_SERVICE_URL: http://notificaciones:8007
+      WATCHPARTY_SERVICE_URL:     http://watchparty:8008
     ports:
       - "80:80"
     depends_on:
       - divisas
       - notificaciones
+      - watchparty
 
 # ════════════════════════════════════════════════════════════════════════════
 # VOLÚMENES — uno por base de datos (aislamiento físico completo)
@@ -481,3 +525,4 @@ volumes:
   pg_divisas_data:
   pg_cobros_data:
   pg_notificaciones_data:
+  pg_watchparty_data:
