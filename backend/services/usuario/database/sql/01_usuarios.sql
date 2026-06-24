@@ -38,11 +38,16 @@ CREATE TABLE usuarios.perfiles (
     color VARCHAR(7) DEFAULT '#6D28D9',
     es_principal BOOLEAN NOT NULL DEFAULT FALSE,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
+    pin_restrictivo VARCHAR(255),
+    control_parental VARCHAR(20),
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     eliminado_en TIMESTAMPTZ,
     CONSTRAINT uq_perfil_nombre_por_cuenta UNIQUE (cuenta_id, nombre),
-    CONSTRAINT ck_perfiles_color_hex CHECK (color ~ '^#[0-9A-Fa-f]{6}$')
+    CONSTRAINT ck_perfiles_color_hex CHECK (color ~ '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT ck_perfiles_control_parental CHECK (
+        control_parental IS NULL OR control_parental IN ('TP', 'PG-13', 'R')
+    )
 );
 
 CREATE TABLE usuarios.sesiones (
@@ -218,6 +223,8 @@ SELECT
     p.color,
     p.es_principal,
     p.activo,
+    p.pin_restrictivo,
+    p.control_parental,
     p.creado_en,
     p.actualizado_en
 FROM usuarios.perfiles p

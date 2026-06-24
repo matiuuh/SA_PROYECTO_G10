@@ -23,11 +23,13 @@ import {
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
+import { PinModal } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { getProfileRestrictions, verifyProfilePin } from '@/lib/usuario-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent, CatalogDetail, CatalogEpisode, CatalogSeason } from '@/types/catalog'
 import type { PlaybackProgress } from '@/types/streaming'
@@ -201,6 +203,8 @@ export function MovieDetailPage() {
   const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
   const [showPlaybackControls, setShowPlaybackControls] = useState(true)
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
+  const [showPinModal, setShowPinModal] = useState(false)
+  const [pendingPlaybackAction, setPendingPlaybackAction] = useState<{ type: 'play' | 'resume' } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playbackContainerRef = useRef<HTMLDivElement | null>(null)
   const controlsHideTimeoutRef = useRef<number | null>(null)
@@ -399,6 +403,102 @@ export function MovieDetailPage() {
     }, 3000)
   }
 
+  const RATING_HIERARCHY: Record<string, number> = { 'TP': 0, 'PG-13': 1, 'R': 2 }
+
+  function ratingRequiresPin(contentRating: string | null | undefined, profileControl: string | null | undefined): boolean {
+    if (!contentRating || !profileControl) return false
+    const contentLevel = RATING_HIERARCHY[contentRating]
+    const profileLevel = RATING_HIERARCHY[profileControl]
+    if (contentLevel == null || profileLevel == null) return false
+    return contentLevel > profileLevel
+  }
+
+  async function checkParentalRestriction(): Promise<boolean> {
+    const contentRating = detail?.clasificacion_edad
+    if (!contentRating) return false
+
+    const profile = getStoredActiveProfile()
+    if (!profile?.id || !accessToken) return false
+
+    try {
+      const restrictions = await getProfileRestrictions(accessToken, profile.id)
+      if (!restrictions.tiene_pin || !restrictions.control_parental) return false
+      return ratingRequiresPin(contentRating, restrictions.control_parental)
+    } catch {
+      return false
+    }
+  }
+
+  async function startPlayback() {
+    setResumeFromSeconds(0)
+    setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }
+
+  async function startResume() {
+    const nextResumePoint = savedProgress?.progreso_segundos ?? 0
+    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setIsPlaybackPaused(false)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }
+
+  async function handlePlayWithPinCheck(action: 'play' | 'resume') {
+    if (isAdmin) {
+      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
+      return
+    }
+    if (!hasSubscription) {
+      setPlaybackError('Activa un plan para reproducir este contenido.')
+      return
+    }
+    if (detail?.tipo === 'serie' && !selectedEpisode) {
+      setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
+      return
+    }
+
+    const restricted = await checkParentalRestriction()
+    if (restricted) {
+      setPendingPlaybackAction(action === 'play' ? { type: 'play' } : { type: 'resume' })
+      setShowPinModal(true)
+      return
+    }
+
+    if (action === 'play') {
+      await startPlayback()
+    } else {
+      await startResume()
+    }
+  }
+
+  async function handlePinVerify(pin: string): Promise<boolean> {
+    const profile = getStoredActiveProfile()
+    if (!profile?.id) return false
+
+    const result = await verifyProfilePin(profile.id, { pin })
+    if (result.valido) {
+      setShowPinModal(false)
+      if (pendingPlaybackAction?.type === 'play') {
+        await startPlayback()
+      } else if (pendingPlaybackAction?.type === 'resume') {
+        await startResume()
+      }
+      setPendingPlaybackAction(null)
+    }
+    return result.valido
+  }
+
+  function handlePinCancel() {
+    setShowPinModal(false)
+    setPendingPlaybackAction(null)
+  }
+
   const resetPlaybackSelectionState = () => {
     setSavedProgress(null)
     setResumeFromSeconds(0)
@@ -490,47 +590,11 @@ export function MovieDetailPage() {
   ])
 
   const handlePlay = () => {
-    if (isAdmin) {
-      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
-      return
-    }
-    if (!hasSubscription) {
-      setPlaybackError('Activa un plan para reproducir este contenido.')
-      return
-    }
-    if (detail?.tipo === 'serie' && !selectedEpisode) {
-      setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
-      return
-    }
-    setResumeFromSeconds(0)
-    setPlaybackPositionSeconds(0)
-    setMediaDurationSeconds(0)
-    setIsPlaybackPaused(false)
-    setPlaybackStartedAt(Date.now())
-    setPlaybackError('')
-    setPlaying(true)
+    void handlePlayWithPinCheck('play')
   }
 
   const handleResume = () => {
-    if (isAdmin) {
-      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
-      return
-    }
-    if (!hasSubscription) {
-      setPlaybackError('Activa un plan para reanudar este contenido.')
-      return
-    }
-    if (detail?.tipo === 'serie' && !selectedEpisode) {
-      setPlaybackError('Selecciona un episodio para reanudar la reproduccion.')
-      return
-    }
-    const nextResumePoint = savedProgress?.progreso_segundos ?? 0
-    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
-    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
-    setIsPlaybackPaused(false)
-    setPlaybackStartedAt(Date.now())
-    setPlaybackError('')
-    setPlaying(true)
+    void handlePlayWithPinCheck('resume')
   }
 
   const getCurrentVideoProgressSeconds = (): number | null => {
@@ -1010,7 +1074,15 @@ export function MovieDetailPage() {
                 {tag}
               </span>
             ))}
-            <span className="inline-flex items-center rounded-md border border-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white/60">
+            <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${
+              detail.clasificacion_edad === 'R'
+                ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                : detail.clasificacion_edad === 'PG-13'
+                  ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300'
+                  : detail.clasificacion_edad === 'TP'
+                    ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                    : 'border-white/20 text-white/60'
+            }`}>
               {detail.clasificacion_edad || 'Sin clasificacion'}
             </span>
           </div>
@@ -1264,7 +1336,25 @@ export function MovieDetailPage() {
               ) : null}
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Clasificacion</span>
-                <span className="text-sm text-white">{detail.clasificacion_edad || 'Sin clasificacion'}</span>
+                <span className={`text-sm font-semibold ${
+                  detail.clasificacion_edad === 'R'
+                    ? 'text-red-400'
+                    : detail.clasificacion_edad === 'PG-13'
+                      ? 'text-yellow-400'
+                      : detail.clasificacion_edad === 'TP'
+                        ? 'text-green-400'
+                        : 'text-white'
+                }`}>
+                  {detail.clasificacion_edad
+                    ? detail.clasificacion_edad === 'TP'
+                      ? 'TP - Apta para todo publico'
+                      : detail.clasificacion_edad === 'PG-13'
+                        ? 'PG-13 - No recomendada para menores de 13'
+                        : detail.clasificacion_edad === 'R'
+                          ? 'R - Restringida, mayores de 18'
+                          : detail.clasificacion_edad
+                    : 'Sin clasificacion'}
+                </span>
               </div>
               {fallbackNotes ? (
                 <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
@@ -1343,6 +1433,15 @@ export function MovieDetailPage() {
             </div>
           </ScrollReveal>
         </div>
+      )}
+
+      {showPinModal && detail && (
+        <PinModal
+          titulo={detail.titulo}
+          clasificacion={detail.clasificacion_edad}
+          onVerify={handlePinVerify}
+          onCancel={handlePinCancel}
+        />
       )}
     </div>
   )

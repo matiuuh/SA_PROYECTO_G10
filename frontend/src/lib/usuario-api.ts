@@ -4,10 +4,15 @@ import type {
   ChangePasswordPayload,
   CreateProfilePayload,
   LoginPayload,
+  ProfileRestrictionsResponse,
   RegisterPayload,
+  SetControlParentalPayload,
+  SetProfilePinPayload,
   UpdateAccountPayload,
   UpdateProfilePayload,
   UserProfile,
+  VerifyProfilePinPayload,
+  VerifyProfilePinResponse,
 } from '@/types/auth'
 
 const API_BASE_URL = import.meta.env.VITE_USUARIO_API_URL ?? 'http://localhost:8001'
@@ -197,4 +202,96 @@ export async function deleteProfile(accessToken: string, profileId: string): Pro
   if (!response.ok) {
     throw new Error(await parseError(response))
   }
+}
+
+export async function setProfilePin(
+  accessToken: string,
+  profileId: string,
+  payload: SetProfilePinPayload,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/pin`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+}
+
+export async function removeProfilePin(
+  accessToken: string,
+  profileId: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/pin`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+}
+
+export async function verifyProfilePin(
+  profileId: string,
+  payload: VerifyProfilePinPayload,
+): Promise<VerifyProfilePinResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/verify-pin`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as VerifyProfilePinResponse
+}
+
+export async function setProfileControlParental(
+  accessToken: string,
+  profileId: string,
+  payload: SetControlParentalPayload,
+): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/control-parental`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as UserProfile
+}
+
+export async function getProfileRestrictions(
+  accessToken: string,
+  profileId: string,
+): Promise<ProfileRestrictionsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/restrictions`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return (await response.json()) as ProfileRestrictionsResponse
 }
