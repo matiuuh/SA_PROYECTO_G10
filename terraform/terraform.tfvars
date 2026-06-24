@@ -1,9 +1,0 @@
-project_id          = "sa-proyecto-g10-500320"
-region              = "us-central1"
-zone                = "us-central1-a"
-vm_machine_type_app = "e2-medium"
-vm_machine_type_db  = "e2-standard-2"
-gke_machine_type    = "e2-standard-2"
-gke_node_count      = 2
-ssh_user            = "ubuntu"
-ssh_public_key      = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKZSJQVao1bOLxNQkjlkW0p0B0oM8CZqdKJTl+B7tGpS quetzaltv-deploy"
