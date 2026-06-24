@@ -49,7 +49,7 @@ const INITIAL_FORM: MovieForm = {
   urlPortada: '',
 }
 
-const AGE_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17']
+const AGE_OPTIONS = ['TP', 'G', 'PG', 'PG-13', 'R', 'NC-17']
 
 function parseTechnicalSheet(sheet: string) {
   const metadata = new Map<string, string>()
@@ -370,7 +370,8 @@ export function UploadMoviePage() {
       let posterObjectName = posterUploadState.phase === 'done' ? posterUploadState.objectName : undefined
 
       // Usar la hora exacta que seleccionó el usuario sin conversión
-      const fechaHoraFormateada = `${form.fechaLanzamiento}T${form.horaLanzamiento}:00`
+      const timeOnly = form.horaLanzamiento.split(':').slice(0, 2).join(':')
+      const fechaHoraFormateada = `${form.fechaLanzamiento}T${timeOnly}:00`
 
       const payload = {
         titulo: form.titulo.trim(),

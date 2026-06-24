@@ -40,6 +40,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   { method: 'GET', matches: startsWith('/api/divisas/') },
   { method: 'POST', matches: startsWith('/api/divisas/') },
   { method: 'POST', matches: startsWith('/api/notificaciones/') },
+  { method: 'POST', matches: (url) => /^\/api\/usuario\/api\/v1\/profiles\/[^/]+\/verify-pin/.test(url) },
   { method: 'OPTIONS', matches: startsWith('/api/') },
   { method: 'GET', matches: exact('/health') },
 ];

@@ -23,6 +23,8 @@ class Profile:
     activo: bool
     creado_en: datetime
     actualizado_en: datetime
+    pin_restrictivo: str | None = None
+    control_parental: str | None = None
 
 
 @dataclass
