@@ -1,0 +1,27 @@
+# ─── Variables compartidas por todas las VMs ─────────────────────────────────
+# IMPORTANTE: los valores de secretos deben pasarse con -e en la línea de
+# comandos o con ansible-vault para no quedar en el repositorio.
+#
+# Ejemplo de ejecución:
+#   ansible-playbook playbooks/site.yml \
+#     -e "db_password=MiPassword123" \
+#     -e "jwt_secret=mi_jwt_secret" \
+#     -e "email_user=correo@gmail.com" \
+#     -e "email_pass=app_password" \
+#     -e "email_from=Quetzal TV"
+
+# Directorio base de la aplicación en todas las VMs
+quetzaltv_dir: /opt/quetzaltv
+
+# Usuario que ejecuta Docker Compose (mismo que SSH)
+app_user: ubuntu
+
+# Ruta al compose file en cada VM (relativo a quetzaltv_dir)
+compose_dir: "{{ quetzaltv_dir }}/backend/deploy/compose"
+
+# ─── Secretos (pasar por -e o ansible-vault) ─────────────────────────────────
+db_password: "CAMBIAR_POR_VAULT_O_-e"
+jwt_secret:  "CAMBIAR_POR_VAULT_O_-e"
+email_user:  "CAMBIAR_POR_VAULT_O_-e"
+email_pass:  "CAMBIAR_POR_VAULT_O_-e"
+email_from:  "CAMBIAR_POR_VAULT_O_-e"

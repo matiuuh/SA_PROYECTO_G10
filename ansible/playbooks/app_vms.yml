@@ -1,0 +1,149 @@
+---
+# Configura VM1, VM2 y VM4: Docker, gcloud, estructura de directorios y .env
+- name: Provisionar VMs de aplicación
+  hosts: vm_app
+  become: true
+
+  tasks:
+
+    # ── Docker CE ─────────────────────────────────────────────────────────────
+
+    - name: Instalar dependencias de Docker
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: true
+
+    - name: Agregar clave GPG de Docker
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Agregar repositorio de Docker
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+        https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+        > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Instalar Docker CE y Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Habilitar y arrancar Docker
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Agregar usuario ubuntu al grupo docker
+      user:
+        name: "{{ app_user }}"
+        groups: docker
+        append: true
+
+    # ── gcloud CLI ────────────────────────────────────────────────────────────
+
+    - name: Agregar clave GPG de Google Cloud
+      shell: |
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+          | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+      args:
+        creates: /usr/share/keyrings/cloud.google.gpg
+
+    - name: Agregar repositorio de gcloud
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] \
+        https://packages.cloud.google.com/apt cloud-sdk main" \
+        > /etc/apt/sources.list.d/google-cloud-sdk.list
+      args:
+        creates: /etc/apt/sources.list.d/google-cloud-sdk.list
+
+    - name: Instalar gcloud CLI
+      apt:
+        name: google-cloud-cli
+        state: present
+        update_cache: true
+
+    # ── Estructura de directorios ─────────────────────────────────────────────
+
+    - name: Crear directorio base de Quetzal TV
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - "{{ quetzaltv_dir }}"
+        - "{{ compose_dir }}"
+        - "{{ quetzaltv_dir }}/secrets"
+
+    # ── Compose files ─────────────────────────────────────────────────────────
+
+    - name: Copiar compose de VM1
+      copy:
+        src: "../../backend/deploy/compose/docker-compose.cloud-vm1.yml"
+        dest: "{{ compose_dir }}/docker-compose.cloud-vm1.yml"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      when: inventory_hostname == 'vm1'
+
+    - name: Copiar compose de VM2
+      copy:
+        src: "../../backend/deploy/compose/docker-compose.cloud-vm2.yml"
+        dest: "{{ compose_dir }}/docker-compose.cloud-vm2.yml"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      when: inventory_hostname == 'vm2'
+
+    - name: Copiar compose de VM4
+      copy:
+        src: "../../backend/deploy/compose/docker-compose.cloud-vm4.yml"
+        dest: "{{ compose_dir }}/docker-compose.cloud-vm4.yml"
+        owner: "{{ app_user }}"
+        mode: "0644"
+      when: inventory_hostname == 'vm4'
+
+    # ── Archivos .env ─────────────────────────────────────────────────────────
+
+    - name: Crear .env para VM1
+      template:
+        src: "../templates/env_vm1.j2"
+        dest: "{{ compose_dir }}/.env"
+        owner: "{{ app_user }}"
+        mode: "0600"
+      when: inventory_hostname == 'vm1'
+
+    - name: Crear .env para VM2
+      template:
+        src: "../templates/env_vm2.j2"
+        dest: "{{ compose_dir }}/.env"
+        owner: "{{ app_user }}"
+        mode: "0600"
+      when: inventory_hostname == 'vm2'
+
+    - name: Crear .env para VM4
+      template:
+        src: "../templates/env_vm4.j2"
+        dest: "{{ compose_dir }}/.env"
+        owner: "{{ app_user }}"
+        mode: "0600"
+      when: inventory_hostname == 'vm4'
