@@ -12,6 +12,7 @@ import {
   ProfileSelectionPage,
   MovieDetailPage,
   HistoryPage,
+  WatchPartyPage,
   AdminDashboardPage,
   AdminCatalogPage,
   AdminAuditPage,
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       { path: '/settings',                    element: <UserSettingsPage /> },
       { path: '/history',                     element: <HistoryPage /> },
       { path: '/movie/:id',                   element: <MovieDetailPage /> },
+      { path: '/watch-party',                 element: <WatchPartyPage /> },
     ],
   },
   {

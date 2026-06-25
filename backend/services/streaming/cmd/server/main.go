@@ -57,6 +57,8 @@ func main() {
 	svc := application.New(repo, trailerRepo, episodeRepo)
 	handler := grpchandler.NewHandler(svc)
 	httpHandler := httphandler.NewHandler(svc)
+	wpRepo := postgres.NewWatchPartyRepository(pool)
+	wpHandler := httphandler.NewWatchPartyHandler(wpRepo)
 
 	grpcServer := grpc.NewServer()
 	streamingv1.RegisterStreamingServiceServer(grpcServer, handler)
@@ -69,6 +71,7 @@ func main() {
 
 	httpMux := http.NewServeMux()
 	httpHandler.RegisterRoutes(httpMux)
+	wpHandler.RegisterRoutes(httpMux)
 
 	go func() {
 		log.Printf("streaming-service HTTP escuchando en :%s", httpPort)

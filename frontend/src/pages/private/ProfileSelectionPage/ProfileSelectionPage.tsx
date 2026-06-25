@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { X, Trash2, Crown } from 'lucide-react'
+import { X, Trash2, Crown, ShieldCheck, Lock } from 'lucide-react'
 import { Button, Input, colorVariants } from '@/components/atoms'
 import { ProfileSelector, type Profile } from '@/components/organisms'
 import {
@@ -12,7 +12,15 @@ import {
 } from '@/lib/auth'
 import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
 import { toUiPlan } from '@/lib/subscription-plans'
-import { createProfile, deleteProfile, syncProfilesAvailability, updateProfile } from '@/lib/usuario-api'
+import {
+  createProfile,
+  deleteProfile,
+  removeProfilePin,
+  setProfileControlParental,
+  setProfilePin,
+  syncProfilesAvailability,
+  updateProfile,
+} from '@/lib/usuario-api'
 import type { UserProfile } from '@/types/auth'
 import type { UiSubscriptionPlan } from '@/types/subscription'
 
@@ -64,6 +72,9 @@ export function ProfileSelectionPage() {
   const [profileName, setProfileName] = useState('')
   const [profileColor, setProfileColor] = useState(availableProfileColors[0].value)
   const [makePrimary, setMakePrimary] = useState(false)
+  const [hasPin, setHasPin] = useState(false)
+  const [pinValue, setPinValue] = useState('')
+  const [controlParental, setControlParental] = useState<string | null>(null)
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -168,6 +179,9 @@ export function ProfileSelectionPage() {
     setProfileName('')
     setProfileColor(availableProfileColors[0].value)
     setMakePrimary(false)
+    setHasPin(false)
+    setPinValue('')
+    setControlParental(null)
     setFormError('')
     setIsSubmitting(false)
   }
@@ -189,6 +203,9 @@ export function ProfileSelectionPage() {
     setProfileName('')
     setProfileColor(availableProfileColors[profiles.length % availableProfileColors.length].value)
     setMakePrimary(false)
+    setHasPin(false)
+    setPinValue('')
+    setControlParental(null)
     setFormError('')
   }
 
@@ -202,6 +219,9 @@ export function ProfileSelectionPage() {
     setProfileName(profile.nombre)
     setProfileColor(profile.color)
     setMakePrimary(profile.es_principal)
+    setHasPin(profile.tiene_pin)
+    setPinValue('')
+    setControlParental(profile.control_parental)
     setFormError('')
   }
 
@@ -211,6 +231,11 @@ export function ProfileSelectionPage() {
     const normalizedName = profileName.trim()
     if (!normalizedName) {
       setFormError('El nombre del perfil es obligatorio.')
+      return
+    }
+
+    if (hasPin && pinValue.length !== 4 && dialogMode === 'edit') {
+      setFormError('El PIN debe tener exactamente 4 digitos.')
       return
     }
 
@@ -240,21 +265,33 @@ export function ProfileSelectionPage() {
           es_principal: makePrimary !== selectedProfile.es_principal ? makePrimary : undefined,
         })
 
+        if (hasPin && pinValue) {
+          await setProfilePin(session.accessToken, selectedProfile.id, { pin: pinValue })
+        } else if (selectedProfile.tiene_pin && !hasPin) {
+          await removeProfilePin(session.accessToken, selectedProfile.id)
+        }
+
+        await setProfileControlParental(session.accessToken, selectedProfile.id, {
+          nivel: controlParental || null,
+        })
+
+        const finalProfile = { ...updatedProfile, tiene_pin: hasPin, control_parental: controlParental }
+
         setProfiles((current) =>
           current.map((profile) => {
-            if (profile.id === updatedProfile.id) return updatedProfile
-            if (updatedProfile.es_principal) {
+            if (profile.id === finalProfile.id) return finalProfile as UserProfile
+            if (finalProfile.es_principal) {
               return { ...profile, es_principal: false }
             }
             return profile
           }),
         )
 
-        if (activeStoredProfile?.id === updatedProfile.id) {
-          storeActiveProfile(updatedProfile)
+        if (activeStoredProfile?.id === finalProfile.id) {
+          storeActiveProfile(finalProfile as unknown as UserProfile)
         }
 
-        setSuccessMessage(`Perfil "${updatedProfile.nombre}" actualizado correctamente.`)
+        setSuccessMessage(`Perfil "${finalProfile.nombre}" actualizado correctamente.`)
       }
 
       setErrorMessage('')
@@ -409,6 +446,91 @@ export function ProfileSelectionPage() {
                   </p>
                 </div>
               </label>
+
+              {dialogMode === 'edit' && (
+                <>
+                  <div className="border-t border-white/[0.06] pt-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-[var(--color-primary)]" />
+                      <p className="text-sm font-semibold text-white">Control Parental</p>
+                    </div>
+                    <p className="mb-3 text-xs text-[var(--color-denim-400)]">
+                      Configura un PIN restrictivo para limitar el acceso a contenido no apto para este perfil.
+                    </p>
+
+                    <label className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={hasPin}
+                        onChange={(event) => {
+                          setHasPin(event.target.checked)
+                          if (!event.target.checked) {
+                            setPinValue('')
+                            setControlParental(null)
+                          }
+                        }}
+                        className="mt-1 h-4 w-4 rounded border-white/20 bg-[#080c14]"
+                      />
+                      <div>
+                        <p className="flex items-center gap-2 text-sm font-medium text-white">
+                          <Lock size={15} className="text-[var(--color-warning)]" />
+                          Activar PIN restrictivo
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--color-denim-400)]">
+                          Se solicitara este PIN al reproducir contenido no apto para menores.
+                        </p>
+                      </div>
+                    </label>
+
+                    {hasPin && (
+                      <div className="mt-3 space-y-3 pl-7">
+                        <Input
+                          label="PIN de 4 digitos"
+                          value={pinValue}
+                          onChange={(event) => {
+                            const val = event.target.value.replace(/\D/g, '').slice(0, 4)
+                            setPinValue(val)
+                          }}
+                          placeholder="****"
+                          type="password"
+                          maxLength={4}
+                          inputMode="numeric"
+                        />
+
+                        <div className="space-y-1.5">
+                          <p className="text-sm font-medium text-[var(--color-denim-200)]">
+                            Clasificacion maxima permitida sin PIN
+                          </p>
+                          <div className="flex gap-2">
+                            {[
+                              { value: 'TP', label: 'TP', desc: 'Todo publico' },
+                              { value: 'PG-13', label: 'PG-13', desc: 'Mayores de 13' },
+                              { value: 'R', label: 'R', desc: 'Mayores de 18' },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setControlParental(option.value)}
+                                className={`flex-1 rounded-lg border px-3 py-2 text-center text-sm transition-colors ${
+                                  controlParental === option.value
+                                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-white'
+                                    : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-300)] hover:bg-white/[0.07]'
+                                }`}
+                              >
+                                <span className="block font-semibold">{option.label}</span>
+                                <span className="block text-[10px] opacity-70">{option.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-[var(--color-denim-500)]">
+                            Los contenidos con clasificacion superior a la seleccionada requeriran el PIN para reproducirse.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               {formError && (
                 <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">

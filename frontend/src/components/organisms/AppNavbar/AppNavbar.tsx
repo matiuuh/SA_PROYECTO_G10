@@ -7,6 +7,7 @@ import {
   User,
   History,
   X,
+  Tv,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
 import { clearSession, getActiveSession, getStoredActiveProfile, isAdminRole } from '@/lib/auth'
@@ -135,6 +136,15 @@ export function AppNavbar() {
                 <span className="sm:hidden">Plan</span>
               </Link>
             )}
+
+            <Link
+              to="/watch-party"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+              aria-label="Watch Party"
+            >
+              <Tv size={16} strokeWidth={1.75} />
+              <span className="hidden sm:inline">Watch Party</span>
+            </Link>
 
             {hasSubscription && (
               <>

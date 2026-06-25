@@ -47,6 +47,34 @@ class InMemoryProfileRepository:
                 promoted.actualizado_en = datetime.now(timezone.utc)
                 self._profiles[promoted.id] = promoted
 
+    def set_pin(self, profile_id: str, pin_hash: str | None) -> None:
+        profile = self._profiles.get(profile_id)
+        if profile is None:
+            return
+        profile.pin_restrictivo = pin_hash
+        profile.actualizado_en = datetime.now(timezone.utc)
+        self._profiles[profile_id] = profile
+
+    def get_pin_hash(self, profile_id: str) -> str | None:
+        profile = self._profiles.get(profile_id)
+        if profile is None:
+            return None
+        return profile.pin_restrictivo
+
+    def set_control_parental(self, profile_id: str, nivel: str | None) -> None:
+        profile = self._profiles.get(profile_id)
+        if profile is None:
+            return
+        profile.control_parental = nivel
+        profile.actualizado_en = datetime.now(timezone.utc)
+        self._profiles[profile_id] = profile
+
+    def get_control_parental(self, profile_id: str) -> str | None:
+        profile = self._profiles.get(profile_id)
+        if profile is None:
+            return None
+        return profile.control_parental
+
     def _unset_principal(self, account_id: str, exclude_profile_id: str | None = None) -> None:
         for profile in self._profiles.values():
             if profile.cuenta_id != account_id:
