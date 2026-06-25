@@ -189,6 +189,7 @@ export function MovieDetailPage() {
   const session = getActiveSession()
   const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
+  const activeProfileId = activeProfile?.id ?? ''
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
   const [playing, setPlaying] = useState(false)
@@ -199,6 +200,7 @@ export function MovieDetailPage() {
   const [hasSubscription, setHasSubscription] = useState(false)
   const [activePlanName, setActivePlanName] = useState('')
   const [activePlanProfileLimit, setActivePlanProfileLimit] = useState(0)
+  const [isLoadingPlanAccess, setIsLoadingPlanAccess] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [seasons, setSeasons] = useState<CatalogSeason[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
@@ -246,34 +248,35 @@ export function MovieDetailPage() {
   useEffect(() => {
     async function loadSubscriptionStatus() {
       if (!accountId || !accessToken) return
-      const [status, profiles] = await Promise.all([
-        getSubscriptionStatusByAccount(accountId),
-        listProfiles(accessToken),
-      ])
-      setHasSubscription(status.tiene_suscripcion)
+      setIsLoadingPlanAccess(true)
       setActivePlanName('')
       setActivePlanProfileLimit(0)
 
-      if (status.tiene_suscripcion) {
-        try {
-          const plans = await listActivePlans()
+      try {
+        const [status, profiles, plans] = await Promise.all([
+          getSubscriptionStatusByAccount(accountId),
+          listProfiles(accessToken),
+          listActivePlans().catch(() => []),
+        ])
+        setHasSubscription(status.tiene_suscripcion)
+
+        if (status.tiene_suscripcion) {
           const activePlan = plans.find((plan) => plan.id === status.suscripcion?.plan_id)
           setActivePlanName(activePlan?.nombre ?? '')
           setActivePlanProfileLimit(activePlan?.perfiles_maximos ?? 0)
-        } catch {
-          setActivePlanName('')
-          setActivePlanProfileLimit(0)
-        }
 
-        const syncedProfile = syncStoredActiveProfile(profiles)
-        if (!syncedProfile) {
-          navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+          const syncedProfile = syncStoredActiveProfile(profiles)
+          if (!syncedProfile) {
+            navigate('/profiles', { replace: true, state: { reason: activeProfileId ? 'invalid-profile' : 'select-profile' } })
+          }
         }
+      } finally {
+        setIsLoadingPlanAccess(false)
       }
     }
 
     void loadSubscriptionStatus()
-  }, [accessToken, accountId, activeProfile, navigate])
+  }, [accessToken, accountId, activeProfileId, navigate])
 
   useEffect(() => {
     async function loadSavedProgress() {
@@ -633,11 +636,15 @@ export function MovieDetailPage() {
       setDownloadFeedback('Activa un plan Premium para descargar contenido.')
       return
     }
+    if (isLoadingPlanAccess) {
+      setDownloadFeedback('Validando tu Plan Premium. Intenta de nuevo en un momento.')
+      return
+    }
     if (!isPremiumPlan) {
       setDownloadFeedback('La descarga esta disponible unicamente para el Plan Premium.')
       return
     }
-    if (!detail || !activeProfile?.id || !accountId) {
+    if (!detail || !activeProfileId || !accountId) {
       setDownloadFeedback('No se pudo preparar la descarga para este perfil.')
       return
     }
@@ -650,7 +657,7 @@ export function MovieDetailPage() {
     try {
       await saveEncryptedOfflineDownload({
         accountId,
-        profileId: activeProfile.id,
+        profileId: activeProfileId,
         contentId: detail.id,
         title: detail.titulo,
         type: detail.tipo,
@@ -1307,7 +1314,7 @@ export function MovieDetailPage() {
                     : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-600)]'
                 } ${isSavingDownload ? 'cursor-wait opacity-70' : ''}`}
                 aria-label={isPremiumPlan ? 'Descargar contenido' : 'Descarga disponible solo para Plan Premium'}
-                title={isPremiumPlan ? 'Descargar contenido' : 'Solo Plan Premium'}
+                title={isLoadingPlanAccess ? 'Validando plan' : isPremiumPlan ? 'Descargar contenido' : 'Solo Plan Premium'}
               >
                 <Download size={15} strokeWidth={1.75} />
               </button>
@@ -1323,6 +1330,31 @@ export function MovieDetailPage() {
           ) : null}
           {!isAdminView && downloadFeedback ? (
             <p className="text-sm text-[var(--color-denim-300)]">{downloadFeedback}</p>
+          ) : null}
+          {hasSubscription && !isAdminView ? (
+            <div className={`max-w-md rounded-lg border px-4 py-3 text-sm ${
+              isPremiumPlan
+                ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                  isPremiumPlan ? 'bg-emerald-400/15 text-emerald-200' : 'bg-amber-400/15 text-amber-200'
+                }`}>
+                  {isPremiumPlan ? <Download size={15} strokeWidth={1.8} /> : <Lock size={15} strokeWidth={1.8} />}
+                </div>
+                <div>
+                  <p className="font-semibold">
+                    Descargas solo para Plan Premium
+                  </p>
+                  <p className={`mt-1 text-xs ${isPremiumPlan ? 'text-emerald-100/75' : 'text-amber-100/75'}`}>
+                    {isPremiumPlan
+                      ? 'Tu plan permite guardar descargas simuladas de forma local y cifrada.'
+                      : 'Actualiza a Premium para habilitar la descarga simulada de peliculas y episodios.'}
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
       </div>

@@ -332,7 +332,10 @@ export function WatchPartyPage() {
   }
 
   function handleLoadedMetadata() {
-    if (videoRef.current) setDuration(videoRef.current.duration)
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration)
+      videoRef.current.pause()
+    }
   }
 
   function handleJoin(code?: string) {
@@ -464,7 +467,7 @@ export function WatchPartyPage() {
                     ref={videoRef}
                     src={videoUrl}
                     className="h-full w-full bg-black"
-                    autoPlay
+                    preload="metadata"
                     muted={muted}
                     playsInline
                     controls={esAnfitrion}

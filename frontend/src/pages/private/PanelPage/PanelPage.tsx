@@ -91,6 +91,7 @@ export function PanelPage() {
   const session = getActiveSession()
   const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
+  const activeProfileId = activeProfile?.id ?? ''
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
   const [query, setQuery] = useState('')
@@ -123,7 +124,7 @@ export function PanelPage() {
         if (status.tiene_suscripcion) {
           const syncedProfile = syncStoredActiveProfile(profiles)
           if (!syncedProfile) {
-            navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+            navigate('/profiles', { replace: true, state: { reason: activeProfileId ? 'invalid-profile' : 'select-profile' } })
             return
           }
         }
@@ -133,7 +134,7 @@ export function PanelPage() {
     }
 
     void loadSubscriptionStatus()
-  }, [accessToken, accountId, activeProfile, navigate])
+  }, [accessToken, accountId, activeProfileId, navigate])
 
   useEffect(() => {
     async function loadCatalog() {
@@ -178,13 +179,13 @@ export function PanelPage() {
 
   useEffect(() => {
     async function loadRecommendations() {
-      if (!activeProfile?.id) {
+      if (!activeProfileId) {
         setPersonalRecommendations([])
         return
       }
 
       try {
-        const recommendations = await getRecommendationsForProfile(activeProfile.id, 10)
+        const recommendations = await getRecommendationsForProfile(activeProfileId, 10)
         setPersonalRecommendations(recommendations.map(mapRecommendationToContentItem))
       } catch {
         setPersonalRecommendations([])
@@ -192,7 +193,7 @@ export function PanelPage() {
     }
 
     void loadRecommendations()
-  }, [activeProfile?.id])
+  }, [activeProfileId])
 
   const catalogEntries = useMemo<CatalogEntry[]>(
     () =>
@@ -259,7 +260,7 @@ export function PanelPage() {
   }, [catalog])
 
   const rows = useMemo(() => {
-    const myListIds = activeProfile?.id ? getMyList(activeProfile.id) : []
+    const myListIds = activeProfileId ? getMyList(activeProfileId) : []
     const myListItems = myListIds
       .map((contentId) => filteredContent.find((item) => item.id === contentId) ?? null)
       .filter((item): item is ContentItem => item != null)
@@ -310,7 +311,7 @@ export function PanelPage() {
       { id: 'series', title: 'Series disponibles', items: series },
       { id: 'recent', title: 'Estrenos y recientes', items: recent },
     ].filter((row) => row.items.length > 0)
-  }, [activeProfile?.id, catalogFilter, filteredContent, personalRecommendations])
+  }, [activeProfileId, catalogFilter, filteredContent, personalRecommendations])
 
   useEffect(() => {
     const trimmed = query.trim()
