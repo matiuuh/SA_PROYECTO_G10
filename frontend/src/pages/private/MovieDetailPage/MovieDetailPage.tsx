@@ -20,6 +20,7 @@ import {
   Share2,
   Lock,
   Users,
+  Crown,
 } from 'lucide-react'
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
@@ -167,6 +168,8 @@ function parseRequestedStart(value: string | null): number {
   return Math.floor(parsed)
 }
 
+const PREMIUM_PLAN_ID = 'b0000000-0000-0000-0000-000000000003'
+
 export function MovieDetailPage() {
   const navigate = useNavigate()
   const { id = '' } = useParams()
@@ -187,6 +190,8 @@ export function MovieDetailPage() {
   const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null)
   const [isSubmittingReaction, setIsSubmittingReaction] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
+  const [subscriptionPlanId, setSubscriptionPlanId] = useState<string | null>(null)
+  const [showPremiumAlert, setShowPremiumAlert] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [seasons, setSeasons] = useState<CatalogSeason[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
@@ -237,6 +242,7 @@ export function MovieDetailPage() {
         listProfiles(accessToken),
       ])
       setHasSubscription(status.tiene_suscripcion)
+      setSubscriptionPlanId(status.suscripcion?.plan_id ?? null)
 
       if (status.tiene_suscripcion) {
         const syncedProfile = syncStoredActiveProfile(profiles)
@@ -829,6 +835,10 @@ export function MovieDetailPage() {
 
   const handleWatchParty = async () => {
     if (!detail || !activeProfile || !accountId) return
+    if (subscriptionPlanId !== PREMIUM_PLAN_ID) {
+      setShowPremiumAlert(true)
+      return
+    }
     try {
       const sala = await createSala({
         perfil_id: activeProfile.id,
@@ -1470,6 +1480,61 @@ export function MovieDetailPage() {
           onVerify={handlePinVerify}
           onCancel={handlePinCancel}
         />
+      )}
+
+      {showPremiumAlert && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#0d1220] p-6 shadow-2xl shadow-black/60">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-warning)]/10">
+                  <Crown size={22} className="text-[var(--color-warning)]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Plan Premium requerido</h2>
+                  <p className="text-sm text-[var(--color-denim-400)]">
+                    Solo los usuarios con plan Premium pueden crear Watch Parties.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPremiumAlert(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] text-[var(--color-denim-400)] transition-colors hover:text-white"
+                aria-label="Cerrar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#080c14] p-4">
+              <p className="text-sm leading-relaxed text-[var(--color-denim-300)]">
+                Para crear una Watch Party necesitas tener el plan Premium activo.
+                Si alguien ya te ha invitado, puedes unirte usando su codigo de invitacion sin necesidad de actualizar.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPremiumAlert(false)}
+                className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-[var(--color-denim-300)] transition-colors hover:bg-white/[0.07]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPremiumAlert(false)
+                  navigate('/subscription/manage')
+                }}
+                className="flex-1 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--color-primary)]/20 transition-opacity hover:opacity-90"
+              >
+                Actualizar plan
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
