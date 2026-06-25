@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Film, Save, Upload, X } from 'lucide-react'
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
 import { createCatalogContent, getAdminCatalogDetail, getUploadPosterUrl, getUploadTrailerUrl, updateCatalogContent } from '@/lib/catalogo-api'
+import { formatVideoDuration, getVideoDuration } from '@/lib/media-duration'
 
 interface MovieForm {
   titulo: string
@@ -105,6 +106,7 @@ export function UploadMoviePage() {
   const [posterUploadState, setPosterUploadState] = useState<UploadState>({ phase: 'idle' })
   const [trailerFile, setTrailerFile] = useState<File | null>(null)
   const [uploadState, setUploadState] = useState<UploadState>({ phase: 'idle' })
+  const [durationLabel, setDurationLabel] = useState('')
   const [savedContentId, setSavedContentId] = useState(editingId)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const posterInputRef = useRef<HTMLInputElement>(null)
@@ -123,6 +125,7 @@ export function UploadMoviePage() {
     setPosterUploadState({ phase: 'idle' })
     setTrailerFile(null)
     setUploadState({ phase: 'idle' })
+    setDurationLabel('')
   }
 
   const handlePosterSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -145,6 +148,19 @@ export function UploadMoviePage() {
     }
     setTrailerFile(file)
     setUploadState({ phase: 'idle' })
+    void getVideoDuration(file)
+      .then((duration) => {
+        setDurationLabel(duration.label)
+        setForm((prev) => ({ ...prev, duracionMinutos: String(duration.minutesForStorage) }))
+      })
+      .catch((error) => {
+        setDurationLabel('')
+        setForm((prev) => ({ ...prev, duracionMinutos: '' }))
+        setUploadState({
+          phase: 'error',
+          message: error instanceof Error ? error.message : 'No se pudo calcular la duracion del video.',
+        })
+      })
   }
 
   const uploadTrailerToGCS = async (token: string, contentId: string, file: File): Promise<string> => {
@@ -300,6 +316,9 @@ export function UploadMoviePage() {
           clasificacionEdad: detail.clasificacion_edad || 'PG-13',
           urlPortada: posterObjectName,
         })
+        if (detail.duracion_minutos) {
+          setDurationLabel(formatVideoDuration(detail.duracion_minutos * 60))
+        }
         if (detail.url_trailer) {
           setUploadState({ phase: 'done', objectName: detail.url_trailer })
         }
@@ -339,7 +358,7 @@ export function UploadMoviePage() {
 
     const duration = Number(form.duracionMinutos)
     if (!Number.isFinite(duration) || duration <= 0) {
-      setFeedback({ type: 'error', message: 'La duracion debe ser un numero mayor que cero.' })
+      setFeedback({ type: 'error', message: 'Selecciona un video valido para calcular la duracion automaticamente.' })
       return
     }
 
@@ -514,14 +533,19 @@ export function UploadMoviePage() {
                   className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
                 />
               </div>
-              <Input
-                label="Duracion (minutos) *"
-                type="number"
-                min="1"
-                value={form.duracionMinutos}
-                onChange={setField('duracionMinutos')}
-                required
-              />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                  Duracion calculada
+                </label>
+                <div className="rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-[var(--color-denim-200)]">
+                  {durationLabel || (form.duracionMinutos ? formatVideoDuration(Number(form.duracionMinutos) * 60) : 'Se calculara al elegir el video')}
+                </div>
+                {durationLabel ? (
+                  <p className="text-xs text-[var(--color-denim-500)]">
+                    Se guardara como {form.duracionMinutos} min porque el catalogo almacena minutos enteros.
+                  </p>
+                ) : null}
+              </div>
               <Input label="Idioma principal *" value={form.idioma} onChange={setField('idioma')} required />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Clasificacion</label>
@@ -653,7 +677,14 @@ export function UploadMoviePage() {
                       <span className="truncate text-[var(--color-denim-300)]">{uploadState.objectName}</span>
                       <button
                         type="button"
-                        onClick={() => { setUploadState({ phase: 'idle' }); setTrailerFile(null) }}
+                        onClick={() => {
+                          setUploadState({ phase: 'idle' })
+                          setTrailerFile(null)
+                          setDurationLabel('')
+                          if (!editingId) {
+                            setForm((prev) => ({ ...prev, duracionMinutos: '' }))
+                          }
+                        }}
                         className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
                       >
                         <X size={14} />
@@ -680,7 +711,13 @@ export function UploadMoviePage() {
                           <span className="truncate">{trailerFile.name}</span>
                           <button
                             type="button"
-                            onClick={() => setTrailerFile(null)}
+                            onClick={() => {
+                              setTrailerFile(null)
+                              setDurationLabel('')
+                              if (!editingId) {
+                                setForm((prev) => ({ ...prev, duracionMinutos: '' }))
+                              }
+                            }}
                             className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
                           >
                             <X size={14} />

@@ -7,9 +7,11 @@ import { DashboardHero } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { getCatalogDetail, listCatalogContent, searchCatalogContent } from '@/lib/catalogo-api'
 import { getMyList } from '@/lib/my-list'
+import { getRecommendationsForProfile } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent } from '@/types/catalog'
+import type { RecommendationContent } from '@/types/streaming'
 import type { ContentItem } from '@/components/molecules'
 
 type CatalogFilter = 'all' | 'pelicula' | 'serie'
@@ -72,11 +74,24 @@ function mapCatalogToContentItem(content: CatalogContent): ContentItem {
   }
 }
 
+function mapRecommendationToContentItem(content: RecommendationContent): ContentItem {
+  return {
+    id: content.id,
+    title: content.titulo,
+    genre: getTypeLabel(content.tipo),
+    year: getReleaseYear(content.fecha_lanzamiento),
+    rating: Math.max(0, Math.min(10, content.puntaje)),
+    posterUrl: content.url_portada,
+    isNew: getReleaseYear(content.fecha_lanzamiento) >= new Date().getFullYear() - 1,
+  }
+}
+
 export function PanelPage() {
   const navigate = useNavigate()
   const session = getActiveSession()
   const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
+  const activeProfileId = activeProfile?.id ?? ''
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
   const [query, setQuery] = useState('')
@@ -90,6 +105,7 @@ export function PanelPage() {
   const [genreMap, setGenreMap] = useState<Record<string, string[]>>({})
   const [searchResults, setSearchResults] = useState<ContentItem[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [personalRecommendations, setPersonalRecommendations] = useState<ContentItem[]>([])
 
   useEffect(() => {
     async function loadSubscriptionStatus() {
@@ -108,7 +124,7 @@ export function PanelPage() {
         if (status.tiene_suscripcion) {
           const syncedProfile = syncStoredActiveProfile(profiles)
           if (!syncedProfile) {
-            navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+            navigate('/profiles', { replace: true, state: { reason: activeProfileId ? 'invalid-profile' : 'select-profile' } })
             return
           }
         }
@@ -118,7 +134,7 @@ export function PanelPage() {
     }
 
     void loadSubscriptionStatus()
-  }, [accessToken, accountId, activeProfile, navigate])
+  }, [accessToken, accountId, activeProfileId, navigate])
 
   useEffect(() => {
     async function loadCatalog() {
@@ -160,6 +176,24 @@ export function PanelPage() {
 
     void loadCatalog()
   }, [])
+
+  useEffect(() => {
+    async function loadRecommendations() {
+      if (!activeProfileId) {
+        setPersonalRecommendations([])
+        return
+      }
+
+      try {
+        const recommendations = await getRecommendationsForProfile(activeProfileId, 10)
+        setPersonalRecommendations(recommendations.map(mapRecommendationToContentItem))
+      } catch {
+        setPersonalRecommendations([])
+      }
+    }
+
+    void loadRecommendations()
+  }, [activeProfileId])
 
   const catalogEntries = useMemo<CatalogEntry[]>(
     () =>
@@ -226,10 +260,15 @@ export function PanelPage() {
   }, [catalog])
 
   const rows = useMemo(() => {
-    const myListIds = activeProfile?.id ? getMyList(activeProfile.id) : []
+    const myListIds = activeProfileId ? getMyList(activeProfileId) : []
     const myListItems = myListIds
       .map((contentId) => filteredContent.find((item) => item.id === contentId) ?? null)
       .filter((item): item is ContentItem => item != null)
+    const personalizedItems = personalRecommendations.filter((item) => {
+      if (catalogFilter === 'pelicula') return item.genre === 'Pelicula'
+      if (catalogFilter === 'serie') return item.genre === 'Serie'
+      return true
+    })
 
     const recommended = filteredContent
       .filter((item) => item.rating != null && item.rating >= 7)
@@ -247,6 +286,7 @@ export function PanelPage() {
     if (catalogFilter === 'pelicula') {
       return [
         { id: 'my-list', title: 'Mi lista de peliculas', items: myListItems },
+        { id: 'recommended-for-you', title: 'Recomendados para ti', items: personalizedItems },
         { id: 'recommended', title: 'Peliculas recomendadas', items: recommended },
         { id: 'movies', title: 'Peliculas disponibles', items: movies },
         { id: 'recent', title: 'Peliculas recientes', items: recent },
@@ -256,6 +296,7 @@ export function PanelPage() {
     if (catalogFilter === 'serie') {
       return [
         { id: 'my-list', title: 'Mi lista de series', items: myListItems },
+        { id: 'recommended-for-you', title: 'Recomendados para ti', items: personalizedItems },
         { id: 'recommended', title: 'Series recomendadas', items: recommended },
         { id: 'series', title: 'Series disponibles', items: series },
         { id: 'recent', title: 'Series recientes', items: recent },
@@ -264,12 +305,13 @@ export function PanelPage() {
 
     return [
       { id: 'my-list', title: 'Mi lista', items: myListItems },
+      { id: 'recommended-for-you', title: 'Recomendados para ti', items: personalizedItems },
       { id: 'recommended', title: 'Recomendacion global', items: recommended },
       { id: 'movies', title: 'Peliculas disponibles', items: movies },
       { id: 'series', title: 'Series disponibles', items: series },
       { id: 'recent', title: 'Estrenos y recientes', items: recent },
     ].filter((row) => row.items.length > 0)
-  }, [activeProfile?.id, catalogFilter, filteredContent])
+  }, [activeProfileId, catalogFilter, filteredContent, personalRecommendations])
 
   useEffect(() => {
     const trimmed = query.trim()

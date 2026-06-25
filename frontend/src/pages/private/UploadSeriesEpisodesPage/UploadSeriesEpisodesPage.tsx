@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Clapperboard, Film, Pencil, Plus, Save, Tras
 import { Button, Input, ScrollReveal } from '@/components/atoms'
 import { getActiveSession } from '@/lib/auth'
 import { createSeriesEpisodeBatch, getAdminCatalogDetail, getCatalogSeasons, getUploadEpisodeVideoUrl } from '@/lib/catalogo-api'
+import { formatVideoDuration, getVideoDuration } from '@/lib/media-duration'
 import type { CatalogSeason, CreateSeriesEpisodePayload } from '@/types/catalog'
 
 interface EpisodeDraft {
@@ -11,6 +12,7 @@ interface EpisodeDraft {
   titulo: string
   sinopsis: string
   duracion_minutos: string
+  duracion_label: string
   url_video: string
 }
 
@@ -30,6 +32,7 @@ const EMPTY_EPISODE: EpisodeDraft = {
   titulo: '',
   sinopsis: '',
   duracion_minutos: '',
+  duracion_label: '',
   url_video: '',
 }
 
@@ -43,6 +46,7 @@ function mapSeasonEpisodesToDrafts(season: CatalogSeason): EpisodeDraft[] {
     titulo: episode.titulo,
     sinopsis: episode.sinopsis ?? '',
     duracion_minutos: String(episode.duracion_minutos),
+    duracion_label: formatVideoDuration(episode.duracion_minutos * 60),
     url_video: episode.url_video,
   }))
 }
@@ -145,6 +149,19 @@ export function UploadSeriesEpisodesPage() {
     }
     setEpisodeFiles((current) => current.map((f, i) => (i === index ? file : f)))
     setEpisodeUploadState(index, { phase: 'idle' })
+    void getVideoDuration(file)
+      .then((duration) => {
+        updateEpisode(index, 'duracion_minutos', String(duration.minutesForStorage))
+        updateEpisode(index, 'duracion_label', duration.label)
+      })
+      .catch((error) => {
+        updateEpisode(index, 'duracion_minutos', '')
+        updateEpisode(index, 'duracion_label', '')
+        setEpisodeUploadState(index, {
+          phase: 'error',
+          message: error instanceof Error ? error.message : 'No se pudo calcular la duracion del video.',
+        })
+      })
   }
 
   async function uploadEpisodeToGCS(token: string, episodeKey: string, file: File, index: number): Promise<string> {
@@ -233,7 +250,7 @@ export function UploadSeriesEpisodesPage() {
         return
       }
       if (!Number.isFinite(duracion) || duracion <= 0) {
-        setFeedback({ type: 'error', message: `Episodio ${i + 1}: duracion invalida.` })
+        setFeedback({ type: 'error', message: `Episodio ${i + 1}: selecciona un video valido para calcular la duracion.` })
         return
       }
       const hasFile = Boolean(episodeFiles[i])
@@ -417,14 +434,19 @@ export function UploadSeriesEpisodesPage() {
                       onChange={(event) => updateEpisode(index, 'numero', event.target.value)}
                       required
                     />
-                    <Input
-                      label="Duracion (min) *"
-                      type="number"
-                      min="1"
-                      value={episode.duracion_minutos}
-                      onChange={(event) => updateEpisode(index, 'duracion_minutos', event.target.value)}
-                      required
-                    />
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                        Duracion calculada
+                      </label>
+                      <div className="rounded-lg border border-white/[0.07] bg-[#09101d] px-4 py-2.5 text-sm text-[var(--color-denim-200)]">
+                        {episode.duracion_label || (episode.duracion_minutos ? formatVideoDuration(Number(episode.duracion_minutos) * 60) : 'Se calculara al elegir el video')}
+                      </div>
+                      {episode.duracion_label ? (
+                        <p className="text-xs text-[var(--color-denim-500)]">
+                          Se guardara como {episode.duracion_minutos} min porque el catalogo almacena minutos enteros.
+                        </p>
+                      ) : null}
+                    </div>
                     <div className="md:col-span-2">
                       <Input
                         label="Titulo *"
@@ -456,6 +478,8 @@ export function UploadSeriesEpisodesPage() {
                               onClick={() => {
                                 setEpisodeUploadState(index, { phase: 'idle' })
                                 setEpisodeFiles((current) => current.map((f, i) => (i === index ? null : f)))
+                                updateEpisode(index, 'duracion_minutos', '')
+                                updateEpisode(index, 'duracion_label', '')
                               }}
                               className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
                             >
@@ -483,7 +507,11 @@ export function UploadSeriesEpisodesPage() {
                                 <span className="truncate">{episodeFiles[index]!.name}</span>
                                 <button
                                   type="button"
-                                  onClick={() => setEpisodeFiles((current) => current.map((f, i) => (i === index ? null : f)))}
+                                  onClick={() => {
+                                    setEpisodeFiles((current) => current.map((f, i) => (i === index ? null : f)))
+                                    updateEpisode(index, 'duracion_minutos', '')
+                                    updateEpisode(index, 'duracion_label', '')
+                                  }}
                                   className="ml-auto shrink-0 text-[var(--color-denim-500)] hover:text-white"
                                 >
                                   <X size={14} />

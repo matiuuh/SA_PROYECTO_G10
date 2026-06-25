@@ -18,6 +18,8 @@ export function AppNavbar() {
   const navigate = useNavigate()
   const session = getActiveSession()
   const activeProfile = getStoredActiveProfile()
+  const accountId = session?.account.id ?? ''
+  const accessToken = session?.accessToken ?? ''
   const [profileOpen, setProfileOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [hidden, setHidden] = useState(false)
@@ -38,16 +40,16 @@ export function AppNavbar() {
 
   useEffect(() => {
     async function checkSubscription() {
-      if (!session?.account.id || !session?.accessToken) return
+      if (!accountId || !accessToken) return
       try {
-        const status = await getSubscriptionStatusByAccount(session.account.id)
+        const status = await getSubscriptionStatusByAccount(accountId)
         setHasSubscription(status.tiene_suscripcion)
       } catch {
         setHasSubscription(false)
       }
     }
     void checkSubscription()
-  }, [session])
+  }, [accessToken, accountId])
 
   const isVisible = !hidden || hovered
   const accountName = session?.account.nombre ?? 'Usuario'
