@@ -256,12 +256,6 @@ export function MovieDetailPage() {
       setIsLoadingPlanAccess(true)
       setActivePlanName('')
       setActivePlanProfileLimit(0)
-      const [status, profiles] = await Promise.all([
-        getSubscriptionStatusByAccount(accountId),
-        listProfiles(accessToken),
-      ])
-      setHasSubscription(status.tiene_suscripcion)
-      setSubscriptionPlanId(status.suscripcion?.plan_id ?? null)
 
       try {
         const [status, profiles, plans] = await Promise.all([
@@ -270,6 +264,7 @@ export function MovieDetailPage() {
           listActivePlans().catch(() => []),
         ])
         setHasSubscription(status.tiene_suscripcion)
+        setSubscriptionPlanId(status.suscripcion?.plan_id ?? null)
 
         if (status.tiene_suscripcion) {
           const activePlan = plans.find((plan) => plan.id === status.suscripcion?.plan_id)
