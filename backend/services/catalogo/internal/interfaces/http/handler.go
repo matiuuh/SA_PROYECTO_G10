@@ -790,6 +790,42 @@ func isReleased(releaseDate *time.Time) bool {
 	return !releaseDate.After(now)
 }
 
+func catalogLocation() *time.Location {
+	loc, err := time.LoadLocation("America/Guatemala")
+	if err != nil {
+		return time.FixedZone("America/Guatemala", -6*60*60)
+	}
+	return loc
+}
+
+func parseReleaseDate(value string) (*time.Time, error) {
+	releaseDateStr := strings.TrimSpace(value)
+	if releaseDateStr == "" {
+		return nil, nil
+	}
+
+	if releaseDate, err := time.Parse(time.RFC3339, releaseDateStr); err == nil {
+		return &releaseDate, nil
+	}
+
+	loc := catalogLocation()
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		releaseDate, err := time.ParseInLocation(layout, releaseDateStr, loc)
+		if err == nil {
+			return &releaseDate, nil
+		}
+	}
+
+	return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
+}
+
+func formatReleaseDate(releaseDate *time.Time) string {
+	if releaseDate == nil {
+		return ""
+	}
+	return releaseDate.In(catalogLocation()).Format("2006-01-02T15:04:05")
+}
+
 func parseCreateContentRequest(req createContentRequest, createdByAccountID string) (*domain.Content, error) {
 	title := strings.TrimSpace(req.Titulo)
 	synopsis := strings.TrimSpace(req.Sinopsis)
@@ -831,23 +867,11 @@ func parseCreateContentRequest(req createContentRequest, createdByAccountID stri
 		CreatedByAccountID: createdByAccountID,
 	}
 
-	// Parsear fecha y hora en formato ISO 8601
-	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-
-		// Intentar con formato completo: "2024-01-15T14:30:00"
-		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
-		if err != nil {
-			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
-			if err != nil {
-				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
-				if err != nil {
-					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
-				}
-			}
-		}
-		content.ReleaseDate = &releaseDate
+	releaseDate, err := parseReleaseDate(req.FechaLanzamiento)
+	if err != nil {
+		return nil, err
 	}
+	content.ReleaseDate = releaseDate
 
 	if req.DuracionMinutos != nil {
 		duration := *req.DuracionMinutos
@@ -889,23 +913,11 @@ func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error
 		TrailerURL:     strings.TrimSpace(req.UrlTrailer),
 	}
 
-	// Parsear fecha y hora en formato ISO 8601
-	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-
-		// Intentar con formato completo: "2024-01-15T14:30:00"
-		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
-		if err != nil {
-			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
-			if err != nil {
-				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
-				if err != nil {
-					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
-				}
-			}
-		}
-		content.ReleaseDate = &releaseDate
+	releaseDate, err := parseReleaseDate(req.FechaLanzamiento)
+	if err != nil {
+		return nil, err
 	}
+	content.ReleaseDate = releaseDate
 
 	if req.DuracionMinutos != nil {
 		duration := *req.DuracionMinutos
@@ -1164,7 +1176,7 @@ func (h *Handler) toContentResponse(ctx context.Context, content domain.Content)
 		UrlTrailer:              content.TrailerURL,
 	}
 	if content.ReleaseDate != nil {
-		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = formatReleaseDate(content.ReleaseDate)
 	}
 	return response
 }
@@ -1220,7 +1232,7 @@ func (h *Handler) toDetailResponse(ctx context.Context, detail *domain.ContentDe
 		PorcentajeRecomendacion: detail.RecommendationPct,
 	}
 	if detail.ReleaseDate != nil {
-		response.FechaLanzamiento = detail.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = formatReleaseDate(detail.ReleaseDate)
 	}
 	for _, genre := range detail.Genres {
 		response.Generos = append(response.Generos, genreResponse{

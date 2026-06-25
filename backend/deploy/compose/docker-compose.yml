@@ -72,10 +72,11 @@ services:
     volumes:
       - ../../services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
       - ../../services/catalogo/database/sql/04_migrate_alertas_publicacion.sql:/migrations/04_migrate_alertas_publicacion.sql:ro
+      - ../../services/catalogo/database/sql/05_migrate_programacion_publicacion.sql:/migrations/05_migrate_programacion_publicacion.sql:ro
     command:
       - sh
       - -c
-      - psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql && psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/04_migrate_alertas_publicacion.sql
+      - psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/03_migrate_auditoria.sql && psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/04_migrate_alertas_publicacion.sql && psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d quetzal_catalogo -f /migrations/05_migrate_programacion_publicacion.sql
     depends_on:
       postgres:
         condition: service_healthy
