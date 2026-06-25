@@ -16,6 +16,7 @@ interface SeriesForm {
   temporadas: string
   notasTecnicas: string
   fechaLanzamiento: string
+  horaLanzamiento: string
   idioma: string
   clasificacionEdad: string
   urlPortada: string
@@ -42,6 +43,7 @@ const INITIAL_FORM: SeriesForm = {
   temporadas: '1',
   notasTecnicas: '',
   fechaLanzamiento: '',
+  horaLanzamiento: '',
   idioma: 'es',
   clasificacionEdad: 'PG-13',
   urlPortada: '',
@@ -274,6 +276,13 @@ export function UploadSeriesPage() {
         ])
         const technicalSheet = parseTechnicalSheet(detail.ficha_tecnica ?? '')
         const posterObjectName = normalizePosterObjectName(detail.url_portada)
+        let fechaLanzamiento = ''
+        let horaLanzamiento = ''
+        if (detail.fecha_lanzamiento) {
+          const [datePart, timePart] = detail.fecha_lanzamiento.split('T')
+          fechaLanzamiento = datePart ?? ''
+          horaLanzamiento = timePart ? timePart.split(':').slice(0, 2).join(':') : ''
+        }
         setExistingSeasons(seasons)
         setForm({
           titulo: detail.titulo,
@@ -284,7 +293,8 @@ export function UploadSeriesPage() {
           subtitulos: technicalSheet.get('subtitulos') ?? '',
           temporadas: technicalSheet.get('temporadas') ?? '1',
           notasTecnicas: technicalSheet.get('notas') ?? detail.ficha_tecnica ?? '',
-          fechaLanzamiento: detail.fecha_lanzamiento ?? '',
+          fechaLanzamiento,
+          horaLanzamiento,
           idioma: detail.idioma,
           clasificacionEdad: detail.clasificacion_edad || 'PG-13',
           urlPortada: posterObjectName,
@@ -321,6 +331,11 @@ export function UploadSeriesPage() {
       return
     }
 
+    if (!form.fechaLanzamiento || !form.horaLanzamiento) {
+      setFeedback({ type: 'error', message: 'Debes seleccionar la fecha y hora de publicacion.' })
+      return
+    }
+
     const seasons = Number(form.temporadas)
     if (!Number.isFinite(seasons) || seasons <= 0) {
       setFeedback({ type: 'error', message: 'La serie debe indicar al menos una temporada.' })
@@ -333,12 +348,14 @@ export function UploadSeriesPage() {
     try {
       let trailerObjectName = uploadState.phase === 'done' ? uploadState.objectName : undefined
       let posterObjectName = posterUploadState.phase === 'done' ? posterUploadState.objectName : undefined
+      const timeOnly = form.horaLanzamiento.split(':').slice(0, 2).join(':')
+      const fechaHoraFormateada = `${form.fechaLanzamiento}T${timeOnly}:00`
 
       const payload = {
         titulo: form.titulo.trim(),
         sinopsis: form.sinopsis.trim(),
         ficha_tecnica: buildTechnicalSheet(form),
-        fecha_lanzamiento: form.fechaLanzamiento || undefined,
+        fecha_lanzamiento: fechaHoraFormateada,
         clasificacion_edad: form.clasificacionEdad || undefined,
         idioma: form.idioma.trim(),
         url_portada: posterObjectName || form.urlPortada.trim() || 'posters/pendiente.jpg',
@@ -448,7 +465,40 @@ export function UploadSeriesPage() {
             </h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Input label="Titulo *" value={form.titulo} onChange={setField('titulo')} required />
-              <Input label="Fecha de estreno / publicacion" type="date" value={form.fechaLanzamiento} onChange={setField('fechaLanzamiento')} />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--color-denim-200)]">
+                  Fecha y hora de publicacion *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={form.fechaLanzamiento && form.horaLanzamiento
+                    ? `${form.fechaLanzamiento}T${form.horaLanzamiento}`
+                    : ''
+                  }
+                  onChange={(event) => {
+                    const value = event.target.value
+                    if (value) {
+                      const [date, time] = value.split('T')
+                      setForm((prev) => ({
+                        ...prev,
+                        fechaLanzamiento: date,
+                        horaLanzamiento: time || '',
+                      }))
+                    } else {
+                      setForm((prev) => ({
+                        ...prev,
+                        fechaLanzamiento: '',
+                        horaLanzamiento: '',
+                      }))
+                    }
+                  }}
+                  className="w-full rounded-lg border border-white/[0.07] bg-[#0d1220] px-4 py-2.5 text-sm text-white placeholder:text-[var(--color-denim-500)] focus:border-[var(--color-primary)] focus:outline-none transition-colors"
+                  required
+                />
+                <p className="text-xs text-[var(--color-denim-500)]">
+                  La serie se publicara hasta esta fecha y hora.
+                </p>
+              </div>
               <div className="md:col-span-2 flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-[var(--color-denim-200)]">Sinopsis *</label>
                 <textarea

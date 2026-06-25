@@ -35,7 +35,7 @@ CREATE TABLE contenidos (
     tipo                 tipo_contenido NOT NULL,
     sinopsis             TEXT NOT NULL,
     ficha_tecnica        TEXT,
-    fecha_lanzamiento    DATE,
+    fecha_lanzamiento    TIMESTAMPTZ,
     clasificacion_edad   VARCHAR(30),
     duracion_minutos     INTEGER,
     idioma               VARCHAR(50),
