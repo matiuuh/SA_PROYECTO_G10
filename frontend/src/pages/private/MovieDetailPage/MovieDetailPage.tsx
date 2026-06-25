@@ -20,6 +20,7 @@ import {
   Share2,
   Lock,
   Users,
+  Download,
 } from 'lucide-react'
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
@@ -28,8 +29,9 @@ import { PinModal } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
+import { saveEncryptedOfflineDownload } from '@/lib/offline-downloads'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
-import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
 import { createSala } from '@/lib/watchparty-api'
 import { getProfileRestrictions, verifyProfilePin } from '@/lib/usuario-api'
 import { listProfiles } from '@/lib/usuario-api'
@@ -167,6 +169,14 @@ function parseRequestedStart(value: string | null): number {
   return Math.floor(parsed)
 }
 
+function normalizePlanName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
 export function MovieDetailPage() {
   const navigate = useNavigate()
   const { id = '' } = useParams()
@@ -187,6 +197,8 @@ export function MovieDetailPage() {
   const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null)
   const [isSubmittingReaction, setIsSubmittingReaction] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
+  const [activePlanName, setActivePlanName] = useState('')
+  const [activePlanProfileLimit, setActivePlanProfileLimit] = useState(0)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [seasons, setSeasons] = useState<CatalogSeason[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
@@ -200,6 +212,8 @@ export function MovieDetailPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [playbackError, setPlaybackError] = useState('')
   const [shareFeedback, setShareFeedback] = useState('')
+  const [downloadFeedback, setDownloadFeedback] = useState('')
+  const [isSavingDownload, setIsSavingDownload] = useState(false)
   const [playbackPositionSeconds, setPlaybackPositionSeconds] = useState(0)
   const [mediaDurationSeconds, setMediaDurationSeconds] = useState(0)
   const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
@@ -237,8 +251,20 @@ export function MovieDetailPage() {
         listProfiles(accessToken),
       ])
       setHasSubscription(status.tiene_suscripcion)
+      setActivePlanName('')
+      setActivePlanProfileLimit(0)
 
       if (status.tiene_suscripcion) {
+        try {
+          const plans = await listActivePlans()
+          const activePlan = plans.find((plan) => plan.id === status.suscripcion?.plan_id)
+          setActivePlanName(activePlan?.nombre ?? '')
+          setActivePlanProfileLimit(activePlan?.perfiles_maximos ?? 0)
+        } catch {
+          setActivePlanName('')
+          setActivePlanProfileLimit(0)
+        }
+
         const syncedProfile = syncStoredActiveProfile(profiles)
         if (!syncedProfile) {
           navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
@@ -383,6 +409,7 @@ export function MovieDetailPage() {
   const fallbackSeasons = technicalSheetMetadata.get('temporadas') ?? ''
   const fallbackNotes = technicalSheetMetadata.get('notas') ?? ''
   const currentPlaybackUrl = (selectedEpisode ? episodeSignedUrl : null) || trailerSignedUrl || detail?.url_trailer
+  const isPremiumPlan = normalizePlanName(activePlanName) === 'premium' || activePlanProfileLimit >= 4
   const trailerSource = useMemo(
     () => resolveTrailerSource(currentPlaybackUrl, muted, resumeFromSeconds),
     [currentPlaybackUrl, muted, resumeFromSeconds],
@@ -597,6 +624,48 @@ export function MovieDetailPage() {
 
   const handleResume = () => {
     void handlePlayWithPinCheck('resume')
+  }
+
+  const handleDownload = async () => {
+    setDownloadFeedback('')
+
+    if (!hasSubscription) {
+      setDownloadFeedback('Activa un plan Premium para descargar contenido.')
+      return
+    }
+    if (!isPremiumPlan) {
+      setDownloadFeedback('La descarga esta disponible unicamente para el Plan Premium.')
+      return
+    }
+    if (!detail || !activeProfile?.id || !accountId) {
+      setDownloadFeedback('No se pudo preparar la descarga para este perfil.')
+      return
+    }
+    if (detail.tipo === 'serie' && !selectedEpisode) {
+      setDownloadFeedback('Selecciona un episodio para descargar.')
+      return
+    }
+
+    setIsSavingDownload(true)
+    try {
+      await saveEncryptedOfflineDownload({
+        accountId,
+        profileId: activeProfile.id,
+        contentId: detail.id,
+        title: detail.titulo,
+        type: detail.tipo,
+        episodeId: selectedEpisode?.id,
+        episodeTitle: selectedEpisode?.titulo,
+        playbackUrl: currentPlaybackUrl,
+        posterUrl: detail.url_portada,
+        downloadedAt: new Date().toISOString(),
+      })
+      setDownloadFeedback('Descarga simulada guardada localmente de forma cifrada.')
+    } catch {
+      setDownloadFeedback('No se pudo guardar la descarga local.')
+    } finally {
+      setIsSavingDownload(false)
+    }
   }
 
   const getCurrentVideoProgressSeconds = (): number | null => {
@@ -1227,6 +1296,22 @@ export function MovieDetailPage() {
                 <Users size={15} strokeWidth={1.75} />
               </button>
             )}
+
+            {hasSubscription && !isAdmin && (
+              <button
+                onClick={() => { void handleDownload() }}
+                disabled={isSavingDownload}
+                className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
+                  isPremiumPlan
+                    ? 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
+                    : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-600)]'
+                } ${isSavingDownload ? 'cursor-wait opacity-70' : ''}`}
+                aria-label={isPremiumPlan ? 'Descargar contenido' : 'Descarga disponible solo para Plan Premium'}
+                title={isPremiumPlan ? 'Descargar contenido' : 'Solo Plan Premium'}
+              >
+                <Download size={15} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
           )}
 
@@ -1235,6 +1320,9 @@ export function MovieDetailPage() {
           ) : null}
           {!isAdminView && shareFeedback ? (
             <p className="text-sm text-[var(--color-denim-300)]">{shareFeedback}</p>
+          ) : null}
+          {!isAdminView && downloadFeedback ? (
+            <p className="text-sm text-[var(--color-denim-300)]">{downloadFeedback}</p>
           ) : null}
         </div>
       </div>
