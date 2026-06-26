@@ -649,6 +649,9 @@ func (h *Handler) handleUpdateContent(w http.ResponseWriter, r *http.Request, co
 		return
 	}
 
+	content.ID = contentID
+	h.dispatchNewContentAlert(content)
+
 	detail, err := h.svc.GetDetail(r.Context(), contentID)
 	if errors.Is(err, domain.ErrContentNotFound) {
 		writeError(w, http.StatusNotFound, "Contenido no encontrado.")
@@ -1113,7 +1116,7 @@ func (h *Handler) toContentResponse(ctx context.Context, content domain.Content)
 		UrlTrailer:              content.TrailerURL,
 	}
 	if content.ReleaseDate != nil {
-		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02T15:04:05")
 	}
 	return response
 }
@@ -1169,7 +1172,7 @@ func (h *Handler) toDetailResponse(ctx context.Context, detail *domain.ContentDe
 		PorcentajeRecomendacion: detail.RecommendationPct,
 	}
 	if detail.ReleaseDate != nil {
-		response.FechaLanzamiento = detail.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = detail.ReleaseDate.Format("2006-01-02T15:04:05")
 	}
 	for _, genre := range detail.Genres {
 		response.Generos = append(response.Generos, genreResponse{

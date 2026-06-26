@@ -32,7 +32,7 @@ func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) 
 		       url_portada, url_trailer,
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
-		WHERE fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE
+		WHERE fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_TIMESTAMP
 		ORDER BY titulo
 	`)
 	if err != nil {
@@ -65,7 +65,7 @@ func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		WHERE titulo ILIKE $1
-		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_TIMESTAMP)
 		ORDER BY titulo
 	`, "%"+query+"%")
 	if err != nil {
@@ -83,7 +83,7 @@ func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64
 		FROM v_cartelera_contenido v
 		JOIN contenido_generos cg ON cg.contenido_id = v.id
 		WHERE cg.genero_id = ANY($1)
-		  AND (v.fecha_lanzamiento IS NULL OR v.fecha_lanzamiento <= CURRENT_DATE)
+		  AND (v.fecha_lanzamiento IS NULL OR v.fecha_lanzamiento <= CURRENT_TIMESTAMP)
 		ORDER BY v.titulo
 	`, genreIDs)
 	if err != nil {
@@ -248,15 +248,19 @@ func (r *ContentRepository) Update(ctx context.Context, id string, content *doma
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE contenidos
-		SET titulo             = $2,
-		    sinopsis           = $3,
-		    ficha_tecnica      = $4,
-		    fecha_lanzamiento  = $5,
-		    clasificacion_edad = $6,
-		    duracion_minutos   = $7,
-		    idioma             = $8,
-		    url_portada        = $9,
-		    url_trailer        = $10
+		SET titulo                    = $2,
+		    sinopsis                  = $3,
+		    ficha_tecnica             = $4,
+		    fecha_lanzamiento         = $5,
+		    clasificacion_edad        = $6,
+		    duracion_minutos          = $7,
+		    idioma                    = $8,
+		    url_portada               = $9,
+		    url_trailer               = $10,
+		    alerta_publicacion_enviada_en = CASE
+		        WHEN fecha_lanzamiento IS DISTINCT FROM $5 THEN NULL
+		        ELSE alerta_publicacion_enviada_en
+		    END
 		WHERE id = $1 AND eliminado_en IS NULL
 	`, id, content.Title, content.Synopsis, content.TechnicalSheet,
 		content.ReleaseDate, content.AgeRating, content.DurationMinutes, content.Language, content.PosterURL, content.TrailerURL,
@@ -584,7 +588,7 @@ func (r *ContentRepository) ListPendingPublicationAlerts(ctx context.Context, li
 		FROM contenidos
 		WHERE eliminado_en IS NULL
 		  AND alerta_publicacion_enviada_en IS NULL
-		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_TIMESTAMP)
 		ORDER BY fecha_lanzamiento NULLS FIRST, creado_en
 		LIMIT $1
 	`, limit)

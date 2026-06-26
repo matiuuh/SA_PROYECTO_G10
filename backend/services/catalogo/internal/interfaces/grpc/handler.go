@@ -126,9 +126,9 @@ func (h *Handler) CrearContenido(
 		CreatedByAccountID: req.CreadoPorCuentaId,
 	}
 	if req.FechaLanzamiento != "" {
-		releaseDate, err := time.Parse("2006-01-02", req.FechaLanzamiento)
+		releaseDate, err := parseReleaseDate(req.FechaLanzamiento)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "fecha_lanzamiento invalida, use YYYY-MM-DD")
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		c.ReleaseDate = &releaseDate
 	}
@@ -173,6 +173,20 @@ func (h *Handler) ActualizarContenido(
 	return toProtoContent(*c), nil
 }
 
+func parseReleaseDate(s string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errors.New("fecha_lanzamiento invalida, use YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
+}
+
 func (h *Handler) EliminarContenido(
 	ctx context.Context,
 	req *catalogov1.EliminarContenidoRequest,
@@ -200,7 +214,7 @@ func toProtoContent(c domain.Content) *catalogov1.Contenido {
 		UrlTrailer:              c.TrailerURL,
 	}
 	if c.ReleaseDate != nil {
-		p.FechaLanzamiento = c.ReleaseDate.Format("2006-01-02")
+		p.FechaLanzamiento = c.ReleaseDate.Format("2006-01-02T15:04:05")
 	}
 	return p
 }
@@ -229,7 +243,7 @@ func toProtoDetail(d *domain.ContentDetail) *catalogov1.DetalleContenido {
 		PorcentajeRecomendacion: d.RecommendationPct,
 	}
 	if d.ReleaseDate != nil {
-		det.FechaLanzamiento = d.ReleaseDate.Format("2006-01-02")
+		det.FechaLanzamiento = d.ReleaseDate.Format("2006-01-02T15:04:05")
 	}
 	if d.DurationMinutes != nil {
 		det.DuracionMinutos = int32(*d.DurationMinutes)
@@ -297,12 +311,5 @@ func isReleased(releaseDate *time.Time) bool {
 	if releaseDate == nil {
 		return true
 	}
-
-	now := time.Now()
-	releaseYear, releaseMonth, releaseDay := releaseDate.Date()
-	todayYear, todayMonth, todayDay := now.Date()
-	releaseOnlyDate := time.Date(releaseYear, releaseMonth, releaseDay, 0, 0, 0, 0, now.Location())
-	todayOnlyDate := time.Date(todayYear, todayMonth, todayDay, 0, 0, 0, 0, now.Location())
-
-	return !releaseOnlyDate.After(todayOnlyDate)
+	return !releaseDate.After(time.Now())
 }
