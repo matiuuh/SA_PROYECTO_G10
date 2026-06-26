@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { getStoredActiveProfile, getActiveSession } from '@/lib/auth'
 import { unirsePorCodigo, getWebSocketUrl } from '@/lib/watchparty-api'
-import { getTrailerSignedUrl } from '@/lib/streaming-api'
+import { getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
 import type { SalaWatchParty, Participante } from '@/lib/watchparty-api'
 
 type SyncState = 'idle' | 'joining' | 'joined'
@@ -170,6 +170,8 @@ export function WatchPartyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const suppressNextSync = useRef(false)
   const chatRef = useRef<HTMLDivElement | null>(null)
+  const lastSavedProgressRef = useRef(0)
+  const savingProgressRef = useRef(false)
 
   const profile = getStoredActiveProfile()
   const session = getActiveSession()
@@ -303,6 +305,37 @@ export function WatchPartyPage() {
     setChatInput('')
   }
 
+  async function persistWatchPartyProgress(force = false) {
+    const vid = videoRef.current
+    if (!profile?.id || !sala?.contenidoId || !vid) return
+
+    const progressSeconds = Math.floor(vid.currentTime)
+    if (!Number.isFinite(progressSeconds) || progressSeconds <= 0) return
+    if (!force && progressSeconds - lastSavedProgressRef.current < 10) return
+    if (savingProgressRef.current) return
+
+    const totalSeconds = Math.max(
+      Math.floor(vid.duration || 0),
+      sala.duracionSegundos || 0,
+      progressSeconds,
+    )
+
+    savingProgressRef.current = true
+    try {
+      await updatePlaybackProgress({
+        perfil_id: profile.id,
+        contenido_id: sala.contenidoId,
+        progreso_segundos: progressSeconds,
+        duracion_total_segundos: totalSeconds,
+      })
+      lastSavedProgressRef.current = progressSeconds
+    } catch {
+      // El historial no debe interrumpir la reproduccion sincronizada.
+    } finally {
+      savingProgressRef.current = false
+    }
+  }
+
   function handleVideoPlay() {
     if (!esAnfitrion || suppressNextSync.current) {
       suppressNextSync.current = false
@@ -312,6 +345,8 @@ export function WatchPartyPage() {
   }
 
   function handleVideoPause() {
+    void persistWatchPartyProgress(true)
+
     if (!esAnfitrion || suppressNextSync.current) {
       suppressNextSync.current = false
       return
@@ -328,11 +363,21 @@ export function WatchPartyPage() {
   }
 
   function handleTimeUpdate() {
-    if (videoRef.current) setCurrentTime(videoRef.current.currentTime)
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime)
+      void persistWatchPartyProgress()
+    }
   }
 
   function handleLoadedMetadata() {
-    if (videoRef.current) setDuration(videoRef.current.duration)
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration)
+      videoRef.current.pause()
+    }
+  }
+
+  function handleVideoEnded() {
+    void persistWatchPartyProgress(true)
   }
 
   function handleJoin(code?: string) {
@@ -464,7 +509,7 @@ export function WatchPartyPage() {
                     ref={videoRef}
                     src={videoUrl}
                     className="h-full w-full bg-black"
-                    autoPlay
+                    preload="metadata"
                     muted={muted}
                     playsInline
                     controls={esAnfitrion}
@@ -473,6 +518,7 @@ export function WatchPartyPage() {
                     onSeeked={handleVideoSeeked}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={handleVideoEnded}
                   />
                   {!esAnfitrion && (
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pt-12">

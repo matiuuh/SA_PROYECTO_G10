@@ -14,12 +14,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	streamingv1 "quetzaltv/services/streaming/pkg/pb/streaming/v1"
 	"quetzaltv/services/streaming/internal/application"
+	catalogclient "quetzaltv/services/streaming/internal/infrastructure/catalog"
 	gcsstorage "quetzaltv/services/streaming/internal/infrastructure/gcs"
+	"quetzaltv/services/streaming/internal/infrastructure/postgres"
 	grpchandler "quetzaltv/services/streaming/internal/interfaces/grpc"
 	httphandler "quetzaltv/services/streaming/internal/interfaces/http"
-	"quetzaltv/services/streaming/internal/infrastructure/postgres"
+	streamingv1 "quetzaltv/services/streaming/pkg/pb/streaming/v1"
 )
 
 func main() {
@@ -54,7 +55,8 @@ func main() {
 	episodeRepo := gcsstorage.NewEpisodeRepository(gcsClient, gcsBucket, time.Duration(ttlMinutes)*time.Minute)
 
 	repo := postgres.NewPlaybackRepository(pool)
-	svc := application.New(repo, trailerRepo, episodeRepo)
+	catalogRepo := catalogclient.NewClient(getEnv("CATALOGO_API_URL", "http://catalogo-service:8003"))
+	svc := application.New(repo, trailerRepo, episodeRepo, catalogRepo)
 	handler := grpchandler.NewHandler(svc)
 	httpHandler := httphandler.NewHandler(svc)
 	wpRepo := postgres.NewWatchPartyRepository(pool)

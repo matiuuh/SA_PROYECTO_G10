@@ -1,6 +1,8 @@
 import type {
   PlaybackProgress,
   PlaybackHistoryResponse,
+  RecommendationContent,
+  RecommendationsResponse,
   UpdatePlaybackProgressPayload,
 } from '@/types/streaming'
 import { getActiveSession } from '@/lib/auth'
@@ -109,4 +111,20 @@ export async function getPlaybackHistory(
 
   const data = (await response.json()) as PlaybackHistoryResponse
   return data.historial
+}
+
+export async function getRecommendationsForProfile(
+  perfilId: string,
+  limit = 10,
+): Promise<RecommendationContent[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/recommendations/${perfilId}?limit=${limit}`, {
+    headers: { ...authHeaders() },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  const data = (await response.json()) as RecommendationsResponse
+  return data.recomendaciones ?? []
 }

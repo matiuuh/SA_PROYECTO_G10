@@ -198,10 +198,12 @@ services:
       PGPASSWORD: quetzal
     volumes:
       - ./backend/services/catalogo/database/sql/03_migrate_auditoria.sql:/migrations/03_migrate_auditoria.sql:ro
+      - ./backend/services/catalogo/database/sql/04_migrate_alertas_publicacion.sql:/migrations/04_migrate_alertas_publicacion.sql:ro
+      - ./backend/services/catalogo/database/sql/05_migrate_programacion_publicacion.sql:/migrations/05_migrate_programacion_publicacion.sql:ro
     command:
       - sh
       - -c
-      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/03_migrate_auditoria.sql
+      - psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/03_migrate_auditoria.sql && psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/04_migrate_alertas_publicacion.sql && psql -v ON_ERROR_STOP=1 -h postgres-catalogo -U quetzal -d catalogo_db -f /migrations/05_migrate_programacion_publicacion.sql
     depends_on:
       postgres-catalogo:
         condition: service_healthy
@@ -274,6 +276,7 @@ services:
       DATABASE_URL: postgres://quetzal:quetzal@postgres-streaming:5432/streaming_db?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      CATALOGO_API_URL: http://catalogo:8003
       GCS_BUCKET: quetzaltv-streaming-g10
       GCS_TRAILERS_FOLDER: trailers
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json

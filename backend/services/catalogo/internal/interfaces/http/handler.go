@@ -90,28 +90,28 @@ type episodeResponse struct {
 }
 
 type createContentRequest struct {
-    Titulo            string `json:"titulo"`
-    Tipo              string `json:"tipo"`
-    Sinopsis          string `json:"sinopsis"`
-    FichaTecnica      string `json:"ficha_tecnica"`
-    FechaLanzamiento  string `json:"fecha_lanzamiento"`  // ← Ahora recibe datetime completo
-    ClasificacionEdad string `json:"clasificacion_edad"`
-    DuracionMinutos   *int   `json:"duracion_minutos"`
-    Idioma            string `json:"idioma"`
-    UrlPortada        string `json:"url_portada"`
-    UrlTrailer        string `json:"url_trailer"`
+	Titulo            string `json:"titulo"`
+	Tipo              string `json:"tipo"`
+	Sinopsis          string `json:"sinopsis"`
+	FichaTecnica      string `json:"ficha_tecnica"`
+	FechaLanzamiento  string `json:"fecha_lanzamiento"` // ← Ahora recibe datetime completo
+	ClasificacionEdad string `json:"clasificacion_edad"`
+	DuracionMinutos   *int   `json:"duracion_minutos"`
+	Idioma            string `json:"idioma"`
+	UrlPortada        string `json:"url_portada"`
+	UrlTrailer        string `json:"url_trailer"`
 }
 
 type updateContentRequest struct {
-    Titulo            string `json:"titulo"`
-    Sinopsis          string `json:"sinopsis"`
-    FichaTecnica      string `json:"ficha_tecnica"`
-    FechaLanzamiento  string `json:"fecha_lanzamiento"`  // ← Ahora recibe datetime completo
-    ClasificacionEdad string `json:"clasificacion_edad"`
-    DuracionMinutos   *int   `json:"duracion_minutos"`
-    Idioma            string `json:"idioma"`
-    UrlPortada        string `json:"url_portada"`
-    UrlTrailer        string `json:"url_trailer"`
+	Titulo            string `json:"titulo"`
+	Sinopsis          string `json:"sinopsis"`
+	FichaTecnica      string `json:"ficha_tecnica"`
+	FechaLanzamiento  string `json:"fecha_lanzamiento"` // ← Ahora recibe datetime completo
+	ClasificacionEdad string `json:"clasificacion_edad"`
+	DuracionMinutos   *int   `json:"duracion_minutos"`
+	Idioma            string `json:"idioma"`
+	UrlPortada        string `json:"url_portada"`
+	UrlTrailer        string `json:"url_trailer"`
 }
 
 type createContentResponse struct {
@@ -139,6 +139,12 @@ type rateContentResponse struct {
 	TotalLikes              int     `json:"total_likes"`
 	TotalDislikes           int     `json:"total_dislikes"`
 	PorcentajeRecomendacion float64 `json:"porcentaje_recomendacion"`
+}
+
+type profileRatingResponse struct {
+	ContenidoID string `json:"contenido_id"`
+	PerfilID    string `json:"perfil_id"`
+	Reaccion    string `json:"reaccion"`
 }
 
 type createEpisodeBatchRequest struct {
@@ -181,6 +187,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/catalog/upload-trailer", h.handleUploadTrailer)
 	mux.HandleFunc("/api/v1/admin/catalog/upload-episode-video", h.handleUploadEpisodeVideo)
 	mux.HandleFunc("/api/v1/catalog/search", h.handleSearch)
+	mux.HandleFunc("/api/v1/catalog/profile/", h.handleProfileRatings)
 	mux.HandleFunc("/api/v1/catalog/", h.handleDetail)
 	mux.HandleFunc("/api/v1/catalog", h.handleList)
 }
@@ -381,6 +388,48 @@ func (h *Handler) handleRateContent(
 		TotalLikes:              detail.TotalLikes,
 		TotalDislikes:           detail.TotalDislikes,
 		PorcentajeRecomendacion: detail.RecommendationPct,
+	})
+}
+
+func (h *Handler) handleProfileRatings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writePreflight(w)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/catalog/profile/"), "/")
+	if !strings.HasSuffix(path, "ratings") {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	profileID := strings.Trim(strings.TrimSuffix(path, "ratings"), "/")
+	if profileID == "" {
+		writeError(w, http.StatusBadRequest, "Debes indicar el perfil a consultar.")
+		return
+	}
+
+	ratings, err := h.svc.ListRatingsByProfile(r.Context(), profileID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "No se pudieron obtener las calificaciones del perfil.")
+		return
+	}
+
+	response := make([]profileRatingResponse, 0, len(ratings))
+	for _, rating := range ratings {
+		response = append(response, profileRatingResponse{
+			ContenidoID: rating.ContentID,
+			PerfilID:    rating.ProfileID,
+			Reaccion:    string(rating.Reaction),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"calificaciones": response,
 	})
 }
 
@@ -741,6 +790,42 @@ func isReleased(releaseDate *time.Time) bool {
 	return !releaseDate.After(now)
 }
 
+func catalogLocation() *time.Location {
+	loc, err := time.LoadLocation("America/Guatemala")
+	if err != nil {
+		return time.FixedZone("America/Guatemala", -6*60*60)
+	}
+	return loc
+}
+
+func parseReleaseDate(value string) (*time.Time, error) {
+	releaseDateStr := strings.TrimSpace(value)
+	if releaseDateStr == "" {
+		return nil, nil
+	}
+
+	if releaseDate, err := time.Parse(time.RFC3339, releaseDateStr); err == nil {
+		return &releaseDate, nil
+	}
+
+	loc := catalogLocation()
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		releaseDate, err := time.ParseInLocation(layout, releaseDateStr, loc)
+		if err == nil {
+			return &releaseDate, nil
+		}
+	}
+
+	return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
+}
+
+func formatReleaseDate(releaseDate *time.Time) string {
+	if releaseDate == nil {
+		return ""
+	}
+	return releaseDate.In(catalogLocation()).Format("2006-01-02T15:04:05")
+}
+
 func parseCreateContentRequest(req createContentRequest, createdByAccountID string) (*domain.Content, error) {
 	title := strings.TrimSpace(req.Titulo)
 	synopsis := strings.TrimSpace(req.Sinopsis)
@@ -782,22 +867,11 @@ func parseCreateContentRequest(req createContentRequest, createdByAccountID stri
 		CreatedByAccountID: createdByAccountID,
 	}
 
-	// Parsear fecha y hora en formato ISO 8601
-	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-
-		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
-		if err != nil {
-			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
-			if err != nil {
-				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
-				if err != nil {
-					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
-				}
-			}
-		}
-		content.ReleaseDate = &releaseDate
+	releaseDate, err := parseReleaseDate(req.FechaLanzamiento)
+	if err != nil {
+		return nil, err
 	}
+	content.ReleaseDate = releaseDate
 
 	if req.DuracionMinutos != nil {
 		duration := *req.DuracionMinutos
@@ -839,22 +913,11 @@ func parseUpdateContentRequest(req updateContentRequest) (*domain.Content, error
 		TrailerURL:     strings.TrimSpace(req.UrlTrailer),
 	}
 
-	// Parsear fecha y hora en formato ISO 8601
-	if strings.TrimSpace(req.FechaLanzamiento) != "" {
-		releaseDateStr := strings.TrimSpace(req.FechaLanzamiento)
-
-		releaseDate, err := time.Parse("2006-01-02T15:04:05", releaseDateStr)
-		if err != nil {
-			releaseDate, err = time.Parse("2006-01-02T15:04", releaseDateStr)
-			if err != nil {
-				releaseDate, err = time.Parse("2006-01-02", releaseDateStr)
-				if err != nil {
-					return nil, errors.New("La fecha de lanzamiento debe usar el formato YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss")
-				}
-			}
-		}
-		content.ReleaseDate = &releaseDate
+	releaseDate, err := parseReleaseDate(req.FechaLanzamiento)
+	if err != nil {
+		return nil, err
 	}
+	content.ReleaseDate = releaseDate
 
 	if req.DuracionMinutos != nil {
 		duration := *req.DuracionMinutos
@@ -1113,7 +1176,7 @@ func (h *Handler) toContentResponse(ctx context.Context, content domain.Content)
 		UrlTrailer:              content.TrailerURL,
 	}
 	if content.ReleaseDate != nil {
-		response.FechaLanzamiento = content.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = formatReleaseDate(content.ReleaseDate)
 	}
 	return response
 }
@@ -1169,7 +1232,7 @@ func (h *Handler) toDetailResponse(ctx context.Context, detail *domain.ContentDe
 		PorcentajeRecomendacion: detail.RecommendationPct,
 	}
 	if detail.ReleaseDate != nil {
-		response.FechaLanzamiento = detail.ReleaseDate.Format("2006-01-02")
+		response.FechaLanzamiento = formatReleaseDate(detail.ReleaseDate)
 	}
 	for _, genre := range detail.Genres {
 		response.Generos = append(response.Generos, genreResponse{
