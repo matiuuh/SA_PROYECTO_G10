@@ -227,7 +227,7 @@ export function MovieDetailPage() {
   const [showPlaybackControls, setShowPlaybackControls] = useState(true)
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
   const [showPinModal, setShowPinModal] = useState(false)
-  const [pendingPlaybackAction, setPendingPlaybackAction] = useState<{ type: 'play' | 'resume' } | null>(null)
+  const [pendingPlaybackAction, setPendingPlaybackAction] = useState<{ type: 'play' | 'resume' | 'watchparty' } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playbackContainerRef = useRef<HTMLDivElement | null>(null)
   const controlsHideTimeoutRef = useRef<number | null>(null)
@@ -526,6 +526,8 @@ export function MovieDetailPage() {
         await startPlayback()
       } else if (pendingPlaybackAction?.type === 'resume') {
         await startResume()
+      } else if (pendingPlaybackAction?.type === 'watchparty') {
+        await handleWatchPartyAfterPin()
       }
       setPendingPlaybackAction(null)
     }
@@ -915,6 +917,28 @@ export function MovieDetailPage() {
       setShowPremiumAlert(true)
       return
     }
+    const restricted = await checkParentalRestriction()
+    if (restricted) {
+      setPendingPlaybackAction({ type: 'watchparty' })
+      setShowPinModal(true)
+      return
+    }
+    try {
+      const sala = await createSala({
+        perfil_id: activeProfile.id,
+        cuenta_id: accountId,
+        contenido_id: detail.id,
+        tipo_contenido: detail.tipo,
+        duracion_segundos: (detail.duracion_minutos ?? 0) * 60,
+      })
+      navigate(`/watch-party?codigo=${sala.codigoInvite}`)
+    } catch (err) {
+      setPlaybackError(err instanceof Error ? err.message : 'Error al crear sala')
+    }
+  }
+
+  const handleWatchPartyAfterPin = async () => {
+    if (!detail || !activeProfile || !accountId) return
     try {
       const sala = await createSala({
         perfil_id: activeProfile.id,
