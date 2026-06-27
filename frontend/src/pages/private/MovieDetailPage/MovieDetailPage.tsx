@@ -30,9 +30,9 @@ import { PinModal } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
-import { saveEncryptedOfflineDownload } from '@/lib/offline-downloads'
+import { hasDownload, saveDownload } from '@/lib/offline-downloads'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
-import { getSubscriptionStatusByAccount, listActivePlans } from '@/lib/suscripcion-api'
+import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
 import { createSala } from '@/lib/watchparty-api'
 import { getProfileRestrictions, verifyProfilePin } from '@/lib/usuario-api'
 import { listProfiles } from '@/lib/usuario-api'
@@ -172,14 +172,6 @@ function parseRequestedStart(value: string | null): number {
 
 const PREMIUM_PLAN_ID = 'b0000000-0000-0000-0000-000000000003'
 
-function normalizePlanName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-}
-
 export function MovieDetailPage() {
   const navigate = useNavigate()
   const { id = '' } = useParams()
@@ -203,8 +195,7 @@ export function MovieDetailPage() {
   const [hasSubscription, setHasSubscription] = useState(false)
   const [subscriptionPlanId, setSubscriptionPlanId] = useState<string | null>(null)
   const [showPremiumAlert, setShowPremiumAlert] = useState(false)
-  const [activePlanName, setActivePlanName] = useState('')
-  const [activePlanProfileLimit, setActivePlanProfileLimit] = useState(0)
+  const [canDownload, setCanDownload] = useState(false)
   const [isLoadingPlanAccess, setIsLoadingPlanAccess] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [seasons, setSeasons] = useState<CatalogSeason[]>([])
@@ -221,6 +212,7 @@ export function MovieDetailPage() {
   const [shareFeedback, setShareFeedback] = useState('')
   const [downloadFeedback, setDownloadFeedback] = useState('')
   const [isSavingDownload, setIsSavingDownload] = useState(false)
+  const [isDownloaded, setIsDownloaded] = useState(false)
   const [playbackPositionSeconds, setPlaybackPositionSeconds] = useState(0)
   const [mediaDurationSeconds, setMediaDurationSeconds] = useState(0)
   const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
@@ -254,23 +246,18 @@ export function MovieDetailPage() {
     async function loadSubscriptionStatus() {
       if (!accountId || !accessToken) return
       setIsLoadingPlanAccess(true)
-      setActivePlanName('')
-      setActivePlanProfileLimit(0)
+      setCanDownload(false)
 
       try {
-        const [status, profiles, plans] = await Promise.all([
+        const [status, profiles] = await Promise.all([
           getSubscriptionStatusByAccount(accountId),
           listProfiles(accessToken),
-          listActivePlans().catch(() => []),
         ])
         setHasSubscription(status.tiene_suscripcion)
         setSubscriptionPlanId(status.suscripcion?.plan_id ?? null)
+        setCanDownload(status.puede_descargar)
 
         if (status.tiene_suscripcion) {
-          const activePlan = plans.find((plan) => plan.id === status.suscripcion?.plan_id)
-          setActivePlanName(activePlan?.nombre ?? '')
-          setActivePlanProfileLimit(activePlan?.perfiles_maximos ?? 0)
-
           const syncedProfile = syncStoredActiveProfile(profiles)
           if (!syncedProfile) {
             navigate('/profiles', { replace: true, state: { reason: activeProfileId ? 'invalid-profile' : 'select-profile' } })
@@ -283,6 +270,29 @@ export function MovieDetailPage() {
 
     void loadSubscriptionStatus()
   }, [accessToken, accountId, activeProfileId, navigate])
+
+  useEffect(() => {
+    async function checkStoredDownload() {
+      if (!accountId || !activeProfileId || !detail) {
+        setIsDownloaded(false)
+        return
+      }
+      if (detail.tipo === 'serie' && !selectedEpisode?.id) {
+        setIsDownloaded(false)
+        return
+      }
+
+      try {
+        setIsDownloaded(
+          await hasDownload(accountId, activeProfileId, detail.id, selectedEpisode?.id),
+        )
+      } catch {
+        setIsDownloaded(false)
+      }
+    }
+
+    void checkStoredDownload()
+  }, [accountId, activeProfileId, detail, selectedEpisode?.id])
 
   useEffect(() => {
     async function loadSavedProgress() {
@@ -418,7 +428,6 @@ export function MovieDetailPage() {
   const fallbackSeasons = technicalSheetMetadata.get('temporadas') ?? ''
   const fallbackNotes = technicalSheetMetadata.get('notas') ?? ''
   const currentPlaybackUrl = (selectedEpisode ? episodeSignedUrl : null) || trailerSignedUrl || detail?.url_trailer
-  const isPremiumPlan = normalizePlanName(activePlanName) === 'premium' || activePlanProfileLimit >= 4
   const trailerSource = useMemo(
     () => resolveTrailerSource(currentPlaybackUrl, muted, resumeFromSeconds),
     [currentPlaybackUrl, muted, resumeFromSeconds],
@@ -648,7 +657,7 @@ export function MovieDetailPage() {
       setDownloadFeedback('Validando tu Plan Premium. Intenta de nuevo en un momento.')
       return
     }
-    if (!isPremiumPlan) {
+    if (!canDownload) {
       setDownloadFeedback('La descarga esta disponible unicamente para el Plan Premium.')
       return
     }
@@ -663,7 +672,7 @@ export function MovieDetailPage() {
 
     setIsSavingDownload(true)
     try {
-      await saveEncryptedOfflineDownload({
+      await saveDownload({
         accountId,
         profileId: activeProfileId,
         contentId: detail.id,
@@ -671,11 +680,15 @@ export function MovieDetailPage() {
         type: detail.tipo,
         episodeId: selectedEpisode?.id,
         episodeTitle: selectedEpisode?.titulo,
-        playbackUrl: currentPlaybackUrl,
         posterUrl: detail.url_portada,
         downloadedAt: new Date().toISOString(),
       })
-      setDownloadFeedback('Descarga simulada guardada localmente de forma cifrada.')
+      setIsDownloaded(true)
+      setDownloadFeedback(
+        isDownloaded
+          ? 'La descarga simulada se actualizo correctamente.'
+          : 'Descarga simulada guardada localmente de forma cifrada.',
+      )
     } catch {
       setDownloadFeedback('No se pudo guardar la descarga local.')
     } finally {
@@ -1343,12 +1356,12 @@ export function MovieDetailPage() {
                 onClick={() => { void handleDownload() }}
                 disabled={isSavingDownload}
                 className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
-                  isPremiumPlan
+                  canDownload
                     ? 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
                     : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-600)]'
                 } ${isSavingDownload ? 'cursor-wait opacity-70' : ''}`}
-                aria-label={isPremiumPlan ? 'Descargar contenido' : 'Descarga disponible solo para Plan Premium'}
-                title={isLoadingPlanAccess ? 'Validando plan' : isPremiumPlan ? 'Descargar contenido' : 'Solo Plan Premium'}
+                aria-label={canDownload ? (isDownloaded ? 'Actualizar descarga' : 'Descargar contenido') : 'Descarga disponible solo para Plan Premium'}
+                title={isLoadingPlanAccess ? 'Validando plan' : canDownload ? (isDownloaded ? 'Contenido descargado' : 'Descargar contenido') : 'Solo Plan Premium'}
               >
                 <Download size={15} strokeWidth={1.75} />
               </button>
@@ -1367,23 +1380,25 @@ export function MovieDetailPage() {
           ) : null}
           {hasSubscription && !isAdminView ? (
             <div className={`max-w-md rounded-lg border px-4 py-3 text-sm ${
-              isPremiumPlan
+              canDownload
                 ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
                 : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
             }`}>
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                  isPremiumPlan ? 'bg-emerald-400/15 text-emerald-200' : 'bg-amber-400/15 text-amber-200'
+                  canDownload ? 'bg-emerald-400/15 text-emerald-200' : 'bg-amber-400/15 text-amber-200'
                 }`}>
-                  {isPremiumPlan ? <Download size={15} strokeWidth={1.8} /> : <Lock size={15} strokeWidth={1.8} />}
+                  {canDownload ? <Download size={15} strokeWidth={1.8} /> : <Lock size={15} strokeWidth={1.8} />}
                 </div>
                 <div>
                   <p className="font-semibold">
                     Descargas solo para Plan Premium
                   </p>
-                  <p className={`mt-1 text-xs ${isPremiumPlan ? 'text-emerald-100/75' : 'text-amber-100/75'}`}>
-                    {isPremiumPlan
-                      ? 'Tu plan permite guardar descargas simuladas de forma local y cifrada.'
+                  <p className={`mt-1 text-xs ${canDownload ? 'text-emerald-100/75' : 'text-amber-100/75'}`}>
+                    {canDownload
+                      ? isDownloaded
+                        ? 'Este contenido ya esta guardado para el perfil activo.'
+                        : 'Tu plan permite guardar descargas simuladas de forma local y cifrada.'
                       : 'Actualiza a Premium para habilitar la descarga simulada de peliculas y episodios.'}
                   </p>
                 </div>

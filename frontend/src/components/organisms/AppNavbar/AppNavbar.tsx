@@ -6,6 +6,7 @@ import {
   ChevronDown,
   User,
   History,
+  Download,
   X,
   Tv,
 } from 'lucide-react'
@@ -172,6 +173,17 @@ export function AppNavbar() {
                 >
                   <History size={16} strokeWidth={1.75} />
                   <span className="hidden sm:inline">Historial</span>
+                </Link>
+
+                <div className="w-px h-5 bg-white/[0.08]" />
+
+                <Link
+                  to="/downloads"
+                  aria-label="Mis descargas"
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+                >
+                  <Download size={16} strokeWidth={1.75} />
+                  <span className="hidden lg:inline">Descargas</span>
                 </Link>
 
                 <div className="w-px h-5 bg-white/[0.08]" />

@@ -305,6 +305,16 @@ class TestSubscriptionServicePlanQuote:
 
 
 class TestSubscriptionServiceSubscriptions:
+    def test_can_download_only_with_active_premium_plan(self) -> None:
+        plan_repo = InMemoryPlanRepository()
+        subscription_repo = InMemorySubscriptionRepository()
+        plan_repo.create(_make_plan("premium-plan", nombre=" Premium "))
+        subscription_repo.create(_make_subscription(plan_id="premium-plan"))
+        service = SubscriptionService(plan_repo, subscription_repo, FakeDivisasClientOK())
+
+        assert service.can_download_by_account("acc-1") is True
+        assert service.can_download_by_account("missing-account") is False
+
     def _setup_with_plan(self) -> tuple[SubscriptionService, str]:
         svc = _build_service()
         req = CreatePlanRequest(
