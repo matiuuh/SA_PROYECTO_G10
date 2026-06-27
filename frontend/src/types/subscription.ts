@@ -58,6 +58,7 @@ export interface SubscriptionRecord {
 export interface SubscriptionStatus {
   tiene_suscripcion: boolean
   suscripcion: SubscriptionRecord | null
+  puede_descargar: boolean
 }
 
 export interface SubscriptionMessage {
