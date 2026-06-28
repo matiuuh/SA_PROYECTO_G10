@@ -336,10 +336,11 @@ jobs:
           export AR_REGISTRY="${{ secrets.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/quetzaltv"
           export VERSION="${{ needs.build-and-push.outputs.version }}"
           export VM3_HOST="${{ secrets.VM3_HOST }}"
+          export VM3_INTERNAL_IP="${{ secrets.VM3_INTERNAL_IP }}"
           echo "AR_REGISTRY construido: ${AR_REGISTRY}"
           echo "VERSION: ${VERSION}"
           for f in k8s/*.yaml; do
-            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST}' < "$f" > "$f.rendered"
+            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST} ${VM3_INTERNAL_IP}' < "$f" > "$f.rendered"
             mv "$f.rendered" "$f"
           done
 
