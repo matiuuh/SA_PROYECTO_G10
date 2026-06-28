@@ -1,6 +1,8 @@
-# Health Check — Terraform · Ansible · Kubernetes
+# Health Check — Terraform · Ansible · Kubernetes · CronJob
 
 Referencia rápida para verificar el estado de la infraestructura de **Quetzal TV** desplegada en GCP.
+
+> **Namespace de producción:** `quetzaltv-prod`
 
 ---
 
@@ -189,21 +191,21 @@ kubectl get pods --all-namespaces -o wide   # incluye nodo y IP
 ### Ver pods en el namespace de la aplicación
 
 ```bash
-kubectl get pods -n quetzaltv
-kubectl get pods -n quetzaltv --watch       # monitoreo en vivo
+kubectl get pods -n quetzaltv-prod
+kubectl get pods -n quetzaltv-prod --watch       # monitoreo en vivo
 ```
 
 ### Verificar que no hubo cambios inesperados en deployments
 
 ```bash
-kubectl get deployments -n quetzaltv
-kubectl rollout status deployment/<nombre> -n quetzaltv
+kubectl get deployments -n quetzaltv-prod
+kubectl rollout status deployment/<nombre> -n quetzaltv-prod
 ```
 
 ### Ver servicios y sus IPs/puertos expuestos
 
 ```bash
-kubectl get services -n quetzaltv
+kubectl get services -n quetzaltv-prod
 kubectl get services --all-namespaces
 ```
 
@@ -216,37 +218,37 @@ kubectl get ingress --all-namespaces
 ### Describir un recurso en detalle (útil para diagnosticar)
 
 ```bash
-kubectl describe pod <nombre-pod> -n quetzaltv
-kubectl describe deployment <nombre-deployment> -n quetzaltv
+kubectl describe pod <nombre-pod> -n quetzaltv-prod
+kubectl describe deployment <nombre-deployment> -n quetzaltv-prod
 kubectl describe node <nombre-nodo>
 ```
 
 ### Ver logs de un pod
 
 ```bash
-kubectl logs <nombre-pod> -n quetzaltv
-kubectl logs <nombre-pod> -n quetzaltv --previous   # último crash
-kubectl logs <nombre-pod> -n quetzaltv -f           # en vivo (follow)
+kubectl logs <nombre-pod> -n quetzaltv-prod
+kubectl logs <nombre-pod> -n quetzaltv-prod --previous   # último crash
+kubectl logs <nombre-pod> -n quetzaltv-prod -f           # en vivo (follow)
 ```
 
 ### Uso de recursos (CPU y memoria)
 
 ```bash
 kubectl top nodes
-kubectl top pods -n quetzaltv
+kubectl top pods -n quetzaltv-prod
 ```
 
 ### Verificar ConfigMaps y Secrets (sin revelar valores)
 
 ```bash
-kubectl get configmaps -n quetzaltv
-kubectl get secrets -n quetzaltv
+kubectl get configmaps -n quetzaltv-prod
+kubectl get secrets -n quetzaltv-prod
 ```
 
 ### Verificar que las imágenes en uso vienen del Artifact Registry correcto
 
 ```bash
-kubectl get pods -n quetzaltv -o jsonpath="{.items[*].spec.containers[*].image}" | tr ' ' '\n'
+kubectl get pods -n quetzaltv-prod -o jsonpath="{.items[*].spec.containers[*].image}" | tr ' ' '\n'
 ```
 
 Las imágenes deben empezar con `us-central1-docker.pkg.dev/sa-proyecto-g10-500320/quetzaltv/`.
@@ -254,12 +256,289 @@ Las imágenes deben empezar con `us-central1-docker.pkg.dev/sa-proyecto-g10-5003
 ### Verificar HPA (autoscaling horizontal) si está configurado
 
 ```bash
-kubectl get hpa -n quetzaltv
+kubectl get hpa -n quetzaltv-prod
 ```
 
 ---
 
-## 4. Verificación rápida combinada
+## 4. CronJob — Depuración de cuentas inactivas (Producción · K8s)
+
+> Archivo: `k8s/13-depuracion-usuarios.yaml` · Namespace: `quetzaltv-prod`
+
+**Qué hace:** cada minuto Kubernetes crea un Pod efímero con imagen `postgres:16-alpine` que conecta directo a la BD `quetzal_usuario` en VM3 (puerto 5437) y hace soft-delete de toda cuenta con más de 5 minutos de inactividad. Usa `pg_advisory_xact_lock` para evitar ejecuciones solapadas y `concurrencyPolicy: Forbid` para que K8s no lance un segundo pod si el anterior aún no terminó.
+
+### Prerequisito — Apuntar el ConfigMap a la IP **interna** de VM3
+
+> **Importante:** el ConfigMap puede tener la IP externa de VM3 si fue creado con Terraform directamente. Siempre verificar y corregir a la IP interna antes de aplicar el CronJob, ya que los pods de GKE alcanzan VM3 por la red interna de GCP.
+
+Verificar el valor actual:
+
+```powershell
+kubectl get configmap quetzaltv-config -n quetzaltv-prod -o jsonpath="{.data.DB_HOST}"
+```
+
+Si no muestra `10.0.0.4`, parchearlo:
+
+```powershell
+# PowerShell
+kubectl patch configmap quetzaltv-config `
+  -n quetzaltv-prod `
+  --type merge `
+  -p '{\"data\":{\"DB_HOST\":\"10.0.0.4\"}}'
+```
+
+```bash
+# Bash/Linux
+kubectl patch configmap quetzaltv-config \
+  -n quetzaltv-prod \
+  --type merge \
+  -p '{"data":{"DB_HOST":"10.0.0.4"}}'
+```
+
+### Instalar / aplicar el CronJob
+
+```bash
+kubectl apply -f k8s/13-depuracion-usuarios.yaml
+```
+
+### Verificar que el CronJob existe y su estado
+
+```powershell
+kubectl get cronjob -n quetzaltv-prod
+```
+
+Salida esperada:
+
+```
+NAME                  SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+depuracion-usuarios   * * * * *   False     0        <none>          7s
+```
+
+Columnas clave:
+- `SCHEDULE: * * * * *` — corre cada minuto ✅
+- `SUSPEND: False` — activo, no pausado ✅
+- `LAST SCHEDULE: <none>` — normal en los primeros segundos; aparecerá tras el primer disparo automático ✅
+
+### Ver el historial de Jobs generados automáticamente
+
+```powershell
+kubectl get jobs -n quetzaltv-prod --sort-by=.metadata.creationTimestamp
+```
+
+Los jobs exitosos se conservan hasta 3 (según `successfulJobsHistoryLimit`). El nombre sigue el patrón `depuracion-usuarios-<timestamp>`.
+
+### Ver logs del último Job automático
+
+```powershell
+# Listar jobs para obtener el nombre
+kubectl get jobs -n quetzaltv-prod --sort-by=.metadata.creationTimestamp
+
+# Ver logs
+kubectl logs job/<nombre-del-job> -n quetzaltv-prod
+```
+
+### Disparar el CronJob manualmente (para pruebas)
+
+```powershell
+kubectl create job depuracion-prueba `
+  --from=cronjob/depuracion-usuarios `
+  -n quetzaltv-prod
+```
+
+```bash
+# Bash
+kubectl create job depuracion-prueba \
+  --from=cronjob/depuracion-usuarios \
+  -n quetzaltv-prod
+```
+
+Ver los logs (esperar ~10 segundos para que el pod arranque):
+
+```powershell
+kubectl logs job/depuracion-prueba -n quetzaltv-prod
+```
+
+Salida real verificada en producción:
+
+```
+Iniciando depuracion de cuentas inactivas...
+BEGIN
+ pg_advisory_xact_lock
+-----------------------
+
+(1 row)
+
+SELECT 0
+UPDATE 0
+UPDATE 0
+UPDATE 0
+COMMIT
+Depuracion finalizada.
+```
+
+`SELECT 0` indica que no había cuentas inactivas pendientes — comportamiento correcto.  
+`SELECT N` con N > 0 indica cuentas depuradas en esa ejecución.
+
+Limpiar el job de prueba:
+
+```powershell
+kubectl delete job depuracion-prueba -n quetzaltv-prod
+```
+
+### Verificar que el Secret con la contraseña de BD existe
+
+```powershell
+kubectl get secret quetzaltv-secrets -n quetzaltv-prod
+kubectl describe secret quetzaltv-secrets -n quetzaltv-prod
+```
+
+### Diagnosticar un Job fallido
+
+```powershell
+# Eventos del job
+kubectl describe job <nombre-job-fallido> -n quetzaltv-prod
+
+# Pod generado por el job
+kubectl get pods -n quetzaltv-prod --selector=job-name=<nombre-job-fallido>
+kubectl logs <nombre-pod> -n quetzaltv-prod
+```
+
+Causas comunes de fallo:
+- `DB_HOST` en el ConfigMap apunta a la IP **externa** de VM3 en lugar de la interna (`10.0.0.4`)
+- El Secret `quetzaltv-secrets` no contiene `DB_PASSWORD`
+- VM3 no está corriendo o el contenedor PostgreSQL del puerto 5437 está caído
+- Firewall GCP bloqueando tráfico desde los nodos GKE hacia VM3 en el puerto 5437
+
+---
+
+## 4b. CronJob — Depuración en entorno Develop (Docker Compose · VM1)
+
+> Archivo: `backend/deploy/compose/docker-compose.cloud-vm1.yml` · Servicio: `depuracion-usuarios`
+
+**Diferencia respecto a K8s:** en develop no hay CronJob de Kubernetes. El servicio `depuracion-usuarios` es un **contenedor long-running** (`restart: unless-stopped`) que al arrancar escribe `/tmp/run.sh` con las variables de conexión ya interpoladas y luego ejecuta `crond -f` internamente. El cron del contenedor llama a ese script cada minuto.
+
+> **Nota de implementación:** las variables `PGHOST`, `PGPORT`, etc. se escriben en `/tmp/run.sh` al inicio del contenedor usando `$$VAR` en el YAML de Docker Compose (doble `$$` = escape para que Docker Compose no las sustituya del host y las deje pasar al shell del contenedor). Esto es necesario porque `crond` en Alpine no hereda el entorno del proceso padre.
+
+### Conectarse a VM1 y posicionarse en el directorio
+
+```bash
+ssh -i ~/.ssh/quetzaltv_deploy ubuntu@130.211.203.9
+cd /opt/quetzaltv
+```
+
+### Verificar que `DB_VM3_HOST` apunta a la IP interna de VM3
+
+```bash
+grep DB_VM3_HOST backend/deploy/compose/.env
+# Debe mostrar: DB_VM3_HOST=10.0.0.4
+```
+
+### Descargar imagen y levantar el servicio
+
+```bash
+docker compose \
+  -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
+  --env-file backend/deploy/compose/.env \
+  pull depuracion-usuarios
+
+docker compose \
+  -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
+  --env-file backend/deploy/compose/.env \
+  up -d depuracion-usuarios
+```
+
+No deben aparecer warnings de `PGHOST`/`PGPORT`/`PGPASSWORD`. Si aparecen, el YAML tiene un error en el escape `$$`.
+
+### Verificar que el contenedor está corriendo
+
+```bash
+docker ps --filter name=quetzal-depuracion-usuarios
+```
+
+Estado esperado: `Up X minutes`.
+
+### Ver logs en vivo
+
+```bash
+docker logs -f quetzal-depuracion-usuarios
+```
+
+Salida real verificada en develop (primera ejecución con cuentas inactivas):
+
+```
+Depurador configurado: ejecucion cada minuto.
+BEGIN
+ pg_advisory_xact_lock
+-----------------------
+
+(1 row)
+
+SELECT 4
+UPDATE 10
+UPDATE 4
+UPDATE 4
+COMMIT
+```
+
+Interpretación: encontró 4 cuentas inactivas → cerró 10 sesiones → desactivó 4 perfiles → soft-delete en 4 cuentas.
+
+### Verificar el script generado por el contenedor
+
+```bash
+docker exec quetzal-depuracion-usuarios cat /tmp/run.sh
+```
+
+Debe mostrar las variables con sus valores reales ya interpolados:
+
+```sh
+#!/bin/sh
+export PGHOST=10.0.0.4
+export PGPORT=5437
+export PGDATABASE=quetzal_usuario
+export PGUSER=postgres
+export PGPASSWORD=...
+export PGCONNECT_TIMEOUT=10
+psql -v ON_ERROR_STOP=1 -f /tmp/depuracion.sql
+```
+
+### Verificar que crond está activo
+
+```bash
+docker exec quetzal-depuracion-usuarios ps aux
+```
+
+Debe aparecer `crond` en la lista de procesos.
+
+### Verificar el crontab
+
+```bash
+docker exec quetzal-depuracion-usuarios cat /etc/crontabs/root
+```
+
+Debe mostrar:
+
+```
+* * * * * /tmp/run.sh >> /proc/1/fd/1 2>> /proc/1/fd/2
+```
+
+### Detener el servicio (solo si es necesario)
+
+```bash
+docker compose \
+  -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
+  --env-file backend/deploy/compose/.env \
+  stop depuracion-usuarios
+```
+
+### Causas comunes de fallo en develop
+
+- `DB_VM3_HOST` en `.env` apunta a la IP externa de VM3 en lugar de la interna (`10.0.0.4`)
+- El contenedor PostgreSQL de usuarios (puerto 5437) en VM3 no está corriendo
+- Warnings de `PGHOST not set` al hacer `up`: el YAML tiene `$PGHOST` en lugar de `$$PGHOST`
+
+---
+
+## 5. Verificación rápida combinada
 
 Secuencia de comandos para confirmar de un vistazo que todo está en pie:
 
@@ -273,9 +552,13 @@ cd ansible && ansible all -m ping
 # 3. Kubernetes — nodos y pods
 kubectl get nodes
 kubectl get pods --all-namespaces | grep -v Running | grep -v Completed
+
+# 4. CronJob — estado y último job
+kubectl get cronjob depuracion-usuarios -n quetzaltv-prod
+kubectl get jobs -n quetzaltv-prod --sort-by=.metadata.creationTimestamp | tail -3
 ```
 
-Si el último comando no devuelve nada (o solo muestra la cabecera), todos los pods están en estado correcto.
+Si el comando del paso 3 no devuelve nada (o solo la cabecera), todos los pods están en estado correcto. El CronJob debe aparecer con `SUSPEND: False` y una fecha reciente en `LAST SCHEDULE`.
 
 ---
 

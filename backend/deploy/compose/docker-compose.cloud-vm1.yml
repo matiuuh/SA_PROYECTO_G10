@@ -105,8 +105,16 @@ services:
         COMMIT;
         SQL
 
-        echo '* * * * * xargs -0 env psql -v ON_ERROR_STOP=1 -f /tmp/depuracion.sql < /proc/1/environ >> /proc/1/fd/1 2>> /proc/1/fd/2' \
-          > /etc/crontabs/root
+        echo '#!/bin/sh' > /tmp/run.sh
+        echo "export PGHOST=$$PGHOST" >> /tmp/run.sh
+        echo "export PGPORT=$$PGPORT" >> /tmp/run.sh
+        echo "export PGDATABASE=$$PGDATABASE" >> /tmp/run.sh
+        echo "export PGUSER=$$PGUSER" >> /tmp/run.sh
+        echo "export PGPASSWORD=$$PGPASSWORD" >> /tmp/run.sh
+        echo "export PGCONNECT_TIMEOUT=$${PGCONNECT_TIMEOUT:-10}" >> /tmp/run.sh
+        echo 'psql -v ON_ERROR_STOP=1 -f /tmp/depuracion.sql' >> /tmp/run.sh
+        chmod +x /tmp/run.sh
+        echo '* * * * * /tmp/run.sh >> /proc/1/fd/1 2>> /proc/1/fd/2' > /etc/crontabs/root
         echo "Depurador configurado: ejecucion cada minuto."
         exec crond -f -l 2
 
