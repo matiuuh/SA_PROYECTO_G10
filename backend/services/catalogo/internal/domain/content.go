@@ -131,6 +131,7 @@ type ContentRepository interface {
 	Update(ctx context.Context, id string, c *Content, actorAccountID string) error
 	Delete(ctx context.Context, id string, actorAccountID string) error
 	Rate(ctx context.Context, r *Rating) (float64, error)
+	ListRatingsByProfile(ctx context.Context, profileID string) ([]Rating, error)
 	ListSeasonsByContent(ctx context.Context, contentID string) ([]Season, error)
 	CreateEpisodeBatch(ctx context.Context, contentID string, batch EpisodeBatch, actorAccountID string) ([]Episode, error)
 	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)

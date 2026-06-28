@@ -449,6 +449,151 @@ GCS se utiliza para:
 - conservar los `pg_dump` de las siete bases PostgreSQL;
 - mantener disponibles los archivos aunque los contenedores o pods sean reemplazados.
 
+## 12. Descarga simulada exclusiva para el Plan Premium
+
+### ¿Qué?
+
+Se implementó un módulo de descarga simulada disponible únicamente para usuarios con un
+Plan Premium activo. En lugar de descargar el archivo completo del video, el navegador
+guarda localmente y de forma cifrada los datos que identifican la película o el episodio.
+
+La solución utiliza:
+
+- **IndexedDB** como almacenamiento persistente del navegador;
+- **Web Crypto API** para las operaciones criptográficas;
+- **AES-GCM de 256 bits** para cifrar y autenticar cada registro;
+- una **clave criptográfica no extraíble**, conservada por el navegador;
+- el permiso `puede_descargar`, calculado por el servicio de Suscripción;
+- la pantalla privada `/downloads` para consultar, abrir y eliminar descargas.
+
+No se utilizan Service Workers porque el requisito permite elegir entre almacenamiento
+cifrado del navegador o Service Workers. La implementación selecciona la primera
+alternativa.
+
+### ¿Por qué?
+
+IndexedDB fue elegido porque está diseñado para almacenar datos estructurados en el
+navegador, admite operaciones asíncronas y ofrece mayor capacidad y organización que
+`localStorage`. El cifrado AES-GCM protege la confidencialidad e integridad de los
+registros locales, mientras que un vector de inicialización aleatorio evita que dos
+descargas iguales produzcan el mismo contenido cifrado.
+
+Se optó por una descarga simulada porque satisface el alcance académico sin duplicar
+archivos multimedia grandes en el dispositivo ni introducir la complejidad de
+segmentación, caché, expiración y reproducción offline de video. Tampoco se almacenan
+URLs firmadas de GCS, ya que son temporales y podrían expirar. Al abrir una descarga, la
+aplicación navega al contenido original y solicita una URL vigente.
+
+La restricción se calcula en el backend para que la interfaz no deduzca el beneficio a
+partir del precio o del número de perfiles. El servicio de Suscripción verifica que exista
+una suscripción activa cuyo plan normalizado sea `Premium` y responde:
+
+- `puede_descargar: true` para Premium;
+- `puede_descargar: false` para Básico, Estándar, suscripción cancelada o inexistente.
+
+El frontend vuelve a validar este permiso antes de mostrar la biblioteca. Si el usuario
+cambia a un plan inferior, los registros permanecen cifrados en el dispositivo, pero no
+pueden consultarse ni abrirse hasta recuperar Premium.
+
+### ¿Para qué?
+
+Esta decisión permite:
+
+- cumplir la segmentación normativa de la descarga como beneficio exclusivo de Premium;
+- demostrar persistencia local cifrada sin almacenar el video completo;
+- separar las descargas por cuenta, perfil, contenido y episodio;
+- impedir que perfiles diferentes mezclen sus bibliotecas locales;
+- permitir guardar, detectar duplicados, listar y eliminar registros;
+- mantener la autorización en el dominio responsable de los planes;
+- evitar tablas de descargas o archivos multimedia duplicados en el backend.
+
+La implementación completa y su procedimiento de verificación se describen en
+[Descarga de contenido Premium](../Descarga_Contenido_Premium.md).
+
+## 13. Algoritmo de recomendaciones basado en contenido
+
+### ¿Qué?
+
+Se implementó un motor de recomendaciones personalizadas basado en contenido. El
+algoritmo construye un perfil de gustos para cada perfil de usuario a partir de:
+
+- los últimos 25 registros del historial de reproducción;
+- la recencia de cada reproducción;
+- el estado `en_progreso` o `finalizado`;
+- las reacciones `like` y `dislike`;
+- los géneros asociados a películas y series;
+- el porcentaje global de recomendación de cada contenido.
+
+El motor asigna un peso a cada género y calcula el puntaje de un candidato mediante:
+
+\[
+score(c) =
+\frac{P(c)}{100}
++ 2\sum_{g \in G(c)} W(g)
+\]
+
+Donde \(P(c)\) es la recomendación global, \(G(c)\) representa los géneros del contenido
+y \(W(g)\) es la preferencia acumulada del perfil por cada género.
+
+El servicio excluye el contenido que ya aparece en el historial, ordena los candidatos
+por puntaje y utiliza la popularidad global como desempate. Cuando el perfil no tiene
+historial ni calificaciones, aplica un arranque en frío basado únicamente en popularidad.
+
+### ¿Por qué?
+
+Se eligió el filtrado basado en contenido porque puede operar con los datos que la
+plataforma ya administra y no requiere una gran comunidad de usuarios para producir
+resultados. Un algoritmo colaborativo necesitaría una matriz amplia de interacciones
+entre usuarios y contenidos; durante las primeras etapas del sistema esa matriz sería
+escasa y produciría recomendaciones poco confiables.
+
+La solución seleccionada también es explicable. Además del puntaje, cada resultado puede
+indicar un motivo como `"Porque viste contenido de Acción"` o
+`"Popular en el catálogo"`. Esto facilita demostrar y validar el comportamiento del
+algoritmo.
+
+Los pesos favorecen señales de mayor intención:
+
+- el contenido reciente aporta más que el antiguo;
+- finalizar una reproducción incrementa la afinidad;
+- un `like` aumenta el peso de sus géneros;
+- un `dislike` reduce la afinidad;
+- el porcentaje comunitario evita ignorar la popularidad general.
+
+Se trata de una adaptación académica inspirada en técnicas empleadas por plataformas como
+Netflix, no de una reproducción de su algoritmo propietario.
+
+### ¿Para qué?
+
+Esta decisión permite:
+
+- mostrar la sección **“Recomendados para ti”** en el panel;
+- generar resultados distintos para cada perfil de una misma cuenta;
+- aprovechar historial y calificaciones ya existentes;
+- evitar recomendar nuevamente contenido reproducido;
+- ofrecer recomendaciones aun cuando el perfil sea nuevo;
+- explicar al usuario la razón principal de cada sugerencia;
+- evolucionar posteriormente hacia un modelo híbrido sin modificar el frontend.
+
+### Justificación arquitectónica
+
+El cálculo pertenece al servicio **Streaming** porque este administra el historial y
+orquesta el caso de uso. El servicio **Catálogo** conserva la propiedad de contenidos,
+géneros y calificaciones, y los proporciona mediante HTTP. El frontend únicamente
+consume y presenta las recomendaciones.
+
+La interfaz de dominio `CatalogRecommendationRepository` desacopla el algoritmo del
+cliente HTTP utilizado para consultar Catálogo. La clase lógica
+`contentBasedRecommender` concentra los pesos y reglas, evitando mezclar el modelo
+matemático con transporte, base de datos o presentación.
+
+Esta distribución mantiene la autonomía de los microservicios: Streaming no accede
+directamente a la base de datos de Catálogo y ambos intercambian únicamente contratos e
+identificadores.
+
+El modelo matemático, pseudocódigo, diagrama, complejidad y flujo de ejecución se
+documentan en [Motor inteligente de recomendación](../Recomendaciones/README.md).
+
 ## Conclusión
 
 Las decisiones adoptadas mantienen coherencia entre desarrollo, persistencia, seguridad y

@@ -6,7 +6,9 @@ import {
   ChevronDown,
   User,
   History,
+  Download,
   X,
+  Tv,
 } from 'lucide-react'
 import { Logo } from '@/components/atoms'
 import { clearSession, getActiveSession, getStoredActiveProfile, isAdminRole } from '@/lib/auth'
@@ -17,6 +19,8 @@ export function AppNavbar() {
   const navigate = useNavigate()
   const session = getActiveSession()
   const activeProfile = getStoredActiveProfile()
+  const accountId = session?.account.id ?? ''
+  const accessToken = session?.accessToken ?? ''
   const [profileOpen, setProfileOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [hidden, setHidden] = useState(false)
@@ -37,16 +41,16 @@ export function AppNavbar() {
 
   useEffect(() => {
     async function checkSubscription() {
-      if (!session?.account.id || !session?.accessToken) return
+      if (!accountId || !accessToken) return
       try {
-        const status = await getSubscriptionStatusByAccount(session.account.id)
+        const status = await getSubscriptionStatusByAccount(accountId)
         setHasSubscription(status.tiene_suscripcion)
       } catch {
         setHasSubscription(false)
       }
     }
     void checkSubscription()
-  }, [session])
+  }, [accessToken, accountId])
 
   const isVisible = !hidden || hovered
   const accountName = session?.account.nombre ?? 'Usuario'
@@ -136,6 +140,15 @@ export function AppNavbar() {
               </Link>
             )}
 
+            <Link
+              to="/watch-party"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+              aria-label="Watch Party"
+            >
+              <Tv size={16} strokeWidth={1.75} />
+              <span className="hidden sm:inline">Watch Party</span>
+            </Link>
+
             {hasSubscription && (
               <>
                 <div className="w-px h-5 bg-white/[0.08]" />
@@ -160,6 +173,17 @@ export function AppNavbar() {
                 >
                   <History size={16} strokeWidth={1.75} />
                   <span className="hidden sm:inline">Historial</span>
+                </Link>
+
+                <div className="w-px h-5 bg-white/[0.08]" />
+
+                <Link
+                  to="/downloads"
+                  aria-label="Mis descargas"
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium text-[var(--color-denim-400)] hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+                >
+                  <Download size={16} strokeWidth={1.75} />
+                  <span className="hidden lg:inline">Descargas</span>
                 </Link>
 
                 <div className="w-px h-5 bg-white/[0.08]" />

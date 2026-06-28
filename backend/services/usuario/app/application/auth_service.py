@@ -11,14 +11,29 @@ from app.application.schemas import (
     CreateProfileRequest,
     LoginRequest,
     RegisterRequest,
+    SetControlParentalRequest,
+    SetProfilePinRequest,
     SyncProfilesAvailabilityRequest,
     UpdateAccountRequest,
     UpdateProfileRequest,
+    VerifyProfilePinRequest,
 )
 from app.domain.errors import AuthenticationError, ConflictError, NotFoundError
 from app.domain.models import Account, AuthTokens, Profile, Session
 from app.infrastructure.security.jwt_service import JwtService
 from app.infrastructure.security.password_hasher import PasswordHasher
+
+RATING_HIERARCHY = {"TP": 0, "PG-13": 1, "R": 2}
+
+
+def _rating_requires_pin(content_rating: str | None, profile_control: str | None) -> bool:
+    if not content_rating or not profile_control:
+        return False
+    content_level = RATING_HIERARCHY.get(content_rating)
+    profile_level = RATING_HIERARCHY.get(profile_control)
+    if content_level is None or profile_level is None:
+        return False
+    return content_level > profile_level
 
 
 class AuthService:
@@ -247,6 +262,59 @@ class AuthService:
             self._profile_repository.update(profile)
 
         return self._profile_repository.list_by_account_id(account.id)
+
+    def set_profile_pin(self, token: str, profile_id: str, request: SetProfilePinRequest) -> None:
+        account = self.get_current_account(token)
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None or profile.cuenta_id != account.id:
+            raise NotFoundError("Perfil no encontrado.")
+        pin_hash = self._password_hasher.hash(request.pin)
+        self._profile_repository.set_pin(profile_id, pin_hash)
+
+    def remove_profile_pin(self, token: str, profile_id: str) -> None:
+        account = self.get_current_account(token)
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None or profile.cuenta_id != account.id:
+            raise NotFoundError("Perfil no encontrado.")
+        self._profile_repository.set_pin(profile_id, None)
+
+    def verify_profile_pin(self, profile_id: str, request: VerifyProfilePinRequest) -> bool:
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None:
+            return False
+        pin_hash = self._profile_repository.get_pin_hash(profile_id)
+        if pin_hash is None:
+            return False
+        return self._password_hasher.verify(request.pin, pin_hash)
+
+    def set_profile_control_parental(
+        self, token: str, profile_id: str, request: SetControlParentalRequest
+    ) -> Profile:
+        account = self.get_current_account(token)
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None or profile.cuenta_id != account.id:
+            raise NotFoundError("Perfil no encontrado.")
+        self._profile_repository.set_control_parental(profile_id, request.nivel)
+        profile.control_parental = request.nivel
+        return profile
+
+    def get_profile_restrictions(self, token: str, profile_id: str) -> Profile:
+        account = self.get_current_account(token)
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None or profile.cuenta_id != account.id:
+            raise NotFoundError("Perfil no encontrado.")
+        return profile
+
+    def check_content_restriction(
+        self, profile_id: str, content_rating: str | None
+    ) -> bool:
+        profile = self._profile_repository.get_by_id(profile_id)
+        if profile is None:
+            return False
+        pin_hash = self._profile_repository.get_pin_hash(profile_id)
+        if pin_hash is None:
+            return False
+        return _rating_requires_pin(content_rating, profile.control_parental)
 
     def _issue_session(self, account: Account) -> AuthTokens:
         now = datetime.now(timezone.utc)

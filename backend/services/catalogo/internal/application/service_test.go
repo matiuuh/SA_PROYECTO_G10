@@ -22,6 +22,7 @@ type mockContentRepo struct {
 	updateFn               func(ctx context.Context, id string, c *domain.Content, actorAccountID string) error
 	deleteFn               func(ctx context.Context, id string, actorAccountID string) error
 	rateFn                 func(ctx context.Context, r *domain.Rating) (float64, error)
+	listRatingsByProfileFn func(ctx context.Context, profileID string) ([]domain.Rating, error)
 	listSeasonsByContentFn func(ctx context.Context, contentID string) ([]domain.Season, error)
 	createEpisodeBatchFn   func(ctx context.Context, contentID string, batch domain.EpisodeBatch, actorAccountID string) ([]domain.Episode, error)
 	listAuditFn            func(ctx context.Context, limit int) ([]domain.AuditEntry, error)
@@ -58,6 +59,12 @@ func (m *mockContentRepo) Delete(ctx context.Context, id string, actor string) e
 }
 func (m *mockContentRepo) Rate(ctx context.Context, r *domain.Rating) (float64, error) {
 	return m.rateFn(ctx, r)
+}
+func (m *mockContentRepo) ListRatingsByProfile(ctx context.Context, profileID string) ([]domain.Rating, error) {
+	if m.listRatingsByProfileFn == nil {
+		return []domain.Rating{}, nil
+	}
+	return m.listRatingsByProfileFn(ctx, profileID)
 }
 func (m *mockContentRepo) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
 	return m.listSeasonsByContentFn(ctx, contentID)

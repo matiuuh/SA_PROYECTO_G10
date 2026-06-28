@@ -9,7 +9,8 @@ WORKDIR /app
 COPY services/divisas/package.json ./
 RUN pnpm install --ignore-scripts
 
-COPY services/divisas/ .
+COPY services/divisas/tsconfig.json ./
+COPY services/divisas/src/ ./src/
 COPY proto/ ./proto/
 
 RUN pnpm run build

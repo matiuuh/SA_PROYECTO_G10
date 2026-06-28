@@ -32,7 +32,7 @@ func (r *ContentRepository) List(ctx context.Context) ([]domain.Content, error) 
 		       url_portada, url_trailer,
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
-		WHERE fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE
+		WHERE fecha_lanzamiento IS NULL OR fecha_lanzamiento <= NOW()
 		ORDER BY titulo
 	`)
 	if err != nil {
@@ -65,7 +65,7 @@ func (r *ContentRepository) Search(ctx context.Context, query string) ([]domain.
 		       fecha_lanzamiento, porcentaje_recomendacion
 		FROM v_cartelera_contenido
 		WHERE titulo ILIKE $1
-		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= NOW())
 		ORDER BY titulo
 	`, "%"+query+"%")
 	if err != nil {
@@ -83,7 +83,7 @@ func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64
 		FROM v_cartelera_contenido v
 		JOIN contenido_generos cg ON cg.contenido_id = v.id
 		WHERE cg.genero_id = ANY($1)
-		  AND (v.fecha_lanzamiento IS NULL OR v.fecha_lanzamiento <= CURRENT_DATE)
+		  AND (v.fecha_lanzamiento IS NULL OR v.fecha_lanzamiento <= NOW())
 		ORDER BY v.titulo
 	`, genreIDs)
 	if err != nil {
@@ -96,7 +96,7 @@ func (r *ContentRepository) FilterByGenres(ctx context.Context, genreIDs []int64
 func (r *ContentRepository) GetDetail(ctx context.Context, id string) (*domain.ContentDetail, error) {
 	var detail domain.ContentDetail
 	var contentType string
-	var releaseDate pgtype.Date
+	var releaseDate pgtype.Timestamptz
 	var durationMinutes pgtype.Int4
 
 	err := r.db.QueryRow(ctx, `
@@ -308,6 +308,32 @@ func (r *ContentRepository) Rate(ctx context.Context, rating *domain.Rating) (fl
 		"SELECT fn_porcentaje_recomendacion($1)", rating.ContentID,
 	).Scan(&pct)
 	return pct, err
+}
+
+func (r *ContentRepository) ListRatingsByProfile(ctx context.Context, profileID string) ([]domain.Rating, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT contenido_id::text, perfil_id::text, reaccion::text
+		FROM calificaciones
+		WHERE perfil_id = $1
+		ORDER BY actualizado_en DESC
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ratings := make([]domain.Rating, 0)
+	for rows.Next() {
+		var rating domain.Rating
+		var reaction string
+		if err := rows.Scan(&rating.ContentID, &rating.ProfileID, &reaction); err != nil {
+			return nil, err
+		}
+		rating.Reaction = domain.ReactionType(reaction)
+		ratings = append(ratings, rating)
+	}
+
+	return ratings, rows.Err()
 }
 
 func (r *ContentRepository) ListSeasonsByContent(ctx context.Context, contentID string) ([]domain.Season, error) {
@@ -584,7 +610,7 @@ func (r *ContentRepository) ListPendingPublicationAlerts(ctx context.Context, li
 		FROM contenidos
 		WHERE eliminado_en IS NULL
 		  AND alerta_publicacion_enviada_en IS NULL
-		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= CURRENT_DATE)
+		  AND (fecha_lanzamiento IS NULL OR fecha_lanzamiento <= NOW())
 		ORDER BY fecha_lanzamiento NULLS FIRST, creado_en
 		LIMIT $1
 	`, limit)
@@ -690,7 +716,7 @@ func scanContentRows(rows pgx.Rows) ([]domain.Content, error) {
 	for rows.Next() {
 		var content domain.Content
 		var contentType string
-		var releaseDate pgtype.Date
+		var releaseDate pgtype.Timestamptz
 		var pct pgtype.Numeric
 
 		if err := rows.Scan(

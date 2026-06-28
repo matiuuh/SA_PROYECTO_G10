@@ -96,6 +96,7 @@ services:
       DATABASE_URL: postgres://postgres:${DB_PASSWORD}@${DB_VM3_HOST}:5434/quetzal_streaming?sslmode=disable
       GRPC_PORT: 5004
       HTTP_PORT: 8004
+      CATALOGO_API_URL: http://${VM1_HOST}:8003
       GCS_BUCKET: quetzal-tv-streaming
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
     volumes:

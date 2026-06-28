@@ -32,10 +32,12 @@ class PostgresProfileRepository:
                         color,
                         es_principal,
                         activo,
+                        pin_restrictivo,
+                        control_parental,
                         creado_en,
                         actualizado_en
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         profile.id,
@@ -44,6 +46,8 @@ class PostgresProfileRepository:
                         profile.color,
                         profile.es_principal,
                         profile.activo,
+                        profile.pin_restrictivo,
+                        profile.control_parental,
                         profile.creado_en,
                         profile.actualizado_en,
                     ),
@@ -55,7 +59,8 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo,
+                           pin_restrictivo, control_parental, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE cuenta_id = %s
                       AND eliminado_en IS NULL
@@ -72,7 +77,8 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo,
+                           pin_restrictivo, control_parental, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE id = %s
                       AND eliminado_en IS NULL
@@ -88,7 +94,8 @@ class PostgresProfileRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, cuenta_id, nombre, color, es_principal, activo, creado_en, actualizado_en
+                    SELECT id, cuenta_id, nombre, color, es_principal, activo,
+                           pin_restrictivo, control_parental, creado_en, actualizado_en
                     FROM usuarios.perfiles
                     WHERE cuenta_id = %s
                       AND lower(nombre) = lower(%s)
@@ -116,6 +123,66 @@ class PostgresProfileRepository:
 
         return int(row["total"])
 
+    def set_pin(self, profile_id: str, pin_hash: str | None) -> None:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE usuarios.perfiles
+                    SET pin_restrictivo = %s,
+                        actualizado_en = NOW()
+                    WHERE id = %s
+                      AND eliminado_en IS NULL
+                    """,
+                    (pin_hash, profile_id),
+                )
+            connection.commit()
+
+    def get_pin_hash(self, profile_id: str) -> str | None:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT pin_restrictivo
+                    FROM usuarios.perfiles
+                    WHERE id = %s
+                      AND eliminado_en IS NULL
+                    """,
+                    (profile_id,),
+                )
+                row = cursor.fetchone()
+        return str(row["pin_restrictivo"]) if row and row["pin_restrictivo"] else None
+
+    def set_control_parental(self, profile_id: str, nivel: str | None) -> None:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE usuarios.perfiles
+                    SET control_parental = %s,
+                        actualizado_en = NOW()
+                    WHERE id = %s
+                      AND eliminado_en IS NULL
+                    """,
+                    (nivel, profile_id),
+                )
+            connection.commit()
+
+    def get_control_parental(self, profile_id: str) -> str | None:
+        with self._database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT control_parental
+                    FROM usuarios.perfiles
+                    WHERE id = %s
+                      AND eliminado_en IS NULL
+                    """,
+                    (profile_id,),
+                )
+                row = cursor.fetchone()
+        return str(row["control_parental"]) if row and row["control_parental"] else None
+
     def update(self, profile: Profile) -> None:
         with self._database.connection() as connection:
             with connection.cursor() as cursor:
@@ -139,6 +206,8 @@ class PostgresProfileRepository:
                         color = %s,
                         es_principal = %s,
                         activo = %s,
+                        pin_restrictivo = %s,
+                        control_parental = %s,
                         actualizado_en = %s
                     WHERE id = %s
                       AND eliminado_en IS NULL
@@ -148,6 +217,8 @@ class PostgresProfileRepository:
                         profile.color,
                         profile.es_principal,
                         profile.activo,
+                        profile.pin_restrictivo,
+                        profile.control_parental,
                         profile.actualizado_en,
                         profile.id,
                     ),
@@ -207,7 +278,7 @@ class PostgresProfileRepository:
             connection.commit()
 
     @staticmethod
-    def _map_row(row: dict[str, str | bool | datetime]) -> Profile:
+    def _map_row(row: dict[str, str | bool | datetime | None]) -> Profile:
         return Profile(
             id=str(row["id"]),
             cuenta_id=str(row["cuenta_id"]),
@@ -215,6 +286,8 @@ class PostgresProfileRepository:
             color=str(row["color"]),
             es_principal=bool(row["es_principal"]),
             activo=bool(row["activo"]),
+            pin_restrictivo=str(row["pin_restrictivo"]) if row.get("pin_restrictivo") else None,
+            control_parental=str(row["control_parental"]) if row.get("control_parental") else None,
             creado_en=row["creado_en"],
             actualizado_en=row["actualizado_en"],
         )

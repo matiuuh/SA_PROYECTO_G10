@@ -59,6 +59,7 @@ class SubscriptionResponse(BaseModel):
 class SubscriptionStatusResponse(BaseModel):
     tiene_suscripcion: bool
     suscripcion: SubscriptionResponse | None
+    puede_descargar: bool
 
 
 class ActiveSubscriptionAccountsResponse(BaseModel):

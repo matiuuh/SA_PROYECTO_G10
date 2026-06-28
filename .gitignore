@@ -65,3 +65,6 @@ grpc_tmp.json
 
 # enunciado proyecto
 SA_PROYECTO2.md
+terraform/.terraform/
+terraform/*.tfvars
+terraform/.terraform.lock.hcl
