@@ -19,15 +19,22 @@ import {
   ThumbsDown,
   Share2,
   Lock,
+  Users,
+  Crown,
+  Download,
 } from 'lucide-react'
 import { ScrollReveal, Button } from '@/components/atoms'
 import type { ContentItem } from '@/components/molecules'
 import { MediaCard } from '@/components/molecules'
+import { PinModal } from '@/components/organisms'
 import { getActiveSession, getStoredActiveProfile, isAdminRole, syncStoredActiveProfile } from '@/lib/auth'
 import { dislikeCatalogContent, getAdminCatalogDetail, getCatalogDetail, getCatalogSeasons, likeCatalogContent, listCatalogContent } from '@/lib/catalogo-api'
 import { isInMyList, toggleMyListItem } from '@/lib/my-list'
+import { hasDownload, saveDownload } from '@/lib/offline-downloads'
 import { getEpisodeSignedUrl, getPlaybackProgress, getTrailerSignedUrl, updatePlaybackProgress } from '@/lib/streaming-api'
 import { getSubscriptionStatusByAccount } from '@/lib/suscripcion-api'
+import { createSala } from '@/lib/watchparty-api'
+import { getProfileRestrictions, verifyProfilePin } from '@/lib/usuario-api'
 import { listProfiles } from '@/lib/usuario-api'
 import type { CatalogContent, CatalogDetail, CatalogEpisode, CatalogSeason } from '@/types/catalog'
 import type { PlaybackProgress } from '@/types/streaming'
@@ -163,6 +170,8 @@ function parseRequestedStart(value: string | null): number {
   return Math.floor(parsed)
 }
 
+const PREMIUM_PLAN_ID = 'b0000000-0000-0000-0000-000000000003'
+
 export function MovieDetailPage() {
   const navigate = useNavigate()
   const { id = '' } = useParams()
@@ -175,6 +184,7 @@ export function MovieDetailPage() {
   const session = getActiveSession()
   const isAdmin = session ? isAdminRole(session.account.rol) : false
   const activeProfile = getStoredActiveProfile()
+  const activeProfileId = activeProfile?.id ?? ''
   const accountId = session?.account.id ?? ''
   const accessToken = session?.accessToken ?? ''
   const [playing, setPlaying] = useState(false)
@@ -183,6 +193,10 @@ export function MovieDetailPage() {
   const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null)
   const [isSubmittingReaction, setIsSubmittingReaction] = useState(false)
   const [hasSubscription, setHasSubscription] = useState(false)
+  const [subscriptionPlanId, setSubscriptionPlanId] = useState<string | null>(null)
+  const [showPremiumAlert, setShowPremiumAlert] = useState(false)
+  const [canDownload, setCanDownload] = useState(false)
+  const [isLoadingPlanAccess, setIsLoadingPlanAccess] = useState(false)
   const [detail, setDetail] = useState<CatalogDetail | null>(null)
   const [seasons, setSeasons] = useState<CatalogSeason[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
@@ -196,11 +210,16 @@ export function MovieDetailPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [playbackError, setPlaybackError] = useState('')
   const [shareFeedback, setShareFeedback] = useState('')
+  const [downloadFeedback, setDownloadFeedback] = useState('')
+  const [isSavingDownload, setIsSavingDownload] = useState(false)
+  const [isDownloaded, setIsDownloaded] = useState(false)
   const [playbackPositionSeconds, setPlaybackPositionSeconds] = useState(0)
   const [mediaDurationSeconds, setMediaDurationSeconds] = useState(0)
   const [isPlaybackPaused, setIsPlaybackPaused] = useState(false)
   const [showPlaybackControls, setShowPlaybackControls] = useState(true)
   const [playbackStartedAt, setPlaybackStartedAt] = useState<number | null>(null)
+  const [showPinModal, setShowPinModal] = useState(false)
+  const [pendingPlaybackAction, setPendingPlaybackAction] = useState<{ type: 'play' | 'resume' | 'watchparty' } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playbackContainerRef = useRef<HTMLDivElement | null>(null)
   const controlsHideTimeoutRef = useRef<number | null>(null)
@@ -226,22 +245,54 @@ export function MovieDetailPage() {
   useEffect(() => {
     async function loadSubscriptionStatus() {
       if (!accountId || !accessToken) return
-      const [status, profiles] = await Promise.all([
-        getSubscriptionStatusByAccount(accountId),
-        listProfiles(accessToken),
-      ])
-      setHasSubscription(status.tiene_suscripcion)
+      setIsLoadingPlanAccess(true)
+      setCanDownload(false)
 
-      if (status.tiene_suscripcion) {
-        const syncedProfile = syncStoredActiveProfile(profiles)
-        if (!syncedProfile) {
-          navigate('/profiles', { replace: true, state: { reason: activeProfile ? 'invalid-profile' : 'select-profile' } })
+      try {
+        const [status, profiles] = await Promise.all([
+          getSubscriptionStatusByAccount(accountId),
+          listProfiles(accessToken),
+        ])
+        setHasSubscription(status.tiene_suscripcion)
+        setSubscriptionPlanId(status.suscripcion?.plan_id ?? null)
+        setCanDownload(status.puede_descargar)
+
+        if (status.tiene_suscripcion) {
+          const syncedProfile = syncStoredActiveProfile(profiles)
+          if (!syncedProfile) {
+            navigate('/profiles', { replace: true, state: { reason: activeProfileId ? 'invalid-profile' : 'select-profile' } })
+          }
         }
+      } finally {
+        setIsLoadingPlanAccess(false)
       }
     }
 
     void loadSubscriptionStatus()
-  }, [accessToken, accountId, activeProfile, navigate])
+  }, [accessToken, accountId, activeProfileId, navigate])
+
+  useEffect(() => {
+    async function checkStoredDownload() {
+      if (!accountId || !activeProfileId || !detail) {
+        setIsDownloaded(false)
+        return
+      }
+      if (detail.tipo === 'serie' && !selectedEpisode?.id) {
+        setIsDownloaded(false)
+        return
+      }
+
+      try {
+        setIsDownloaded(
+          await hasDownload(accountId, activeProfileId, detail.id, selectedEpisode?.id),
+        )
+      } catch {
+        setIsDownloaded(false)
+      }
+    }
+
+    void checkStoredDownload()
+  }, [accountId, activeProfileId, detail, selectedEpisode?.id])
 
   useEffect(() => {
     async function loadSavedProgress() {
@@ -399,6 +450,104 @@ export function MovieDetailPage() {
     }, 3000)
   }
 
+  const RATING_HIERARCHY: Record<string, number> = { 'TP': 0, 'PG-13': 1, 'R': 2 }
+
+  function ratingRequiresPin(contentRating: string | null | undefined, profileControl: string | null | undefined): boolean {
+    if (!contentRating || !profileControl) return false
+    const contentLevel = RATING_HIERARCHY[contentRating]
+    const profileLevel = RATING_HIERARCHY[profileControl]
+    if (contentLevel == null || profileLevel == null) return false
+    return contentLevel > profileLevel
+  }
+
+  async function checkParentalRestriction(): Promise<boolean> {
+    const contentRating = detail?.clasificacion_edad
+    if (!contentRating) return false
+
+    const profile = getStoredActiveProfile()
+    if (!profile?.id || !accessToken) return false
+
+    try {
+      const restrictions = await getProfileRestrictions(accessToken, profile.id)
+      if (!restrictions.tiene_pin || !restrictions.control_parental) return false
+      return ratingRequiresPin(contentRating, restrictions.control_parental)
+    } catch {
+      return false
+    }
+  }
+
+  async function startPlayback() {
+    setResumeFromSeconds(0)
+    setPlaybackPositionSeconds(0)
+    setMediaDurationSeconds(0)
+    setIsPlaybackPaused(false)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }
+
+  async function startResume() {
+    const nextResumePoint = savedProgress?.progreso_segundos ?? 0
+    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
+    setIsPlaybackPaused(false)
+    setPlaybackStartedAt(Date.now())
+    setPlaybackError('')
+    setPlaying(true)
+  }
+
+  async function handlePlayWithPinCheck(action: 'play' | 'resume') {
+    if (isAdmin) {
+      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
+      return
+    }
+    if (!hasSubscription) {
+      setPlaybackError('Activa un plan para reproducir este contenido.')
+      return
+    }
+    if (detail?.tipo === 'serie' && !selectedEpisode) {
+      setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
+      return
+    }
+
+    const restricted = await checkParentalRestriction()
+    if (restricted) {
+      setPendingPlaybackAction(action === 'play' ? { type: 'play' } : { type: 'resume' })
+      setShowPinModal(true)
+      return
+    }
+
+    if (action === 'play') {
+      await startPlayback()
+    } else {
+      await startResume()
+    }
+  }
+
+  async function handlePinVerify(pin: string): Promise<boolean> {
+    const profile = getStoredActiveProfile()
+    if (!profile?.id) return false
+
+    const result = await verifyProfilePin(profile.id, { pin })
+    if (result.valido) {
+      setShowPinModal(false)
+      if (pendingPlaybackAction?.type === 'play') {
+        await startPlayback()
+      } else if (pendingPlaybackAction?.type === 'resume') {
+        await startResume()
+      } else if (pendingPlaybackAction?.type === 'watchparty') {
+        await handleWatchPartyAfterPin()
+      }
+      setPendingPlaybackAction(null)
+    }
+    return result.valido
+  }
+
+  function handlePinCancel() {
+    setShowPinModal(false)
+    setPendingPlaybackAction(null)
+  }
+
   const resetPlaybackSelectionState = () => {
     setSavedProgress(null)
     setResumeFromSeconds(0)
@@ -490,47 +639,61 @@ export function MovieDetailPage() {
   ])
 
   const handlePlay = () => {
-    if (isAdmin) {
-      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
-      return
-    }
-    if (!hasSubscription) {
-      setPlaybackError('Activa un plan para reproducir este contenido.')
-      return
-    }
-    if (detail?.tipo === 'serie' && !selectedEpisode) {
-      setPlaybackError('Selecciona un episodio para iniciar la reproduccion.')
-      return
-    }
-    setResumeFromSeconds(0)
-    setPlaybackPositionSeconds(0)
-    setMediaDurationSeconds(0)
-    setIsPlaybackPaused(false)
-    setPlaybackStartedAt(Date.now())
-    setPlaybackError('')
-    setPlaying(true)
+    void handlePlayWithPinCheck('play')
   }
 
   const handleResume = () => {
-    if (isAdmin) {
-      setPlaybackError('Los administradores no reproducen contenido desde la vista de usuario.')
-      return
-    }
+    void handlePlayWithPinCheck('resume')
+  }
+
+  const handleDownload = async () => {
+    setDownloadFeedback('')
+
     if (!hasSubscription) {
-      setPlaybackError('Activa un plan para reanudar este contenido.')
+      setDownloadFeedback('Activa un plan Premium para descargar contenido.')
       return
     }
-    if (detail?.tipo === 'serie' && !selectedEpisode) {
-      setPlaybackError('Selecciona un episodio para reanudar la reproduccion.')
+    if (isLoadingPlanAccess) {
+      setDownloadFeedback('Validando tu Plan Premium. Intenta de nuevo en un momento.')
       return
     }
-    const nextResumePoint = savedProgress?.progreso_segundos ?? 0
-    setResumeFromSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
-    setPlaybackPositionSeconds(nextResumePoint > 0 ? nextResumePoint : 0)
-    setIsPlaybackPaused(false)
-    setPlaybackStartedAt(Date.now())
-    setPlaybackError('')
-    setPlaying(true)
+    if (!canDownload) {
+      setDownloadFeedback('La descarga esta disponible unicamente para el Plan Premium.')
+      return
+    }
+    if (!detail || !activeProfileId || !accountId) {
+      setDownloadFeedback('No se pudo preparar la descarga para este perfil.')
+      return
+    }
+    if (detail.tipo === 'serie' && !selectedEpisode) {
+      setDownloadFeedback('Selecciona un episodio para descargar.')
+      return
+    }
+
+    setIsSavingDownload(true)
+    try {
+      await saveDownload({
+        accountId,
+        profileId: activeProfileId,
+        contentId: detail.id,
+        title: detail.titulo,
+        type: detail.tipo,
+        episodeId: selectedEpisode?.id,
+        episodeTitle: selectedEpisode?.titulo,
+        posterUrl: detail.url_portada,
+        downloadedAt: new Date().toISOString(),
+      })
+      setIsDownloaded(true)
+      setDownloadFeedback(
+        isDownloaded
+          ? 'La descarga simulada se actualizo correctamente.'
+          : 'Descarga simulada guardada localmente de forma cifrada.',
+      )
+    } catch {
+      setDownloadFeedback('No se pudo guardar la descarga local.')
+    } finally {
+      setIsSavingDownload(false)
+    }
   }
 
   const getCurrentVideoProgressSeconds = (): number | null => {
@@ -758,6 +921,48 @@ export function MovieDetailPage() {
       setShareFeedback('Enlace copiado.')
     } catch {
       setShareFeedback('No se pudo compartir el enlace.')
+    }
+  }
+
+  const handleWatchParty = async () => {
+    if (!detail || !activeProfile || !accountId) return
+    if (subscriptionPlanId !== PREMIUM_PLAN_ID) {
+      setShowPremiumAlert(true)
+      return
+    }
+    const restricted = await checkParentalRestriction()
+    if (restricted) {
+      setPendingPlaybackAction({ type: 'watchparty' })
+      setShowPinModal(true)
+      return
+    }
+    try {
+      const sala = await createSala({
+        perfil_id: activeProfile.id,
+        cuenta_id: accountId,
+        contenido_id: detail.id,
+        tipo_contenido: detail.tipo,
+        duracion_segundos: (detail.duracion_minutos ?? 0) * 60,
+      })
+      navigate(`/watch-party?codigo=${sala.codigoInvite}`)
+    } catch (err) {
+      setPlaybackError(err instanceof Error ? err.message : 'Error al crear sala')
+    }
+  }
+
+  const handleWatchPartyAfterPin = async () => {
+    if (!detail || !activeProfile || !accountId) return
+    try {
+      const sala = await createSala({
+        perfil_id: activeProfile.id,
+        cuenta_id: accountId,
+        contenido_id: detail.id,
+        tipo_contenido: detail.tipo,
+        duracion_segundos: (detail.duracion_minutos ?? 0) * 60,
+      })
+      navigate(`/watch-party?codigo=${sala.codigoInvite}`)
+    } catch (err) {
+      setPlaybackError(err instanceof Error ? err.message : 'Error al crear sala')
     }
   }
 
@@ -1010,7 +1215,15 @@ export function MovieDetailPage() {
                 {tag}
               </span>
             ))}
-            <span className="inline-flex items-center rounded-md border border-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white/60">
+            <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${
+              detail.clasificacion_edad === 'R'
+                ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                : detail.clasificacion_edad === 'PG-13'
+                  ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300'
+                  : detail.clasificacion_edad === 'TP'
+                    ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                    : 'border-white/20 text-white/60'
+            }`}>
               {detail.clasificacion_edad || 'Sin clasificacion'}
             </span>
           </div>
@@ -1127,6 +1340,32 @@ export function MovieDetailPage() {
             >
               <Share2 size={15} strokeWidth={1.75} />
             </button>
+
+            {hasSubscription && !isAdmin && (
+              <button
+                onClick={() => { void handleWatchParty() }}
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] transition-colors duration-200 hover:bg-white/[0.10] hover:text-white"
+                aria-label="Watch Party"
+              >
+                <Users size={15} strokeWidth={1.75} />
+              </button>
+            )}
+
+            {hasSubscription && !isAdmin && (
+              <button
+                onClick={() => { void handleDownload() }}
+                disabled={isSavingDownload}
+                className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
+                  canDownload
+                    ? 'border-white/[0.10] bg-white/[0.06] text-[var(--color-denim-400)] hover:bg-white/[0.10] hover:text-white'
+                    : 'border-white/[0.08] bg-white/[0.03] text-[var(--color-denim-600)]'
+                } ${isSavingDownload ? 'cursor-wait opacity-70' : ''}`}
+                aria-label={canDownload ? (isDownloaded ? 'Actualizar descarga' : 'Descargar contenido') : 'Descarga disponible solo para Plan Premium'}
+                title={isLoadingPlanAccess ? 'Validando plan' : canDownload ? (isDownloaded ? 'Contenido descargado' : 'Descargar contenido') : 'Solo Plan Premium'}
+              >
+                <Download size={15} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
           )}
 
@@ -1135,6 +1374,36 @@ export function MovieDetailPage() {
           ) : null}
           {!isAdminView && shareFeedback ? (
             <p className="text-sm text-[var(--color-denim-300)]">{shareFeedback}</p>
+          ) : null}
+          {!isAdminView && downloadFeedback ? (
+            <p className="text-sm text-[var(--color-denim-300)]">{downloadFeedback}</p>
+          ) : null}
+          {hasSubscription && !isAdminView ? (
+            <div className={`max-w-md rounded-lg border px-4 py-3 text-sm ${
+              canDownload
+                ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                  canDownload ? 'bg-emerald-400/15 text-emerald-200' : 'bg-amber-400/15 text-amber-200'
+                }`}>
+                  {canDownload ? <Download size={15} strokeWidth={1.8} /> : <Lock size={15} strokeWidth={1.8} />}
+                </div>
+                <div>
+                  <p className="font-semibold">
+                    Descargas solo para Plan Premium
+                  </p>
+                  <p className={`mt-1 text-xs ${canDownload ? 'text-emerald-100/75' : 'text-amber-100/75'}`}>
+                    {canDownload
+                      ? isDownloaded
+                        ? 'Este contenido ya esta guardado para el perfil activo.'
+                        : 'Tu plan permite guardar descargas simuladas de forma local y cifrada.'
+                      : 'Actualiza a Premium para habilitar la descarga simulada de peliculas y episodios.'}
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
@@ -1264,7 +1533,25 @@ export function MovieDetailPage() {
               ) : null}
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-denim-600)]">Clasificacion</span>
-                <span className="text-sm text-white">{detail.clasificacion_edad || 'Sin clasificacion'}</span>
+                <span className={`text-sm font-semibold ${
+                  detail.clasificacion_edad === 'R'
+                    ? 'text-red-400'
+                    : detail.clasificacion_edad === 'PG-13'
+                      ? 'text-yellow-400'
+                      : detail.clasificacion_edad === 'TP'
+                        ? 'text-green-400'
+                        : 'text-white'
+                }`}>
+                  {detail.clasificacion_edad
+                    ? detail.clasificacion_edad === 'TP'
+                      ? 'TP - Apta para todo publico'
+                      : detail.clasificacion_edad === 'PG-13'
+                        ? 'PG-13 - No recomendada para menores de 13'
+                        : detail.clasificacion_edad === 'R'
+                          ? 'R - Restringida, mayores de 18'
+                          : detail.clasificacion_edad
+                    : 'Sin clasificacion'}
+                </span>
               </div>
               {fallbackNotes ? (
                 <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
@@ -1342,6 +1629,70 @@ export function MovieDetailPage() {
               ))}
             </div>
           </ScrollReveal>
+        </div>
+      )}
+
+      {showPinModal && detail && (
+        <PinModal
+          titulo={detail.titulo}
+          clasificacion={detail.clasificacion_edad}
+          onVerify={handlePinVerify}
+          onCancel={handlePinCancel}
+        />
+      )}
+
+      {showPremiumAlert && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#0d1220] p-6 shadow-2xl shadow-black/60">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-warning)]/10">
+                  <Crown size={22} className="text-[var(--color-warning)]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Plan Premium requerido</h2>
+                  <p className="text-sm text-[var(--color-denim-400)]">
+                    Solo los usuarios con plan Premium pueden crear Watch Parties.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPremiumAlert(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] text-[var(--color-denim-400)] transition-colors hover:text-white"
+                aria-label="Cerrar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#080c14] p-4">
+              <p className="text-sm leading-relaxed text-[var(--color-denim-300)]">
+                Para crear una Watch Party necesitas tener el plan Premium activo.
+                Si alguien ya te ha invitado, puedes unirte usando su codigo de invitacion sin necesidad de actualizar.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPremiumAlert(false)}
+                className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-[var(--color-denim-300)] transition-colors hover:bg-white/[0.07]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPremiumAlert(false)
+                  navigate('/subscription/manage')
+                }}
+                className="flex-1 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--color-primary)]/20 transition-opacity hover:opacity-90"
+              >
+                Actualizar plan
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

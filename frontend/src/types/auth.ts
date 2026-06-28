@@ -28,6 +28,8 @@ export interface UserProfile {
   color: string
   es_principal: boolean
   activo: boolean
+  tiene_pin: boolean
+  control_parental: string | null
   creado_en: string
   actualizado_en: string
 }
@@ -64,4 +66,25 @@ export interface UpdateProfilePayload {
   nombre?: string
   color?: string
   es_principal?: boolean
+}
+
+export interface SetProfilePinPayload {
+  pin: string
+}
+
+export interface SetControlParentalPayload {
+  nivel: string | null
+}
+
+export interface VerifyProfilePinPayload {
+  pin: string
+}
+
+export interface VerifyProfilePinResponse {
+  valido: boolean
+}
+
+export interface ProfileRestrictionsResponse {
+  tiene_pin: boolean
+  control_parental: string | null
 }

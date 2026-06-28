@@ -8,6 +8,11 @@ import type {
 import { getActiveSession } from '@/lib/auth'
 
 const API_BASE_URL = import.meta.env.VITE_SUSCRIPCION_API_URL ?? 'http://localhost:8002'
+const PLANS_CACHE_TTL_MS = 5 * 60 * 1000
+const STATUS_CACHE_TTL_MS = 30 * 1000
+
+let plansCache: { expiresAt: number; data: SubscriptionPlan[] } | null = null
+const statusCache = new Map<string, { expiresAt: number; data: SubscriptionStatus }>()
 
 function authHeaders(): Record<string, string> {
   const session = getActiveSession()
@@ -30,13 +35,22 @@ async function parseError(response: Response): Promise<string> {
 }
 
 export async function listActivePlans(): Promise<SubscriptionPlan[]> {
+  if (plansCache && plansCache.expiresAt > Date.now()) {
+    return plansCache.data
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/v1/plans`)
 
   if (!response.ok) {
     throw new Error(await parseError(response))
   }
 
-  return (await response.json()) as SubscriptionPlan[]
+  const data = (await response.json()) as SubscriptionPlan[]
+  plansCache = {
+    expiresAt: Date.now() + PLANS_CACHE_TTL_MS,
+    data,
+  }
+  return data
 }
 
 export async function getPlanQuote(planId: string, pais: string): Promise<PlanQuote> {
@@ -69,6 +83,11 @@ export async function getSubscriptionByAccount(cuentaId: string): Promise<Subscr
 }
 
 export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<SubscriptionStatus> {
+  const cached = statusCache.get(cuentaId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/v1/subscriptions/account/${cuentaId}/status`, {
     headers: { ...authHeaders() },
   })
@@ -77,7 +96,12 @@ export async function getSubscriptionStatusByAccount(cuentaId: string): Promise<
     throw new Error(await parseError(response))
   }
 
-  return (await response.json()) as SubscriptionStatus
+  const data = (await response.json()) as SubscriptionStatus
+  statusCache.set(cuentaId, {
+    expiresAt: Date.now() + STATUS_CACHE_TTL_MS,
+    data,
+  })
+  return data
 }
 
 export async function createSubscription(
@@ -100,7 +124,9 @@ export async function createSubscription(
     throw new Error(await parseError(response))
   }
 
-  return (await response.json()) as SubscriptionRecord
+  const subscription = (await response.json()) as SubscriptionRecord
+  invalidateSubscriptionStatus(cuentaId)
+  return subscription
 }
 
 export async function changeSubscriptionPlan(
@@ -122,7 +148,9 @@ export async function changeSubscriptionPlan(
     throw new Error(await parseError(response))
   }
 
-  return (await response.json()) as SubscriptionRecord
+  const subscription = (await response.json()) as SubscriptionRecord
+  invalidateSubscriptionStatus(subscription.cuenta_id)
+  return subscription
 }
 
 export async function cancelSubscription(suscripcionId: string): Promise<SubscriptionMessage> {
@@ -135,5 +163,18 @@ export async function cancelSubscription(suscripcionId: string): Promise<Subscri
     throw new Error(await parseError(response))
   }
 
+  statusCache.clear()
   return (await response.json()) as SubscriptionMessage
+}
+
+export function invalidateSubscriptionStatus(cuentaId?: string): void {
+  if (cuentaId) {
+    statusCache.delete(cuentaId)
+    return
+  }
+  statusCache.clear()
+}
+
+export function invalidatePlansCache(): void {
+  plansCache = null
 }

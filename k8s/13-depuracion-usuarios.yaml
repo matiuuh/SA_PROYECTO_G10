@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: depuracion-usuarios
+  namespace: quetzaltv-prod
+spec:
+  # Consultar cada minuto; eliminar cuentas con 5 minutos de inactividad.
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: depurador
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: quetzaltv-config
+                      key: DB_HOST
+                - name: PGPORT
+                  value: "5437"
+                - name: PGDATABASE
+                  value: "quetzal_usuario"
+                - name: PGUSER
+                  value: "postgres"
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: quetzaltv-secrets
+                      key: DB_PASSWORD
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - |
+                  set -eu
+
+                  echo "Iniciando depuracion de cuentas inactivas..."
+
+                  psql -v ON_ERROR_STOP=1 <<'SQL'
+                  BEGIN;
+
+                  SELECT pg_advisory_xact_lock(hashtext('depuracion-usuarios'));
+
+                  CREATE TEMP TABLE cuentas_inactivas ON COMMIT DROP AS
+                  SELECT c.id
+                  FROM usuarios.cuentas AS c
+                  LEFT JOIN usuarios.sesiones AS s
+                    ON s.cuenta_id = c.id
+                  WHERE c.eliminado_en IS NULL
+                    AND c.rol <> 'administrador'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM usuarios.sesiones s_activa
+                      WHERE s_activa.cuenta_id = c.id
+                        AND s_activa.cerrada_en IS NULL
+                        AND s_activa.expira_en > NOW()
+                    )
+                  GROUP BY c.id, c.creado_en
+                  HAVING COALESCE(MAX(s.iniciada_en), c.creado_en)
+                    < NOW() - INTERVAL '5 minutes';
+
+                  UPDATE usuarios.sesiones
+                  SET cerrada_en = COALESCE(cerrada_en, NOW())
+                  WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas);
+
+                  UPDATE usuarios.perfiles
+                  SET activo = FALSE,
+                      eliminado_en = COALESCE(eliminado_en, NOW())
+                  WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas)
+                    AND eliminado_en IS NULL;
+
+                  UPDATE usuarios.cuentas
+                  SET eliminado_en = NOW()
+                  WHERE id IN (SELECT id FROM cuentas_inactivas);
+
+                  COMMIT;
+                  SQL
+
+                  echo "Depuracion finalizada."

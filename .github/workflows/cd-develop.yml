@@ -455,3 +455,22 @@ jobs:
 
             rm -f "${DEPLOY_ENV}"
             echo "✓ VM4 actualizada: ${AR_REGISTRY}/frontend:${IMAGE_TAG}"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 6. SMOKE TESTS — verifica rutas base después del despliegue
+  # ════════════════════════════════════════════════════════════════════════════
+
+  smoke-tests:
+    name: "Smoke Tests → develop (VM4)"
+    runs-on: ubuntu-latest
+    needs: [deploy-vm1, deploy-vm2, deploy-vm4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Esperar estabilización de los servicios
+        run: sleep 20
+
+      - name: Ejecutar smoke tests contra VM4
+        run: |
+          chmod +x scripts/smoke-test.sh
+          bash scripts/smoke-test.sh "http://${{ secrets.VM4_HOST }}"

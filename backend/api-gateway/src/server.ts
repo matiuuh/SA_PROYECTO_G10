@@ -13,6 +13,7 @@ const ROUTES: Array<{ prefix: string; target: keyof typeof config.services }> = 
   { prefix: '/api/cobros',         target: 'cobros' },
   { prefix: '/api/divisas',        target: 'divisas' },
   { prefix: '/api/notificaciones', target: 'notificaciones' },
+  { prefix: '/api/watchparty',     target: 'streaming' },
 ];
 
 function writeJson(res: http.ServerResponse, status: number, body: unknown): void {

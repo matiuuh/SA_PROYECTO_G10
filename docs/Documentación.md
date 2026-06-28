@@ -45,6 +45,9 @@ Integrantes:
 
 ### Diagramas Estructurales, Comportamentales y Persistencia
 - [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
+- [Despliegue de infraestructura](./Terraform/terraform.md)
+- [Configuración de infraestructura](./ansible/ansible.md)
+
 ## Introducción
 
 El presente documento corresponde al Proyecto del curso de Software Avanzado, cuyo objetivo es el diseño y desarrollo de **Quetzal TV**, una plataforma de streaming de video bajo demanda orientada a operar en múltiples países con soporte para diferentes divisas y pasarelas de pago locales.

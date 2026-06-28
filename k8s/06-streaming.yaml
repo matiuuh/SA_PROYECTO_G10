@@ -35,6 +35,16 @@ spec:
                 configMapKeyRef:
                   name: quetzaltv-config
                   key: GCS_BUCKET
+            - name: CATALOGO_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: quetzaltv-config
+                  key: CATALOGO_API_URL
+            - name: SUSCRIPCION_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: quetzaltv-config
+                  key: SUSCRIPCION_SERVICE_URL
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

@@ -1,0 +1,12 @@
+# .env — VM1 (usuario · suscripcion · catalogo)
+# Generado por Ansible. No editar manualmente.
+
+DB_VM3_HOST={{ vm3_internal_ip }}
+VM2_HOST={{ hostvars['vm2']['vm2_internal_ip'] | default(hostvars['vm2']['ansible_host']) }}
+VM4_HOST={{ hostvars['vm4']['vm4_internal_ip'] | default(hostvars['vm4']['ansible_host']) }}
+DB_PASSWORD={{ db_password }}
+JWT_SECRET={{ jwt_secret }}
+
+# El CI/CD sobreescribe estos dos en cada despliegue
+AR_REGISTRY=us-central1-docker.pkg.dev/sa-proyecto-g10-500320/quetzaltv
+IMAGE_TAG=latest

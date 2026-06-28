@@ -336,10 +336,11 @@ jobs:
           export AR_REGISTRY="${{ secrets.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/quetzaltv"
           export VERSION="${{ needs.build-and-push.outputs.version }}"
           export VM3_HOST="${{ secrets.VM3_HOST }}"
+          export VM3_INTERNAL_IP="${{ secrets.VM3_INTERNAL_IP }}"
           echo "AR_REGISTRY construido: ${AR_REGISTRY}"
           echo "VERSION: ${VERSION}"
           for f in k8s/*.yaml; do
-            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST}' < "$f" > "$f.rendered"
+            envsubst '${AR_REGISTRY} ${VERSION} ${VM3_HOST} ${VM3_INTERNAL_IP}' < "$f" > "$f.rendered"
             mv "$f.rendered" "$f"
           done
 
@@ -353,7 +354,8 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          VM3_HOST: ${{ secrets.VM3_HOST }}
+          # VM3_INTERNAL_IP: IP interna de VM3 (los pods de GKE están en la misma VPC)
+          VM3_INTERNAL_IP: ${{ secrets.VM3_INTERNAL_IP }}
         run: |
           kubectl create secret generic quetzaltv-secrets \
             --namespace=quetzaltv-prod \
@@ -362,11 +364,11 @@ jobs:
             --from-literal=EMAIL_USER="${EMAIL_USER}" \
             --from-literal=EMAIL_PASS="${EMAIL_PASS}" \
             --from-literal=EMAIL_FROM="${EMAIL_FROM}" \
-            --from-literal=DATABASE_URL_CATALOGO="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5433/quetzal_catalogo?sslmode=disable" \
-            --from-literal=DATABASE_URL_STREAMING="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5434/quetzal_streaming?sslmode=disable" \
-            --from-literal=DATABASE_URL_DIVISAS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5435/quetzal_divisas?sslmode=disable" \
-            --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5436/quetzal_cobros?sslmode=disable" \
-            --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_HOST}:5439/quetzal_notificaciones?sslmode=disable" \
+            --from-literal=DATABASE_URL_CATALOGO="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5433/quetzal_catalogo?sslmode=disable" \
+            --from-literal=DATABASE_URL_STREAMING="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5434/quetzal_streaming?sslmode=disable" \
+            --from-literal=DATABASE_URL_DIVISAS="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5435/quetzal_divisas?sslmode=disable" \
+            --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5436/quetzal_cobros?sslmode=disable" \
+            --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5439/quetzal_notificaciones?sslmode=disable" \
             --dry-run=client -o yaml | kubectl apply -f -
           echo "✓ Secret quetzaltv-secrets actualizado"
 
@@ -426,3 +428,55 @@ jobs:
           echo "║  Namespace: quetzaltv-prod                          ║"
           echo "╚══════════════════════════════════════════════════════╝"
           kubectl get pods -n quetzaltv-prod
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 5. SMOKE TESTS — verifica rutas base tras el despliegue en GKE
+  # ════════════════════════════════════════════════════════════════════════════
+
+  smoke-tests:
+    name: "Smoke Tests → GKE"
+    runs-on: ubuntu-latest
+    needs: deploy-gke
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar con GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Obtener credenciales del clúster GKE
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_ZONE }}
+
+      - name: Obtener IP del Ingress (espera hasta 5 min)
+        id: ingress
+        run: |
+          echo "Esperando IP del Ingress..."
+          for i in $(seq 1 30); do
+            IP=$(kubectl get ingress quetzaltv-ingress \
+              -n quetzaltv-prod \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            if [ -n "$IP" ]; then
+              echo "Ingress IP: ${IP}"
+              echo "ip=${IP}" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            echo "  Intento $i/30 — sin IP aún, reintentando en 10s..."
+            sleep 10
+          done
+          if [ -z "${IP:-}" ]; then
+            echo "::error::El Ingress no obtuvo IP en 5 minutos"
+            exit 1
+          fi
+
+      - name: Esperar estabilización de los pods
+        run: sleep 15
+
+      - name: Ejecutar smoke tests contra GKE Ingress
+        run: |
+          chmod +x scripts/smoke-test.sh
+          bash scripts/smoke-test.sh "http://${{ steps.ingress.outputs.ip }}"
