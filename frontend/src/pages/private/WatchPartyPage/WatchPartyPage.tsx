@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Volume2, VolumeX, Users, MessageCircle, Copy, Check,
-  ArrowLeft, Monitor, LogIn, Ticket,
+  ArrowLeft, Monitor, LogIn, Ticket, AlertTriangle,
 } from 'lucide-react'
 import { getStoredActiveProfile, getActiveSession } from '@/lib/auth'
 import { unirsePorCodigo, getWebSocketUrl } from '@/lib/watchparty-api'
@@ -150,7 +150,7 @@ function JoinModal({
 }
 
 export function WatchPartyPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const [modalOpen, setModalOpen] = useState(false)
   const [codigoInput, setCodigoInput] = useState('')
@@ -159,6 +159,7 @@ export function WatchPartyPage() {
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [error, setError] = useState('')
   const [copiado, setCopiado] = useState(false)
+  const [codigoCopiado, setCodigoCopiado] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
@@ -172,6 +173,35 @@ export function WatchPartyPage() {
   const chatRef = useRef<HTMLDivElement | null>(null)
   const lastSavedProgressRef = useRef(0)
   const savingProgressRef = useRef(false)
+  const salaRef = useRef(sala)
+  const syncStateRef = useRef(syncState)
+  const hostLeftRef = useRef(false)
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [hostLeftCountdown, setHostLeftCountdown] = useState<number | null>(null)
+
+  salaRef.current = sala
+  syncStateRef.current = syncState
+
+  useEffect(() => {
+    if (hostLeftCountdown === null) return
+
+    if (hostLeftCountdown <= 0) {
+      hostLeftRef.current = false
+      setSyncState('idle')
+      setSala(null)
+      setParticipantes([])
+      setVideoUrl(null)
+      setHostLeftCountdown(null)
+      navigate('/watch-party', { replace: true })
+      return
+    }
+
+    const timer = setInterval(() => {
+      setHostLeftCountdown((prev) => (prev !== null ? prev - 1 : null))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [hostLeftCountdown, navigate])
 
   const profile = getStoredActiveProfile()
   const session = getActiveSession()
@@ -179,7 +209,7 @@ export function WatchPartyPage() {
 
   useEffect(() => {
     const code = searchParams.get('codigo')
-    if (code) {
+    if (code && !sala && syncState === 'idle') {
       setCodigoInput(code)
       handleJoin(code)
     }
@@ -216,14 +246,27 @@ export function WatchPartyPage() {
         case 'joined':
           if (msg.sala) setSala(msg.sala)
           if (msg.participantes) setParticipantes(msg.participantes)
+          setMensajesChat((prev) => [...prev, { perfilId: 'system', perfilNombre: '', text: 'Te has unido a la sala' }])
           break
         case 'participant_joined':
-          if (msg.participant)
+          if (msg.participant) {
             setParticipantes((prev) => [...prev.filter((p) => p.perfilId !== msg.participant!.perfilId), msg.participant!])
+            setMensajesChat((prev) => [...prev, { perfilId: 'system', perfilNombre: '', text: `${msg.participant!.perfilNombre} se unio a la sala` }])
+            setTimeout(() => chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }), 50)
+          }
           break
         case 'participant_left':
-          if (msg.perfil_id)
+          if (msg.perfil_id) {
+            const nombre = participantes.find((p) => p.perfilId === msg.perfil_id)?.perfilNombre
+            if (msg.perfil_id === salaRef.current?.creadorPerfilId && !hostLeftRef.current) {
+              hostLeftRef.current = true
+              setHostLeftCountdown(15)
+            } else if (nombre && msg.perfil_id !== profile?.id) {
+              setMensajesChat((prev) => [...prev, { perfilId: 'system', perfilNombre: '', text: `${nombre} abandono la sala` }])
+              setTimeout(() => chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }), 50)
+            }
             setParticipantes((prev) => prev.filter((p) => p.perfilId !== msg.perfil_id))
+          }
           break
         case 'play':
           if (msg.triggered_by !== profile?.id) {
@@ -276,7 +319,7 @@ export function WatchPartyPage() {
     ws.onerror = () => setError('Error de conexion WebSocket')
 
     ws.onclose = () => {
-      if (syncState === 'joined') {
+      if (syncStateRef.current === 'joined' && !hostLeftRef.current) {
         setError('Conexion perdida. Reconnecting...')
         setTimeout(() => conectarWebSocket(room), 3000)
       }
@@ -287,11 +330,21 @@ export function WatchPartyPage() {
         ws.send(JSON.stringify({ type: 'ping' }))
     }, 25000)
 
-    return () => {
-      clearInterval(pingInterval)
-      ws.close()
-    }
+    pingIntervalRef.current = pingInterval
   }
+
+  useEffect(() => {
+    return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [])
 
   function enviarMensaje(msg: Record<string, unknown>) {
     if (wsRef.current?.readyState === WebSocket.OPEN)
@@ -389,6 +442,7 @@ export function WatchPartyPage() {
     unirsePorCodigo(codigo)
       .then((room) => {
         setSala(room)
+        setSearchParams({ codigo: room.codigoInvite }, { replace: true })
         conectarWebSocket(room)
       })
       .catch((err) => {
@@ -404,6 +458,13 @@ export function WatchPartyPage() {
     navigator.clipboard.writeText(link)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
+  }
+
+  function handleCopyCodigo() {
+    if (!sala) return
+    navigator.clipboard.writeText(sala.codigoInvite)
+    setCodigoCopiado(true)
+    setTimeout(() => setCodigoCopiado(false), 2000)
   }
 
   if (!profile || !session) {
@@ -426,6 +487,32 @@ export function WatchPartyPage() {
         joining={syncState === 'joining'}
         error={error}
       />
+
+      {hostLeftCountdown !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm animate-in zoom-in-95 duration-200 rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#1a1a2e] to-[#0f0f1a] p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/15 ring-1 ring-red-500/20">
+              <AlertTriangle size={32} className="text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold text-white">El anfitrion abandono la sala</h2>
+            <p className="mt-2 text-sm text-[var(--color-denim-400)] leading-relaxed">
+              La sala se cerrara automaticamente en
+            </p>
+            <div className="mt-4 flex items-center justify-center">
+              <span className="font-mono text-5xl font-bold tabular-nums text-red-400">
+                {hostLeftCountdown}
+              </span>
+              <span className="ml-1.5 text-sm text-[var(--color-denim-500)]">s</span>
+            </div>
+            <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-400 transition-all duration-1000 ease-linear"
+                style={{ width: `${(hostLeftCountdown / 15) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {!sala && syncState !== 'joining' && (
         <div className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden">
@@ -492,6 +579,13 @@ export function WatchPartyPage() {
                   <div className="flex items-center gap-1.5 rounded-xl bg-white/[0.04] px-3 py-1.5">
                     <span className="text-[10px] text-[var(--color-denim-500)]">CODIGO</span>
                     <span className="font-mono text-sm font-bold tracking-widest text-white">{sala.codigoInvite}</span>
+                    <button
+                      onClick={handleCopyCodigo}
+                      className="ml-1 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-[var(--color-denim-400)] transition-colors hover:bg-white/[0.06] hover:text-white"
+                      title="Copiar codigo"
+                    >
+                      {codigoCopiado ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                    </button>
                   </div>
                   <button
                     onClick={handleCopyLink}
@@ -657,7 +751,17 @@ export function WatchPartyPage() {
                     </div>
                   )}
                   {mensajesChat.map((m, i) => {
+                    const esSystem = m.perfilId === 'system'
                     const esMio = m.perfilId === profile?.id
+                    if (esSystem) {
+                      return (
+                        <div key={i} className="flex justify-center animate-in slide-in-from-bottom-2 duration-200">
+                          <div className="rounded-lg bg-white/[0.03] px-3 py-1.5">
+                            <p className="text-[11px] italic text-[var(--color-denim-500)] leading-relaxed">{m.text}</p>
+                          </div>
+                        </div>
+                      )
+                    }
                     return (
                       <div key={i} className={`flex ${esMio ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-200`}>
                         <div className={`max-w-[88%] ${esMio ? 'order-1' : 'order-1'}`}>
