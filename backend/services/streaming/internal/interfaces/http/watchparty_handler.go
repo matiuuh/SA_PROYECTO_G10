@@ -366,7 +366,7 @@ func (h *WatchPartyHandler) broadcastToRoom(salaID string, msg map[string]any, e
 func (h *WatchPartyHandler) checkPremium(cuentaID string) (bool, error) {
 	suscURL := os.Getenv("SUSCRIPCION_SERVICE_URL")
 	if suscURL == "" {
-		suscURL = "http://suscripcion:8002"
+		suscURL = "http://suscripcion-service:8002"
 	}
 	resp, err := http.Get(suscURL + "/api/v1/internal/subscriptions/account/" + cuentaID + "/status")
 	if err != nil {
@@ -389,5 +389,5 @@ func (h *WatchPartyHandler) checkPremium(cuentaID string) (bool, error) {
 	if data.Suscripcion == nil {
 		return false, nil
 	}
-	return data.Suscripcion.PlanID == "b0000000-0000-0000-0000-000000000003", nil
+	return data.Suscripcion.PlanID == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3", nil
 }
