@@ -56,6 +56,12 @@ spec:
                     ON s.cuenta_id = c.id
                   WHERE c.eliminado_en IS NULL
                     AND c.rol <> 'administrador'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM usuarios.sesiones s_activa
+                      WHERE s_activa.cuenta_id = c.id
+                        AND s_activa.cerrada_en IS NULL
+                        AND s_activa.expira_en > NOW()
+                    )
                   GROUP BY c.id, c.creado_en
                   HAVING COALESCE(MAX(s.iniciada_en), c.creado_en)
                     < NOW() - INTERVAL '5 minutes';
