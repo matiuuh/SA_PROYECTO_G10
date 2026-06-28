@@ -15,6 +15,10 @@ from app.infrastructure.currency_map import currency_from_country
 from app.infrastructure.divisas_client import DivisasClient
 
 
+def _normalize_plan_name(name: str) -> str:
+    return name.strip().casefold()
+
+
 class SubscriptionService:
     def __init__(
         self,
@@ -144,6 +148,18 @@ class SubscriptionService:
 
     def get_subscription_status_by_account(self, account_id: str) -> Subscription | None:
         return self._subscription_repository.get_active_by_account_id(account_id)
+
+    def can_download_by_account(self, account_id: str) -> bool:
+        subscription = self.get_subscription_status_by_account(account_id)
+        if subscription is None:
+            return False
+
+        plan = self._plan_repository.get_by_id(subscription.plan_id)
+        return bool(
+            plan is not None
+            and plan.activo
+            and _normalize_plan_name(plan.nombre) == "premium"
+        )
 
     def list_active_account_ids(self) -> list[str]:
         return self._subscription_repository.list_active_account_ids()

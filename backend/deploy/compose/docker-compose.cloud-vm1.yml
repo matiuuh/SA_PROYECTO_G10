@@ -52,6 +52,64 @@ services:
       - "8001:8001"
       - "5001:5001"
 
+  # Tarea programada de mantenimiento para develop.
+  # Se ejecuta en VM1 y se conecta al PostgreSQL de usuarios alojado en VM3.
+  depuracion-usuarios:
+    image: postgres:16-alpine
+    container_name: quetzal-depuracion-usuarios
+    restart: unless-stopped
+    environment:
+      PGHOST: ${DB_VM3_HOST}
+      PGPORT: 5437
+      PGDATABASE: quetzal_usuario
+      PGUSER: postgres
+      PGPASSWORD: ${DB_PASSWORD}
+      PGCONNECT_TIMEOUT: 10
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - |
+        set -eu
+
+        cat > /tmp/depuracion.sql <<'SQL'
+        BEGIN;
+
+        SELECT pg_advisory_xact_lock(hashtext('depuracion-usuarios'));
+
+        CREATE TEMP TABLE cuentas_inactivas ON COMMIT DROP AS
+        SELECT c.id
+        FROM usuarios.cuentas AS c
+        LEFT JOIN usuarios.sesiones AS s
+          ON s.cuenta_id = c.id
+        WHERE c.eliminado_en IS NULL
+          AND c.rol <> 'administrador'
+        GROUP BY c.id, c.creado_en
+        HAVING COALESCE(MAX(s.iniciada_en), c.creado_en)
+          < NOW() - INTERVAL '5 minutes';
+
+        UPDATE usuarios.sesiones
+        SET cerrada_en = COALESCE(cerrada_en, NOW())
+        WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas);
+
+        UPDATE usuarios.perfiles
+        SET activo = FALSE,
+            eliminado_en = COALESCE(eliminado_en, NOW())
+        WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas)
+          AND eliminado_en IS NULL;
+
+        UPDATE usuarios.cuentas
+        SET eliminado_en = NOW()
+        WHERE id IN (SELECT id FROM cuentas_inactivas);
+
+        COMMIT;
+        SQL
+
+        echo '* * * * * xargs -0 env psql -v ON_ERROR_STOP=1 -f /tmp/depuracion.sql < /proc/1/environ >> /proc/1/fd/1 2>> /proc/1/fd/2' \
+          > /etc/crontabs/root
+        echo "Depurador configurado: ejecucion cada minuto."
+        exec crond -f -l 2
+
   # ════════════════════════════════════════════════════════════════════════════
   # SUSCRIPCIÓN  (Python · FastAPI + gRPC)
   # ════════════════════════════════════════════════════════════════════════════

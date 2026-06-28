@@ -13,6 +13,7 @@ def build_internal_router(container: Container) -> APIRouter:
         return SubscriptionStatusResponse(
             tiene_suscripcion=subscription is not None,
             suscripcion=SubscriptionResponse(**subscription.__dict__) if subscription is not None else None,
+            puede_descargar=container.subscription_service.can_download_by_account(cuenta_id),
         )
 
     return router

@@ -46,13 +46,17 @@ def auth_header(account_id: str, role: str = "usuario") -> dict[str, str]:
     return {"Authorization": f"Bearer {make_token(account_id, role)}"}
 
 
-def create_plan(moneda_base: str = "GTQ", perfiles_maximos: int = 4) -> dict:
+def create_plan(
+    moneda_base: str = "GTQ",
+    perfiles_maximos: int = 4,
+    nombre: str | None = None,
+) -> dict:
     admin_id = str(uuid4())
     response = client.post(
         "/api/v1/plans",
         headers=auth_header(admin_id, role="administrador"),
         json={
-            "nombre": f"Plan {uuid4()}",
+            "nombre": nombre or f"Plan {uuid4()}",
             "descripcion": "Plan de prueba",
             "precio_base": "99.90",
             "moneda_base": moneda_base,
@@ -290,6 +294,7 @@ def test_get_subscription_status_by_account() -> None:
     assert with_response.status_code == 200
     assert with_response.json()["tiene_suscripcion"] is True
     assert with_response.json()["suscripcion"]["cuenta_id"] == account_id
+    assert with_response.json()["puede_descargar"] is False
 
     without_response = client.get(
         f"/api/v1/subscriptions/account/{without_subscription_id}/status",
@@ -298,6 +303,26 @@ def test_get_subscription_status_by_account() -> None:
     assert without_response.status_code == 200
     assert without_response.json()["tiene_suscripcion"] is False
     assert without_response.json()["suscripcion"] is None
+    assert without_response.json()["puede_descargar"] is False
+
+
+def test_subscription_status_allows_downloads_only_for_premium() -> None:
+    premium_plan = create_plan(nombre="  PREMIUM  ")
+    account_id = str(uuid4())
+
+    client.post(
+        "/api/v1/subscriptions",
+        headers=auth_header(account_id),
+        json={"cuenta_id": account_id, "plan_id": premium_plan["id"]},
+    )
+
+    response = client.get(
+        f"/api/v1/subscriptions/account/{account_id}/status",
+        headers=auth_header(account_id),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["puede_descargar"] is True
 
 
 def test_get_subscription_status_by_account_forbidden_for_other_user() -> None:
