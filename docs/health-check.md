@@ -265,7 +265,45 @@ kubectl get hpa -n quetzaltv-prod
 
 > Archivo: `k8s/13-depuracion-usuarios.yaml` · Namespace: `quetzaltv-prod`
 
-**Qué hace:** cada minuto Kubernetes crea un Pod efímero con imagen `postgres:16-alpine` que conecta directo a la BD `quetzal_usuario` en VM3 (puerto 5437) y hace soft-delete de toda cuenta con más de 5 minutos de inactividad. Usa `pg_advisory_xact_lock` para evitar ejecuciones solapadas y `concurrencyPolicy: Forbid` para que K8s no lance un segundo pod si el anterior aún no terminó.
+### ¿Qué es un CronJob en Kubernetes?
+
+Un **CronJob** es un objeto de Kubernetes que crea `Jobs` de forma automática según una expresión de tiempo (cron). Cada `Job` crea uno o más `Pods` que ejecutan una tarea y terminan. Es el equivalente al `crontab` de Linux, pero gestionado por el clúster.
+
+```
+CronJob (schedule: "* * * * *")
+    │
+    │  cada minuto crea un →
+    ▼
+  Job (depuracion-usuarios-<timestamp>)
+    │
+    │  que crea un →
+    ▼
+  Pod (efímero, termina al finalizar la tarea)
+```
+
+### Sintaxis del schedule
+
+```
+* * * * *
+│ │ │ │ └── día de la semana (0-7, 0 y 7 = domingo)
+│ │ │ └──── mes (1-12)
+│ │ └────── día del mes (1-31)
+│ └──────── hora (0-23)
+└────────── minuto (0-59)
+```
+
+| Expresión | Significado |
+|---|---|
+| `* * * * *` | cada minuto |
+| `0 * * * *` | cada hora (al minuto 0) |
+| `0 2 * * *` | cada día a las 2:00 AM |
+| `0 2 * * 0` | cada domingo a las 2:00 AM |
+
+El CronJob de depuración usa `* * * * *` para que en la demo/defensa se pueda observar su ejecución en tiempo real sin esperar.
+
+### ¿Qué hace este CronJob?
+
+Cada minuto conecta directo a la BD `quetzal_usuario` en VM3 (puerto 5437) y hace soft-delete de toda cuenta con más de 5 minutos de inactividad. Usa `pg_advisory_xact_lock` para evitar ejecuciones solapadas y `concurrencyPolicy: Forbid` para que K8s no lance un segundo pod si el anterior aún no terminó.
 
 ### Prerequisito — Apuntar el ConfigMap a la IP **interna** de VM3
 
@@ -409,6 +447,64 @@ Causas comunes de fallo:
 - VM3 no está corriendo o el contenedor PostgreSQL del puerto 5437 está caído
 - Firewall GCP bloqueando tráfico desde los nodos GKE hacia VM3 en el puerto 5437
 
+### Comandos para demostrar que el CronJob está en uso
+
+Estos comandos muestran evidencia concreta de que el CronJob se ejecutó y está activo.
+
+**1. Ver el CronJob registrado en el clúster:**
+```powershell
+kubectl get cronjob -n quetzaltv-prod
+```
+```
+NAME                  SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+depuracion-usuarios   * * * * *   False     0        45s             10m
+```
+
+**2. Ver los Jobs creados automáticamente por el CronJob:**
+```powershell
+kubectl get jobs -n quetzaltv-prod --sort-by=.metadata.creationTimestamp
+```
+```
+NAME                             COMPLETIONS   DURATION   AGE
+depuracion-usuarios-29136960     1/1           4s         8m
+depuracion-usuarios-29136961     1/1           3s         7m
+depuracion-usuarios-29136962     1/1           4s         6m
+```
+Cada fila es una ejecución automática. `1/1` significa que el Job completó exitosamente.
+
+**3. Ver los Pods que ejecutó el CronJob (incluye los terminados):**
+```powershell
+kubectl get pods -n quetzaltv-prod --selector=job-name=depuracion-usuarios-29136962
+```
+```
+NAME                                   READY   STATUS      RESTARTS   AGE
+depuracion-usuarios-29136962-xxxxx     0/1     Completed   0          6m
+```
+`STATUS: Completed` confirma que el Pod terminó exitosamente y no está crasheando.
+
+**4. Ver los logs de una ejecución automática específica:**
+```powershell
+kubectl logs -n quetzaltv-prod --selector=job-name=depuracion-usuarios-29136962
+```
+
+**5. Ver el detalle completo del CronJob (historial, configuración, eventos):**
+```powershell
+kubectl describe cronjob depuracion-usuarios -n quetzaltv-prod
+```
+Muestra: schedule, último disparo, Jobs activos, Jobs exitosos/fallidos, y el historial de eventos del clúster.
+
+**6. Confirmar que el YAML está aplicado correctamente:**
+```powershell
+kubectl get cronjob depuracion-usuarios -n quetzaltv-prod -o yaml
+```
+Devuelve la especificación completa tal como está almacenada en etcd.
+
+**7. Ver eventos del CronJob en tiempo real (útil en defensa):**
+```powershell
+kubectl get events -n quetzaltv-prod --field-selector reason=SuccessfulCreate --sort-by=.lastTimestamp
+```
+Muestra cada vez que el CronJob creó un Job nuevo, con timestamp.
+
 ---
 
 ## 4b. CronJob — Depuración en entorno Develop (Docker Compose · VM1)
@@ -529,6 +625,63 @@ docker compose \
   --env-file backend/deploy/compose/.env \
   stop depuracion-usuarios
 ```
+
+### Comandos para demostrar que el crond está en uso (develop)
+
+**1. Confirmar que el contenedor está corriendo:**
+```bash
+docker ps --filter name=quetzal-depuracion-usuarios --format "table {{.Names}}\t{{.Status}}\t{{.RunningFor}}"
+```
+```
+NAMES                          STATUS         RUNNING FOR
+quetzal-depuracion-usuarios    Up 12 minutes  12 minutes
+```
+
+**2. Confirmar que crond está activo dentro del contenedor:**
+```bash
+docker exec quetzal-depuracion-usuarios ps aux
+```
+```
+PID   USER     COMMAND
+    1 root     crond -f -l 2
+   ...
+```
+PID 1 es `crond`, lo que confirma que es el proceso principal del contenedor.
+
+**3. Ver el script de ejecución generado al arrancar:**
+```bash
+docker exec quetzal-depuracion-usuarios cat /tmp/run.sh
+```
+```sh
+#!/bin/sh
+export PGHOST=10.0.0.4
+export PGPORT=5437
+export PGDATABASE=quetzal_usuario
+export PGUSER=postgres
+export PGPASSWORD=...
+export PGCONNECT_TIMEOUT=10
+psql -v ON_ERROR_STOP=1 -f /tmp/depuracion.sql
+```
+
+**4. Ver el crontab activo:**
+```bash
+docker exec quetzal-depuracion-usuarios cat /etc/crontabs/root
+```
+```
+* * * * * /tmp/run.sh >> /proc/1/fd/1 2>> /proc/1/fd/2
+```
+
+**5. Ver las últimas ejecuciones en los logs:**
+```bash
+docker logs --tail 50 quetzal-depuracion-usuarios
+```
+Cada bloque `BEGIN ... COMMIT` corresponde a una ejecución del cron. Si hay múltiples bloques, confirma que el cron ha corrido varias veces.
+
+**6. Contar cuántas veces ha corrido:**
+```bash
+docker logs quetzal-depuracion-usuarios 2>&1 | grep -c "COMMIT"
+```
+Devuelve el número de ejecuciones completadas desde que el contenedor arrancó.
 
 ### Causas comunes de fallo en develop
 
