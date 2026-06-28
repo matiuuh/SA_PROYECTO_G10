@@ -1,5 +1,8 @@
 from datetime import datetime
 
+from psycopg.errors import UniqueViolation
+
+from app.domain.errors import ConflictError
 from app.domain.models import Account
 from app.infrastructure.database import Database
 
@@ -9,34 +12,37 @@ class PostgresAccountRepository:
         self._database = database
 
     def create(self, account: Account) -> None:
-        with self._database.connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO usuarios.cuentas (
-                        id,
-                        nombre,
-                        correo,
-                        contrasena_hash,
-                        pais,
-                        rol,
-                        creado_en,
-                        actualizado_en
+        try:
+            with self._database.connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO usuarios.cuentas (
+                            id,
+                            nombre,
+                            correo,
+                            contrasena_hash,
+                            pais,
+                            rol,
+                            creado_en,
+                            actualizado_en
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            account.id,
+                            account.nombre,
+                            account.correo,
+                            account.contrasena_hash,
+                            account.pais,
+                            account.rol,
+                            account.creado_en,
+                            account.creado_en,
+                        ),
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        account.id,
-                        account.nombre,
-                        account.correo,
-                        account.contrasena_hash,
-                        account.pais,
-                        account.rol,
-                        account.creado_en,
-                        account.creado_en,
-                    ),
-                )
-            connection.commit()
+                connection.commit()
+        except UniqueViolation:
+            raise ConflictError("Ya existe una cuenta con ese correo.")
 
     def get_by_email(self, email: str) -> Account | None:
         with self._database.connection() as connection:
