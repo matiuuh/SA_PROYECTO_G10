@@ -1,3 +1,8 @@
+# Credenciales GCP — nunca subir al repo
+terraform/key.json
+terraform/key-storage.json
+terraform/*.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

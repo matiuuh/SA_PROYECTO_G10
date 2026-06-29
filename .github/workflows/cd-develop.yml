@@ -234,7 +234,7 @@ jobs:
             DATE=$(date +%Y%m%d_%H%M%S)
 
             # Autenticar gcloud con la cuenta de servicio
-            echo "${GCP_SA_KEY}" > /tmp/sa-key.json
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' > /tmp/sa-key.json
             gcloud auth activate-service-account --key-file=/tmp/sa-key.json --quiet
             rm /tmp/sa-key.json
 
@@ -309,7 +309,7 @@ jobs:
             AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
             # Autenticar Docker con Artifact Registry
-            echo "${GCP_SA_KEY}" | docker login \
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' | docker login \
               -u _json_key --password-stdin \
               "${AR_REGION}-docker.pkg.dev"
 
@@ -323,7 +323,7 @@ jobs:
 
             # Key de quetzal-tv-storage para que catalogo-service firme URLs V4 de GCS
             mkdir -p secrets
-            echo "${GCS_SA_KEY}" > secrets/gcs-key.json
+            printf '%s' "${GCS_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' > secrets/gcs-key.json
             chmod 600 secrets/gcs-key.json
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm1.yml \
@@ -374,7 +374,7 @@ jobs:
 
             AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
-            echo "${GCP_SA_KEY}" | docker login \
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' | docker login \
               -u _json_key --password-stdin \
               "${AR_REGION}-docker.pkg.dev"
 
@@ -387,7 +387,7 @@ jobs:
 
             # Key de quetzal-tv-storage para que streaming-service firme URLs V4 de GCS
             mkdir -p secrets
-            echo "${GCS_SA_KEY}" > secrets/gcs-key.json
+            printf '%s' "${GCS_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' > secrets/gcs-key.json
             chmod 600 secrets/gcs-key.json
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm2.yml \
@@ -437,7 +437,7 @@ jobs:
 
             AR_REGISTRY="${AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/quetzaltv"
 
-            echo "${GCP_SA_KEY}" | docker login \
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' | docker login \
               -u _json_key --password-stdin \
               "${AR_REGION}-docker.pkg.dev"
 
