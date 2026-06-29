@@ -3,7 +3,7 @@
 ## Core del negocio
 | Representación | Actor | Descripción |
 |----|-------------|-------------|
-|![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles, gestionar su suscripción, explorar el catálogo, reproducir contenido y calificarlo. |
+|![Cliente](./img/actor.png)  | **Usuario** | Persona registrada en la plataforma que puede iniciar sesión, administrar perfiles y su control parental, gestionar su suscripción, explorar el catálogo y sus recomendaciones, reproducir o descargar contenido y participar en Watch Parties. |
 |![Administrador](./img/actor.png)  | **Administrador** | Usuario con permisos especiales para gestionar el contenido de la plataforma, permitiendo registrar, modificar, eliminar películas o series y consultar la auditoría del catálogo. |
 |![Proveedor de Divisas](./img/actor.png)  | **Proveedor de Divisas** | Servicio externo que suministra los tipos de cambio utilizados por la plataforma para mostrar precios en la moneda local del usuario. |
 |![Proveedor de Correo SMTP](./img/actor.png)  | **Proveedor de Correo SMTP** | Servicio externo encargado de entregar los correos de confirmación de registro, recibos de compra y alertas de nuevo contenido. |
@@ -17,15 +17,15 @@
 
 ![Primera Descomposicion](./img/CDU_PRIMERADESCOMPOSICION.png)
 
-**CDU001**: **Gestión de Cuenta y Perfiles**: Agrupa las operaciones de registro, autenticación y administración de perfiles asociadas a una cuenta dentro de la plataforma.
+**CDU001**: **Gestión de Cuenta y Perfiles**: Agrupa las operaciones de registro, autenticación, administración de perfiles y configuración de control parental asociadas a una cuenta dentro de la plataforma.
 
 **CDU002**: **Gestión de Suscripción y Pago**: Permite al usuario consultar planes, visualizar precios en moneda local y administrar su suscripción mediante el procesamiento de pagos.
 
-**CDU003**: **Exploración de Catálogo de Contenido**: Permite al usuario y al administrador explorar el catálogo de contenido disponible en la plataforma y consultar la información detallada de películas y series.
+**CDU003**: **Exploración de Catálogo de Contenido**: Permite al usuario explorar el catálogo, consultar la información detallada de películas y series y recibir recomendaciones personalizadas para su perfil.
 
 **CDU004**: **Calificación de Contenido**: Permite al usuario emitir su valoración sobre una película o serie mediante like o dislike y consultar la recomendación global generada por la comunidad.
 
-**CDU005**: **Reproducción e Historial**: Permite al usuario reproducir contenido, reanudarlo desde el punto en que lo dejó y consultar el historial reciente de su perfil activo.
+**CDU005**: **Reproducción e Historial**: Permite al usuario reproducir contenido, reanudarlo, consultar el historial del perfil activo, crear o ingresar a Watch Parties y guardar descargas simuladas cuando su plan lo permite.
 
 **CDU006**: **Administración de Contenido**: Permite al administrador gestionar el catálogo de la plataforma mediante operaciones de registro, modificación y eliminación de películas o series.
 
@@ -40,12 +40,13 @@
 - **CDU-001.1**: Registro de Cuenta
 - **CDU-001.2**: Envío de Notificación de Registro
 - **CDU-001.3**: Inicio de sesión
-- **CDU-001.4**: Cierre de sesión
-- **CDU-001.5**: Actualización de Credenciales de Acceso
-- **CDU-001.6**: Selección de Perfil
-- **CDU-001.7**: Creación de Perfil
-- **CDU-001.8**: Modificación de Perfil
-- **CDU-001.9**: Eliminación de Perfil
+- **CDU-001.5**: Cierre de sesión
+- **CDU-001.6**: Actualización de Credenciales de Acceso
+- **CDU-001.7**: Selección de Perfil
+- **CDU-001.8**: Creación de Perfil
+- **CDU-001.9**: Modificación de Perfil
+- **CDU-001.10**: Eliminación de Perfil
+- **CDU-001.11**: Configuración de Control Parental
 
 #### CDU-001.1 Registro de Cuenta
 
@@ -95,12 +96,12 @@
 | Reglas de negocio | Solo cuentas registradas pueden iniciar sesión con correo y contraseña.<br>La sesión debe quedar asociada a una cuenta válida. |
 | Reglas de calidad | Las credenciales no deben mostrarse en texto plano.<br>El sistema debe informar errores sin exponer detalles sensibles. |
 
-#### CDU-001.4 Cierre de sesión
+#### CDU-001.5 Cierre de sesión
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Cierre de sesión |
-| Código | CDU-001.4 |
+| Código | CDU-001.5 |
 | Actores | Usuario, Administrador |
 | Descripción | Permite al usuario o administrador cerrar su sesión activa para finalizar de forma segura el acceso a la plataforma desde el dispositivo actual. |
 | Precondiciones | El usuario o administrador debe tener una sesión activa. |
@@ -111,12 +112,12 @@
 | Reglas de negocio | El cierre de sesión debe invalidar el token activo del usuario.<br>La salida debe aplicarse sobre la sesión actual. |
 | Reglas de calidad | El cierre de sesión debe ser inmediato y visible para el usuario.<br>El token no debe permanecer activo en el cliente. |
 
-#### CDU-001.5 Actualización de Credenciales de Acceso
+#### CDU-001.6 Actualización de Credenciales de Acceso
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Actualización de Credenciales de Acceso |
-| Código | CDU-001.5 |
+| Código | CDU-001.6 |
 | Actores | Usuario |
 | Descripción | Permite al usuario actualizar la contraseña asociada a su cuenta desde la configuración para mantener segura su información de acceso. |
 | Precondiciones | El usuario debe haber iniciado sesión. |
@@ -127,12 +128,12 @@
 | Reglas de negocio | La contraseña debe cumplir la política de seguridad definida por la plataforma.<br>La nueva contraseña debe ser diferente de la contraseña actual. |
 | Reglas de calidad | La actualización debe requerir validaciones claras para el usuario.<br>La información sensible no debe exponerse en pantalla ni en registros. |
 
-#### CDU-001.6 Selección de Perfil
+#### CDU-001.7 Selección de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Selección de Perfil |
-| Código | CDU-001.6 |
+| Código | CDU-001.7 |
 | Actores | Usuario |
 | Descripción | Permite al usuario elegir uno de los perfiles asociados a su cuenta para navegar con preferencias, historial y valoraciónes aisladas. |
 | Precondiciones | El usuario debe haber iniciado sesión y contar con al menos un perfil asociado a su cuenta con su plan de pago. |
@@ -143,12 +144,12 @@
 | Reglas de negocio | Toda cuenta debe contar con al menos un perfil creado automáticamente al momento del registro.<br>Un usuario solo puede seleccionar perfiles de su propia cuenta.<br>Cada perfil debe mantener su información aislada. |
 | Reglas de calidad | La selección debe mostrar claramente cuál perfil quedo activo.<br>El cambio de perfil no debe mezclar historiales ni preferencias. |
 
-#### CDU-001.7 Creación de Perfil
+#### CDU-001.8 Creación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Creación de Perfil |
-| Código | CDU-001.7 |
+| Código | CDU-001.8 |
 | Actores | Usuario |
 | Descripción | Permite al usuario crear perfiles adicionales dentro de su cuenta para separar preferencias, historial de reproducción y calificaciónes. |
 | Precondiciones | El usuario debe haber iniciado sesión, haber adquirido un plan y no haber alcanzado el limite de perfiles permitidos. |
@@ -159,12 +160,12 @@
 | Reglas de negocio | Una cuenta puede tener como máximo cinco perfiles, pero depende del plan escogido.<br>Cada perfil debe pertenecer a una única cuenta. |
 | Reglas de calidad | La creación debe completarse con validaciones simples y claras.<br>La respuesta del sistema debe indicar el resultado de la operación. |
 
-#### CDU-001.8 Modificación de Perfil
+#### CDU-001.9 Modificación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Modificación de Perfil |
-| Código | CDU-001.8 |
+| Código | CDU-001.9 |
 | Actores | Usuario |
 | Descripción | Permite al usuario modificar la información visible de uno de sus perfiles para actualizar su identificación dentro de la cuenta. |
 | Precondiciones | El usuario debe haber iniciado sesión, tener un plan de pago y el perfil a modificar debe pertenecer a su cuenta. |
@@ -175,12 +176,12 @@
 | Reglas de negocio | Solo pueden modificarse perfiles pertenecientes a la cuenta autenticada.<br>La modificación no debe afectar el historial ni las calificaciónes existentes. |
 | Reglas de calidad | La actualización debe reflejarse inmediatamente en la interfaz.<br>Los cambios deben conservar la integridad de la información del perfil. |
 
-#### CDU-001.9 Eliminación de Perfil
+#### CDU-001.10 Eliminación de Perfil
 
 | Campo | Especificación |
 |----|----|
 | Nombre | Eliminación de Perfil |
-| Código | CDU-001.9 |
+| Código | CDU-001.10 |
 | Actores | Usuario |
 | Descripción | Permite al usuario eliminar perfiles adicionales de su cuenta cuando ya no desea conservar su historial y preferencias asociadas. |
 | Precondiciones | El usuario debe haber iniciado sesión, tener un plan de pago y el perfil debe pertenecer a su cuenta. |
@@ -190,6 +191,22 @@
 | Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible eliminar el perfil. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | Una cuenta debe conservar al menos un perfil activo.<br>Solo se pueden eliminar perfiles pertenecientes a la cuenta autenticada.<br>El perfil principal creado automáticamente con la cuenta no puede eliminarse. |
 | Reglas de calidad | La confirmación debe prevenir eliminaciónes accidentales.<br>El sistema debe notificar claramente si la eliminación fue exitosa o rechazada. |
+
+#### CDU-001.11 Configuración de Control Parental
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Configuración de Control Parental |
+| Código | CDU-001.11 |
+| Actores | Usuario |
+| Descripción | Permite al usuario configurar o retirar un PIN restrictivo y definir la clasificación máxima que uno de sus perfiles puede reproducir sin solicitar dicho PIN. |
+| Precondiciones | El usuario debe haber iniciado sesión y el perfil que desea configurar debe pertenecer a su cuenta. La configuración se realiza al editar un perfil existente. |
+| Postcondiciones | El PIN queda almacenado de forma protegida y el nivel de control parental queda asociado al perfil; o ambos quedan desactivados cuando el usuario retira el PIN. |
+| Flujo principal | 1. El usuario ingresa a la administración de perfiles.<br>2. El usuario selecciona un perfil y abre su edición.<br>3. El usuario activa el PIN restrictivo.<br>4. El usuario ingresa un PIN numérico de cuatro dígitos.<br>5. El usuario selecciona la clasificación máxima permitida sin PIN: TP, PG-13 o R.<br>6. El usuario guarda los cambios.<br>7. El sistema valida y almacena el PIN cifrado mediante hash.<br>8. El sistema asocia el nivel seleccionado al perfil y confirma su actualización. |
+| Flujos alternos | FA1. El usuario desactiva el PIN restrictivo.<br>FA1.1 El sistema limpia el PIN y el nivel de control parental del perfil.<br>FA2. El contenido seleccionado para reproducir supera el nivel configurado.<br>FA2.1 El sistema solicita el PIN antes de reproducir, reanudar o crear una Watch Party.<br>FA3. El usuario cancela la solicitud del PIN durante la reproducción.<br>FA3.1 El sistema no ejecuta la acción protegida. |
+| Flujos de excepción | FE1. El PIN no contiene exactamente cuatro dígitos numéricos.<br>FE1.1 El sistema rechaza la configuración e informa la validación requerida.<br>FE2. El perfil no existe o no pertenece a la cuenta autenticada.<br>FE2.1 El sistema informa que el perfil no fue encontrado.<br>FE3. La sesión expiró o falla la persistencia de la configuración.<br>FE3.1 El sistema no completa la operación y muestra el error correspondiente. |
+| Reglas de negocio | El PIN debe contener exactamente cuatro dígitos y se almacena mediante hash, no en texto plano.<br>Los únicos niveles admitidos son TP, PG-13 y R.<br>El PIN se solicita únicamente cuando el contenido tiene una clasificación superior al nivel del perfil y el perfil conserva tanto PIN como nivel configurado.<br>La configuración solo puede modificarse desde la cuenta propietaria del perfil. |
+| Reglas de calidad | El campo de PIN debe ocultar su valor y aceptar únicamente caracteres numéricos.<br>La interfaz debe explicar qué contenidos requerirán PIN según el nivel seleccionado.<br>La configuración actualizada debe reflejarse en el perfil activo sin mezclar restricciones entre perfiles. |
 
 ### Expandidos de CDU002: Gestión de Suscripción y Pago
 
@@ -323,6 +340,7 @@
 - **CDU-003.2**: Búsqueda de Contenido
 - **CDU-003.3**: Filtrado de Catálogo de Contenido
 - **CDU-003.4**: Consulta de Detalle de Contenido
+- **CDU-003.5**: Mostrar sección "Recomendados para ti"
 
 #### CDU-003.1 Visualización de Catálogo de Contenido
 
@@ -388,6 +406,22 @@
 | Reglas de negocio | La información detallada debe corresponder al contenido seleccionado.<br>Solo debe mostrarse información de contenido disponible en el catálogo. |
 | Reglas de calidad | La ficha técnica debe presentarse de forma organizada y legible.<br>La carga del detalle no debe romper la navegación del usuario. |
 
+#### CDU-003.5 Mostrar sección "Recomendados para ti"
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Mostrar sección "Recomendados para ti" |
+| Código | CDU-003.5 |
+| Actores | Usuario |
+| Descripción | Permite al usuario visualizar en el panel una fila de contenido recomendada específicamente para el perfil activo a partir de su historial, sus calificaciones y los géneros del catálogo. |
+| Precondiciones | El usuario debe haber iniciado sesión, tener una suscripción activa y un perfil activo válido. |
+| Postcondiciones | La sección muestra hasta diez contenidos ordenados por afinidad para el perfil; o se omite cuando no hay resultados o no se pueden obtener recomendaciones. |
+| Flujo principal | 1. El usuario ingresa al panel con un perfil activo.<br>2. El sistema solicita hasta diez recomendaciones para el identificador del perfil.<br>3. El servicio de Streaming consulta los últimos 25 registros del historial, las calificaciones del perfil y el catálogo disponible.<br>4. El sistema calcula la afinidad por géneros, considerando la recencia, el avance, la finalización y las reacciones like o dislike.<br>5. El sistema excluye el contenido ya reproducido y ordena los candidatos por puntaje; en caso de empate, utiliza el porcentaje de recomendación global.<br>6. El panel muestra los resultados en la fila "Recomendados para ti". |
+| Flujos alternos | FA1. El perfil no posee historial ni calificaciones.<br>FA1.1 El sistema aplica un arranque en frío y ordena el catálogo no visto por su recomendación global, indicando que es popular en el catálogo.<br>FA2. El usuario filtra el panel por películas o series.<br>FA2.1 La sección conserva únicamente recomendaciones del tipo seleccionado.<br>FA3. La lista resultante está vacía.<br>FA3.1 El panel omite la fila "Recomendados para ti". |
+| Flujos de excepción | FE1. No se puede consultar el historial, las calificaciones o el catálogo.<br>FE1.1 El servicio informa que no pudo generar las recomendaciones.<br>FE2. El frontend no puede obtener la respuesta del servicio de Streaming.<br>FE2.1 El panel continúa mostrando las demás secciones y omite las recomendaciones personalizadas. |
+| Reglas de negocio | Las recomendaciones se calculan por perfil y no se comparten entre perfiles de una cuenta.<br>El contenido ya reproducido no vuelve a recomendarse.<br>Un like incrementa la afinidad por los géneros relacionados y un dislike la reduce.<br>La popularidad global participa en el puntaje de todos los candidatos.<br>La consulta del panel solicita un máximo de diez recomendaciones. |
+| Reglas de calidad | Un fallo del recomendador no debe impedir la carga del resto del catálogo.<br>Los resultados deben conservar el formato visual de las demás filas del panel.<br>El cálculo debe producir un orden estable y explicable por afinidad o popularidad. |
+
 ### Expandidos de CDU004: Calificación de Contenido
 
 ![CDU004](./img/CDU_CDU004.png)
@@ -434,6 +468,9 @@
 - **CDU-005.1**: Reproducción de Contenido
 - **CDU-005.2**: Reanudación de Reproducción
 - **CDU-005.3**: Consulta de Historial de Reproducción
+- **CDU-005.4**: Creación de Watch Party
+- **CDU-005.5**: Ingreso a Watch Party
+- **CDU-005.6**: Descarga de Contenido
 
 #### CDU-005.1 Reproducción de Contenido
 
@@ -482,6 +519,54 @@
 | Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible cargar el historial. Intenta nuevamente.<br>FE2. Sesión expirada.<br>FE2.1 El sistema redirige al usuario a la pantalla de inicio de sesión. |
 | Reglas de negocio | El historial debe pertenecer exclusivamente al perfil activo.<br>Las reproducciones de otros perfiles no deben mezclarse. |
 | Reglas de calidad | La información del historial debe ser clara y ordenada.<br>La consulta debe responder sin afectar la experiencia de navegación. |
+
+#### CDU-005.4 Creación de Watch Party
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Creación de Watch Party |
+| Código | CDU-005.4 |
+| Actores | Usuario |
+| Descripción | Permite al usuario con Plan Premium crear desde el detalle de un contenido una sala de reproducción sincronizada y obtener un código de invitación para otros participantes. |
+| Precondiciones | El usuario debe haber iniciado sesión, tener un perfil activo, contar con un Plan Premium activo y haber abierto un contenido existente. |
+| Postcondiciones | Sala activa creada con el usuario como anfitrión, código único de invitación generado y navegación realizada hacia la Watch Party; o creación rechazada sin abrir una sala. |
+| Flujo principal | 1. El usuario abre el detalle de un contenido y selecciona Watch Party.<br>2. El sistema verifica que la cuenta tenga el Plan Premium.<br>3. El sistema comprueba las restricciones parentales del perfil.<br>4. El sistema registra una sala asociada al perfil, la cuenta y el contenido, con reproducción pausada y posición inicial en cero.<br>5. El sistema genera un código único de invitación de ocho caracteres.<br>6. El sistema redirige al usuario a la sala usando el código generado.<br>7. El sistema conecta al anfitrión mediante WebSocket y muestra las opciones para copiar el código o el enlace de invitación. |
+| Flujos alternos | FA1. La cuenta no tiene Plan Premium.<br>FA1.1 El sistema muestra la restricción Premium y no crea la sala.<br>FA2. El contenido supera el nivel de control parental del perfil.<br>FA2.1 El sistema solicita el PIN y solo crea la sala si la verificación es correcta.<br>FA3. El usuario cancela la solicitud del PIN o ingresa uno incorrecto.<br>FA3.1 El sistema no crea la sala. |
+| Flujos de excepción | FE1. El servicio de Suscripción no responde o no puede verificar el plan.<br>FE1.1 El sistema informa que ocurrió un error al verificar el plan.<br>FE2. La sala no puede persistirse en la base de datos.<br>FE2.1 El sistema informa que no pudo crear la sala.<br>FE3. Falla la conexión WebSocket después de crear la sala.<br>FE3.1 La interfaz informa el error de conexión e intenta restablecerla. |
+| Reglas de negocio | Solo una cuenta con el identificador del Plan Premium puede crear una Watch Party.<br>La sala debe quedar asociada al perfil y la cuenta que la crean.<br>El creador de la sala es el anfitrión.<br>El código de invitación debe ser único entre las salas activas.<br>Solo el anfitrión controla la reproducción sincronizada. |
+| Reglas de calidad | La creación debe informar claramente los errores de plan, PIN o persistencia.<br>El código y el enlace de invitación deben poder copiarse desde la sala.<br>La reproducción, pausa y desplazamiento del anfitrión deben propagarse en tiempo real. |
+
+#### CDU-005.5 Ingreso a Watch Party
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Ingreso a Watch Party |
+| Código | CDU-005.5 |
+| Actores | Usuario |
+| Descripción | Permite al usuario ingresar con su perfil activo a una Watch Party mediante el código compartido por el anfitrión para seguir la reproducción sincronizada y utilizar el chat de la sala. |
+| Precondiciones | El usuario debe haber iniciado sesión, tener un perfil activo y disponer del código de una sala activa. |
+| Postcondiciones | El perfil queda registrado o reconectado como participante y conectado a la sala; o permanece fuera cuando el código no corresponde a una sala activa. |
+| Flujo principal | 1. El usuario accede a Watch Party y selecciona "Unirse con código".<br>2. El usuario ingresa el código de invitación.<br>3. El sistema normaliza el código a mayúsculas y consulta la sala activa.<br>4. El sistema actualiza la URL con el código y establece una conexión WebSocket.<br>5. El sistema registra al perfil como participante, o reutiliza su registro si ya pertenecía a la sala.<br>6. El sistema obtiene el video mediante una URL vigente y sincroniza el estado y la posición con la sala.<br>7. El sistema muestra los participantes y habilita el chat en vivo. |
+| Flujos alternos | FA1. El usuario abre directamente un enlace que contiene el código.<br>FA1.1 El sistema intenta el ingreso automáticamente.<br>FA2. El perfil ya estaba registrado en la sala.<br>FA2.1 El sistema reutiliza el participante y restablece su conexión.<br>FA3. El anfitrión abandona la sala.<br>FA3.1 El sistema muestra una cuenta regresiva de 15 segundos y devuelve a los participantes a la pantalla de Watch Party. |
+| Flujos de excepción | FE1. El código es inválido o la sala ya finalizó.<br>FE1.1 El sistema informa el error y vuelve a mostrar el formulario de ingreso.<br>FE2. Se pierde la conexión WebSocket.<br>FE2.1 El sistema informa la pérdida de conexión e intenta reconectarse cada tres segundos.<br>FE3. No se puede obtener el video.<br>FE3.1 El sistema mantiene la sala e informa que el video no pudo cargarse. |
+| Reglas de negocio | El ingreso requiere una sala activa y un perfil identificado.<br>El código generado por el sistema contiene ocho caracteres, aunque la interfaz admite el envío desde cuatro caracteres para validarlo contra el servidor.<br>La validación de Plan Premium se realiza al crear la sala; el flujo actual de ingreso por código no vuelve a exigir dicho plan.<br>Los participantes que no son anfitriones siguen el estado de reproducción del anfitrión. |
+| Reglas de calidad | La sincronización debe propagar reproducción, pausa y desplazamientos sin recargar la página.<br>La conexión debe enviar latidos periódicos y reintentar ante una interrupción.<br>La salida o reconexión de participantes debe reflejarse en la lista de la sala. |
+
+#### CDU-005.6 Descarga de Contenido
+
+| Campo | Especificación |
+|----|----|
+| Nombre | Descarga de Contenido |
+| Código | CDU-005.6 |
+| Actores | Usuario |
+| Descripción | Permite al usuario con Plan Premium guardar localmente y de forma cifrada un registro de una película o episodio para consultarlo desde "Mis descargas". La implementación es una descarga simulada y no almacena el archivo de video. |
+| Precondiciones | El usuario debe haber iniciado sesión, tener un perfil activo, contar con un Plan Premium activo y abrir un contenido disponible. Para una serie debe seleccionar un episodio. |
+| Postcondiciones | Registro cifrado guardado en IndexedDB e identificado por cuenta, perfil, contenido y episodio; o descarga no creada cuando el permiso o el almacenamiento local no están disponibles. |
+| Flujo principal | 1. El usuario abre el detalle de una película o selecciona un episodio de una serie.<br>2. El usuario presiona el botón de descarga.<br>3. El sistema verifica la suscripción y el permiso `puede_descargar` de la cuenta.<br>4. El sistema prepara los metadatos del contenido para la cuenta y el perfil activos.<br>5. El navegador cifra el registro con AES-GCM de 256 bits y un vector de inicialización aleatorio.<br>6. El sistema guarda el registro en IndexedDB con una clave no extraíble.<br>7. El sistema confirma que la descarga simulada fue guardada.<br>8. El usuario puede consultarla, abrir el contenido en línea o eliminarla desde "Mis descargas". |
+| Flujos alternos | FA1. La cuenta no tiene Plan Premium activo.<br>FA1.1 El sistema bloquea la operación e invita al usuario a activar o consultar el Plan Premium.<br>FA2. La serie no tiene un episodio seleccionado.<br>FA2.1 El sistema solicita seleccionar un episodio.<br>FA3. Ya existe un registro para la misma cuenta, perfil, contenido y episodio.<br>FA3.1 El sistema actualiza la descarga simulada existente.<br>FA4. El usuario abre un registro desde "Mis descargas".<br>FA4.1 El sistema navega al contenido y solicita una URL de reproducción vigente; no reproduce un archivo local. |
+| Flujos de excepción | FE1. IndexedDB o Web Crypto API no están disponibles o fallan.<br>FE1.1 El sistema informa que no pudo guardar la descarga local.<br>FE2. No se puede consultar el estado de la suscripción.<br>FE2.1 El sistema no habilita la descarga y muestra el error de consulta.<br>FE3. Un registro almacenado no puede descifrarse.<br>FE3.1 El sistema elimina el registro inválido y no lo muestra en la lista. |
+| Reglas de negocio | Solo el Plan Premium activo obtiene `puede_descargar: true`.<br>La descarga es simulada: se almacenan metadatos, no el archivo multimedia ni URLs firmadas.<br>Los registros se separan por cuenta, perfil, contenido y episodio.<br>Si la cuenta deja de ser Premium, los registros permanecen cifrados pero no pueden consultarse ni abrirse desde la pantalla de descargas.<br>Las descargas de otros perfiles no deben mostrarse en el perfil activo. |
+| Reglas de calidad | Los registros deben cifrarse con AES-GCM de 256 bits y una clave no extraíble.<br>La lista debe ordenarse desde la descarga más reciente.<br>La falta de permiso debe comunicarse sin borrar los registros cifrados existentes. |
 
 ### Expandidos de CDU006: Administración de Contenido
 
@@ -558,7 +643,7 @@
 
 ### Expandidos de CDU007: Consulta de Auditoría del Catálogo
 
-![CDU007](./img/CDU_CDU007.svg)
+![CDU007](./img/CDU_CDU007.png)
 
 - **CDU-007.1**: Consulta de Tabla de Auditoría
 
