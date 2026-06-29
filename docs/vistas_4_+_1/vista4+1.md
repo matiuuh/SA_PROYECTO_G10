@@ -26,7 +26,7 @@ La **vista lógica** describe la organización del sistema desde la perspectiva 
 
 La **vista de desarrollo** describe cómo está organizado el sistema desde la perspectiva del diseño del software. Su objetivo no es mostrar puertos o nodos físicos, sino la forma en que el sistema se divide en capas, paquetes y componentes para facilitar su construcción, mantenimiento y evolución.
 
-![Vista de desarrollo](./img/DiagramaComponentesPROYECTO.drawio.svg)
+![Vista de desarrollo](./img/Componentes.svg)
 
 ### Naturaleza del diagrama
 

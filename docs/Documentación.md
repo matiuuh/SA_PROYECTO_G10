@@ -50,6 +50,7 @@ Integrantes:
 - [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
 - [Despliegue de infraestructura](./Terraform/terraform.md)
 - [Configuración de infraestructura](./ansible/ansible.md)
+- [Observabilidad de métricas con Prometheus y Grafana](./PrometheusGrafana/prometheus-grafana.md)
 
 ## Introducción
 
