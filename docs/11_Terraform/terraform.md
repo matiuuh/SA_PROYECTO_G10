@@ -133,4 +133,98 @@ artifact_registry_url = "us-central1-docker.pkg.dev/sa-proyecto-g10-500320/quetz
 ![Output](./img/output.png)
 
 
+#### Destruir la infraestructura
+
+```bash
+terraform destroy
+```
+
+Escribir `yes` cuando lo solicite. Elimina todos los recursos gestionados por Terraform. **Se pierden permanentemente:** archivos en los buckets GCS, imágenes Docker en Artifact Registry y datos en las BDs de las VMs si no hay backup.
+
+---
+
+## 4. Recrear la infraestructura desde cero
+
+Después de un `terraform destroy`, seguir estos pasos en orden:
+
+#### 1. Volver a crear la infraestructura
+
+```bash
+terraform apply
+```
+
+Anotar las nuevas IPs del output — cambiarán respecto a las anteriores.
+
+#### 2. Actualizar el inventario de Ansible
+
+Editar `ansible/inventory.ini` y reemplazar todas las IPs con los nuevos valores de `terraform output`.
+
+#### 3. Correr Ansible
+
+```bash
+ansible-playbook playbooks/site.yml -i inventory.ini \
+  -e "db_password=TuPasswordAqui" \
+  -e "jwt_secret=TuJwtSecretAqui" \
+  -e "email_user=correo@gmail.com" \
+  -e "email_pass=tu_app_password" \
+  -e "email_from=QuetzalTV"
+```
+
+#### 4. Generar nueva clave de service account
+
+La service account es destruida y recreada — la clave anterior queda inválida:
+
+```bash
+gcloud iam service-accounts keys create key.json \
+  --iam-account=quetzaltv-deploy@sa-proyecto-g10-500320.iam.gserviceaccount.com
+```
+
+#### 5. Actualizar secretos en GitHub
+
+| Secreto | Valor |
+|---|---|
+| `GKE_SA_KEY` | Contenido del `key.json` generado en el paso anterior |
+| `VM3_HOST` | Nueva `vm3_external_ip` del output |
+| `VM3_INTERNAL_IP` | Nueva `vm3_internal_ip` del output |
+
+#### 6. Reconectar kubectl
+
+```bash
+gcloud container clusters get-credentials quetzaltv-cluster \
+  --zone us-central1-a \
+  --project sa-proyecto-g10-500320
+```
+
+#### 7. Configurar permisos GKE
+
+> **Prerequisito:** Ansible debe haberse ejecutado correctamente antes de este paso.
+
+Reconectar kubectl al nuevo clúster:
+
+```powershell
+gcloud container clusters get-credentials quetzaltv-cluster --zone us-central1-a --project sa-proyecto-g10-500320
+```
+
+Re-grant del permiso signBlob (necesario para signed URLs de portadas en catálogo-service):
+
+```powershell
+gcloud iam service-accounts add-iam-policy-binding quetzaltv-deploy@sa-proyecto-g10-500320.iam.gserviceaccount.com --member=serviceAccount:quetzaltv-deploy@sa-proyecto-g10-500320.iam.gserviceaccount.com --role=roles/iam.serviceAccountTokenCreator
+```
+
+ClusterRoleBinding para que el pipeline CD pueda aplicar manifiestos en GKE:
+
+```powershell
+kubectl create clusterrolebinding quetzaltv-deploy-cluster-admin --clusterrole=cluster-admin --user=quetzaltv-deploy@sa-proyecto-g10-500320.iam.gserviceaccount.com
+```
+
+#### 8. Redesplegar a GKE
+
+Hacer push a la rama `release` para que el pipeline CD reconstruya las imágenes y las despliegue, o aplicar manualmente:
+
+```bash
+kubectl apply -f k8s/
+```
+
+---
+
 [Volver a la documentacion](../Documentación.md)
