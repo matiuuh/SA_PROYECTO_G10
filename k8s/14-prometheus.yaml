@@ -9,30 +9,6 @@ metadata:
   name: prometheus
   namespace: quetzaltv-monitoring
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: prometheus-discovery
-  namespace: quetzaltv-prod
-rules:
-  - apiGroups: [""]
-    resources: ["services", "endpoints", "pods"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: prometheus-discovery
-  namespace: quetzaltv-prod
-subjects:
-  - kind: ServiceAccount
-    name: prometheus
-    namespace: quetzaltv-monitoring
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: prometheus-discovery
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -53,70 +29,6 @@ data:
             labels:
               env: release
               namespace: quetzaltv-monitoring
-
-      - job_name: quetzaltv-prod-services
-        kubernetes_sd_configs:
-          - role: endpoints
-            namespaces:
-              names:
-                - quetzaltv-prod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
-            action: keep
-            regex: "true"
-          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
-            action: replace
-            target_label: __scheme__
-            regex: (https?)
-          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
-            action: replace
-            target_label: __metrics_path__
-            regex: (.+)
-          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
-            action: replace
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
-          - action: labelmap
-            regex: __meta_kubernetes_service_label_(.+)
-          - target_label: env
-            replacement: release
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: kubernetes_namespace
-          - source_labels: [__meta_kubernetes_service_name]
-            target_label: kubernetes_name
-
-      - job_name: quetzaltv-prod-pods
-        kubernetes_sd_configs:
-          - role: pod
-            namespaces:
-              names:
-                - quetzaltv-prod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-            action: keep
-            regex: "true"
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
-            action: replace
-            target_label: __scheme__
-            regex: (https?)
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-            action: replace
-            target_label: __metrics_path__
-            regex: (.+)
-          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
-            action: replace
-            regex: (.+);(\d+)
-            replacement: $1:$2
-            target_label: __address__
-          - action: labelmap
-            regex: __meta_kubernetes_pod_label_(.+)
-          - target_label: env
-            replacement: release
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: kubernetes_namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: kubernetes_pod_name
 
       - job_name: quetzaltv-monitoring-node-exporter
         kubernetes_sd_configs:
