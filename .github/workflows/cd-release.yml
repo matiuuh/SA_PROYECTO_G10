@@ -409,6 +409,7 @@ jobs:
           kubectl apply -f k8s/15-grafana.yaml
           kubectl apply -f k8s/16-prometheus-vm-targets.yaml
           kubectl apply -f k8s/17-grafana-dashboards.yaml
+          kubectl apply -f k8s/18-kube-state-metrics.yaml
           kubectl apply -f k8s/19-node-exporter.yaml
           echo "✓ Manifiestos aplicados"
 
