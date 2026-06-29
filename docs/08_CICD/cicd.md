@@ -2,7 +2,7 @@
 
 ## Diagrama de flujo de CI/CD - Quetzal TV
 
-![flujo](CI-CDP2.svg)
+![flujo](CI-CD.svg)
 
 [Archivo Crudo](https://drive.google.com/file/d/1ro1_zcd-iqKpRUpsEjVMUB_VJoGTecpg/view?usp=sharing)
 
@@ -152,6 +152,46 @@ Esta separación permite que cada etapa tenga reglas, dependencias y objetivos d
 
 ---
 
+### gcloud CLI y gsutil
+
+**¿Qué?** Son herramientas de línea de comandos de Google Cloud disponibles en los runners de GitHub Actions y en las VMs de despliegue.
+
+**¿Por qué?** Porque el pipeline necesita autenticar Docker contra Artifact Registry, activar cuentas de servicio dentro de VM3 y subir respaldos comprimidos hacia Google Cloud Storage. Estas operaciones se realizan con `gcloud auth configure-docker`, `gcloud auth activate-service-account` y `gsutil cp`.
+
+**¿Para qué?** Para conectar el flujo automatizado con los servicios administrados de GCP: registro de imágenes, autenticación de cuenta de servicio y almacenamiento de respaldos.
+
+---
+
+### Docker Compose
+
+**¿Qué?** Es la herramienta usada en las VMs de desarrollo para levantar grupos de contenedores a partir de archivos `docker-compose.cloud-vm*.yml`.
+
+**¿Por qué?** Porque el entorno `develop` se distribuye en varias máquinas virtuales y cada VM ejecuta un subconjunto de servicios. Docker Compose permite actualizar esos servicios con las imágenes publicadas en Artifact Registry sin administrar manualmente cada contenedor.
+
+**¿Para qué?** Para ejecutar `docker compose pull` y `docker compose up -d --force-recreate` en VM1, VM2 y VM4, usando la etiqueta `develop-<sha>` generada por el pipeline.
+
+---
+
+### kubectl y envsubst
+
+**¿Qué?** `kubectl` administra los recursos del clúster de Kubernetes y `envsubst` sustituye variables de entorno dentro de los manifiestos YAML antes de aplicarlos.
+
+**¿Por qué?** Porque el despliegue de producción usa manifiestos parametrizados con valores como `AR_REGISTRY`, `VERSION`, `VM3_HOST` y `VM3_INTERNAL_IP`. Antes de aplicar los recursos, el pipeline renderiza esos valores y luego usa `kubectl` para crear namespaces, secretos, deployments, servicios, ingress y recursos de monitoreo.
+
+**¿Para qué?** Para desplegar la versión de release en GKE, verificar rollouts, consultar pods, obtener la IP del Ingress y ejecutar rollback automático cuando un deployment no queda saludable.
+
+---
+
+### scripts/smoke-test.sh
+
+**¿Qué?** Es el script del repositorio que verifica rutas base del sistema después de un despliegue usando `curl` y códigos de respuesta HTTP esperados.
+
+**¿Por qué?** Porque un rollout exitoso o un `docker compose up` correcto no garantizan por sí solos que las rutas públicas respondan como se espera. Los smoke tests agregan una validación externa mínima sobre el sistema ya desplegado.
+
+**¿Para qué?** Para validar el entorno `develop` contra VM4 y producción contra la IP del Ingress de GKE antes de considerar completo el flujo de CD.
+
+---
+
 ## Arquitectura general del pipeline
 
 El pipeline sigue una lógica de promoción por ramas:
@@ -291,6 +331,7 @@ Automatizar el despliegue del entorno de desarrollo cuando se actualiza la rama 
 | `deploy-vm1` | `build-and-push`, `backup-databases` | Actualiza servicios en VM1 |
 | `deploy-vm2` | `build-and-push`, `backup-databases` | Actualiza servicios en VM2 |
 | `deploy-vm4` | `build-and-push`, `backup-databases` | Actualiza frontend y API Gateway en VM4 |
+| `smoke-tests` | `deploy-vm1`, `deploy-vm2`, `deploy-vm4` | Verifica rutas base del entorno develop expuesto por VM4 |
 
 ### Explicación paso a paso del CD develop
 
@@ -357,11 +398,24 @@ Una vez que el build y el backup finalizan con éxito, se despliegan los cambios
 Cada job de despliegue realiza lo siguiente:
 
 1. prepara una clave SSH temporal
-2. se conecta a la VM correspondiente
-3. autentica Docker contra Artifact Registry
-4. actualiza variables `AR_REGISTRY` e `IMAGE_TAG` en el `.env`
-5. hace `docker compose pull`
-6. ejecuta `docker compose up -d`
+2. registra la VM en `known_hosts`
+3. copia el archivo Compose actualizado mediante `scp`
+4. se conecta a la VM correspondiente
+5. autentica Docker contra Artifact Registry
+6. construye un archivo `.env` temporal con `AR_REGISTRY` e `IMAGE_TAG`
+7. escribe `secrets/gcs-key.json` en VM1 y VM2 cuando los servicios necesitan firmar URLs V4 de GCS
+8. hace `docker compose pull`
+9. ejecuta `docker compose up -d --force-recreate`
+
+#### 8. Smoke tests sobre desarrollo
+
+Después de actualizar VM1, VM2 y VM4, el workflow espera brevemente la estabilización de los servicios y ejecuta:
+
+```bash
+bash scripts/smoke-test.sh "http://<VM4_HOST>"
+```
+
+Esto valida rutas base a través de VM4, que expone el frontend y el API Gateway del entorno de desarrollo.
 
 ### Justificación del diseño de despliegue en VMs separadas
 
@@ -392,6 +446,7 @@ Desplegar una nueva versión del sistema en producción de forma controlada, tra
 | `build-and-push` | `version` | Construye y publica 9 imágenes con versión semántica |
 | `backup-databases` | `ci-passed` | Respalda 7 bases de datos antes del release |
 | `deploy-gke` | `build-and-push`, `backup-databases` | Despliega en GKE, verifica rollout y revierte si falla |
+| `smoke-tests` | `deploy-gke` | Obtiene la IP del Ingress y verifica rutas base de producción |
 
 ### Explicación paso a paso del CD release
 
@@ -439,7 +494,7 @@ El job `deploy-gke`:
 
 #### 5. Sustitución de variables en manifiestos
 
-Los archivos del directorio `k8s/` usan variables como `AR_REGISTRY`, `VERSION` y `VM3_HOST`, las cuales se reemplazan durante el pipeline mediante `envsubst`.
+Los archivos del directorio `k8s/` usan variables como `AR_REGISTRY`, `VERSION`, `VM3_HOST` y `VM3_INTERNAL_IP`, las cuales se reemplazan durante el pipeline mediante `envsubst`.
 
 Esta decisión desacopla la definición del despliegue del valor específico de cada release.
 
@@ -448,29 +503,35 @@ Esta decisión desacopla la definición del despliegue del valor específico de 
 Antes de aplicar los manifiestos, el workflow:
 
 - crea el namespace si no existe
-- genera o actualiza un `Secret` de Kubernetes con credenciales y variables sensibles
+- crea también el namespace `quetzaltv-monitoring` para componentes de observabilidad
+- genera o actualiza el `Secret` `quetzaltv-secrets` con credenciales, variables sensibles y URLs de bases de datos hacia VM3
+- genera o actualiza el `Secret` `grafana-admin` para credenciales de Grafana
 
 Esto asegura que los pods reciban configuración sensible sin hardcodearla dentro de los manifiestos del repositorio.
 
 #### 7. Aplicación del despliegue
 
-Se ejecuta:
+Se aplican los manifiestos de forma explícita, separando recursos de aplicación y monitoreo. Para los servicios de Quetzal TV se usa el namespace `quetzaltv-prod`; los recursos de observabilidad usan sus propios manifiestos y namespaces.
 
 ```bash
-kubectl apply -f k8s/ --namespace=quetzaltv-prod
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/01-configmap.yaml -n quetzaltv-prod
+kubectl apply -f k8s/02-redis.yaml -n quetzaltv-prod
+...
+kubectl apply -f k8s/19-node-exporter.yaml
 ```
 
 Con esto se publican o actualizan los recursos necesarios del sistema dentro del clúster.
 
 #### 8. Verificación del rollout
 
-Después de aplicar los manifiestos, el workflow inspecciona todos los `Deployment` del namespace y espera a que completen su rollout con éxito.
+Después de aplicar los manifiestos, el workflow inspecciona todos los `Deployment` de los namespaces `quetzaltv-prod` y `quetzaltv-monitoring`, y espera a que completen su rollout con éxito.
 
 Esto evita marcar como exitoso un despliegue que solo fue aceptado por el clúster, pero no llegó realmente a estado saludable.
 
 #### 9. Rollback automático si algo falla
 
-Si alguno de los despliegues no logra completarse correctamente, el workflow ejecuta `kubectl rollout undo` sobre cada deployment afectado y espera nuevamente a que la versión previa quede saludable.
+Si alguno de los despliegues no logra completarse correctamente, el workflow ejecuta `kubectl rollout undo` sobre los deployments de los namespaces revisados y espera nuevamente a que la versión previa quede saludable.
 
 ### Justificación del rollback automático
 
@@ -479,6 +540,18 @@ Si alguno de los despliegues no logra completarse correctamente, el workflow eje
 **¿Por qué?** Porque en producción no basta con detectar el error; también es necesario restaurar el servicio lo más rápido posible para minimizar indisponibilidad e impacto al usuario.
 
 **¿Para qué?** Para aumentar la resiliencia del pipeline de producción, reduciendo el riesgo operativo asociado a despliegues defectuosos.
+
+---
+
+#### 10. Smoke tests sobre producción
+
+Cuando el despliegue en GKE termina correctamente, el workflow obtiene la IP pública del Ingress `quetzaltv-ingress`, espera la estabilización de los pods y ejecuta:
+
+```bash
+bash scripts/smoke-test.sh "http://<ingress-ip>"
+```
+
+Esto confirma que la versión publicada no solo fue aceptada por Kubernetes, sino que también responde desde el punto de entrada externo.
 
 ---
 
@@ -505,6 +578,8 @@ Los workflows dependen de secretos configurados en **Settings > Secrets and vari
 | `GCP_PROJECT_ID` | ID del proyecto de Google Cloud |
 | `GCP_SA_KEY` | JSON de la cuenta de servicio con permisos requeridos |
 | `AR_REGION` | Región de Artifact Registry |
+| `GCS_BACKUP_BUCKET` | Bucket de Google Cloud Storage para respaldos |
+| `GCS_SA_KEY` | JSON para firma de URLs V4 en servicios que lo requieren |
 | `DOCKERHUB_USERNAME` | Usuario de Docker Hub |
 | `DOCKERHUB_TOKEN` | Token de Docker Hub |
 
@@ -523,9 +598,7 @@ Los workflows dependen de secretos configurados en **Settings > Secrets and vari
 
 | Secreto | Descripción |
 | --- | --- |
-| `GCS_BACKUP_BUCKET` | Bucket de Google Cloud Storage para respaldos |
 | `DB_PASSWORD` | Contraseña de PostgreSQL |
-| `GCS_SA_KEY` | JSON para firma de URLs V4 en servicios que lo requieren |
 
 ### Secretos para despliegue en GKE
 
@@ -533,7 +606,10 @@ Los workflows dependen de secretos configurados en **Settings > Secrets and vari
 | --- | --- |
 | `GKE_CLUSTER` | Nombre del clúster de GKE |
 | `GKE_ZONE` | Zona o ubicación del clúster |
+| `VM3_INTERNAL_IP` | IP interna de VM3 usada por pods de GKE para conectar a PostgreSQL |
 | `JWT_SECRET` | Clave JWT |
 | `EMAIL_USER` | Usuario del servicio de correo |
 | `EMAIL_PASS` | Contraseña del servicio de correo |
 | `EMAIL_FROM` | Remitente del servicio de correo |
+| `GRAFANA_ADMIN_USER` | Usuario administrador de Grafana |
+| `GRAFANA_ADMIN_PASSWORD` | Contraseña administradora de Grafana |

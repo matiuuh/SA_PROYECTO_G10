@@ -48,6 +48,7 @@ Integrantes:
 - [Documentación sobre terraform](./11_Terraform/terraform.md)
 - [Documentación sobre ansible](./12_Ansible/ansible.md)
 - [Documentación sobre ELK](./13_ELK/elstack.md)
+- [Documentación sobre observabilidad con Prometheus y Grafana](./14_Obsevabilidad/Observabilidad.md)
 - [Documentación sobre Locust](./15_Locust/Locust.md)
 
 ### Pruebas Unitarias
