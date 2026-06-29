@@ -43,6 +43,9 @@ Integrantes:
 ### Pruebas Unitarias
 - [Pruebas unitarias del backend](./Pruebas/PruebasUnitarias.md)
 
+### Pruebas de carga
+- [Pruebas de carga con Locust](./Locust/Locust.md)
+
 ### Diagramas Estructurales, Comportamentales y Persistencia
 - [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
 - [Despliegue de infraestructura](./Terraform/terraform.md)
