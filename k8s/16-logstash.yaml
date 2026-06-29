@@ -22,6 +22,7 @@ data:
         match => {
           "message" => "^%{TIMESTAMP_ISO8601:log_timestamp}\s+%{WORD:stream}\s+\w\s+%{GREEDYDATA:log_message}"
         }
+        tag_on_failure => ["_cri_parse_failure"]
       }
 
       # Intentar parsear el mensaje como JSON (logs estructurados de Go/Python)
@@ -36,14 +37,12 @@ data:
         }
       }
 
-      # Extraer metadatos del nombre del archivo
-      # Patrón: /var/log/containers/<pod>_<namespace>_<container>-<id>.log
-      if [log] and [log][file] and [log][file][path] {
-        grok {
-          match => {
-            "[log][file][path]" => "/var/log/containers/%{DATA:k8s_pod_name}_%{DATA:k8s_namespace}_%{DATA:k8s_container_name}-%{GREEDYDATA}\\.log"
-          }
+      # Extraer metadatos del path: /var/log/pods/<namespace>_<pod>_<uid>/<container>/<num>.log
+      grok {
+        match => {
+          "[log][file][path]" => "/var/log/pods/%{DATA:k8s_namespace}_%{DATA:k8s_pod_name}_%{DATA:k8s_uid}/%{DATA:k8s_container_name}/%{GREEDYDATA}\\.log"
         }
+        tag_on_failure => []
       }
 
       mutate {
@@ -51,7 +50,7 @@ data:
           "environment" => "production"
           "platform"    => "quetzaltv"
         }
-        remove_field => ["log_message", "log_timestamp"]
+        remove_field => ["log_message", "log_timestamp", "k8s_uid"]
       }
     }
 
