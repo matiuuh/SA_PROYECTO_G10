@@ -1,64 +1,46 @@
-# Configuración de Infraestructura
+# Ansible
+## configuración de infraestructura
+---
 
-## Índice
-
-1. [Terraform — Qué es y cómo funciona](#1-terraform--qué-es-y-cómo-funciona)
-2. [Infraestructura declarada](#2-infraestructura-declarada)
-3. [Configuración paso a paso con Terraform](#3-configuración-paso-a-paso-con-terraform)
-4. [Ansible — Qué es y cómo funciona](#4-ansible--qué-es-y-cómo-funciona)
-
-## 4. Ansible — Qué es y cómo funciona
-
-**Ansible** es una herramienta de automatización de configuración **agentless** (sin agente): no requiere instalar nada en los servidores remotos. Se conecta a las VMs por SSH desde la máquina de control (tu laptop) y ejecuta las tareas declaradas en los **Playbooks**.
+## Qué es y cómo funciona?
+Es una herramienta de automatización de configuración agentless o sea que no requiere instalar nada en los servidores remotos. Se conecta a las VMs por SSH desde la máquina de control y ejecuta las tareas declaradas en los **Playbooks**.
 
 ### Conceptos clave
 
-| Concepto | Descripción |
-|---|---|
-| **Playbook** | Archivo YAML que describe las tareas a ejecutar en los hosts |
-| **Inventory** | Lista de hosts (VMs) con sus IPs y variables de conexión |
-| **Task** | Unidad mínima de trabajo (instalar paquete, crear directorio, copiar archivo) |
-| **Module** | Función predefinida de Ansible (apt, copy, template, systemd, user, etc.) |
-| **Template (Jinja2)** | Archivo con variables que Ansible rellena al copiar al servidor |
-| **become** | Equivalente a `sudo` — permite ejecutar tareas con privilegios de root |
-| **Agentless** | Ansible solo necesita SSH y Python en el servidor remoto. No instala ningún daemon. |
+- **Playbook**: Archivo YAML que describe las tareas a ejecutar en los hosts.
+- **Inventory**: Lista de hosts con sus IPs y variables de conexión.
+- **Task**: Unidad mínima de trabajo.
+- **Module**: Función predefinida de Ansible.
+- **Template**: Archivo con variables que Ansible rellena al copiar al servidor.
+- **become**: Equivalente a `sudo`, este permite ejecutar tareas con privilegios de root.
+- **Agentless**: Ansible solo necesita SSH y Python en el servidor remoto. No instala ningún daemon.
 
-### Arquitectura de conexión
-
-```
-Tu laptop (control node)          VMs en GCP (managed nodes)
-         │                                  │
-         │  SSH (clave quetzaltv_deploy)     │
-         ├─────────────────────────────────►│ VM1
-         ├─────────────────────────────────►│ VM2
-         ├─────────────────────────────────►│ VM3
-         └─────────────────────────────────►│ VM4
-```
 
 ### Estructura de archivos
 
 ```
-ansible/
-├── ansible.cfg              — Configuración: usuario SSH, clave, inventario
-├── inventory.ini            — Hosts con sus IPs (completar con terraform output)
-├── group_vars/
-│   └── all.yml              — Variables comunes (secretos se pasan con -e)
-├── playbooks/
-│   ├── site.yml             — Punto de entrada: llama a los dos playbooks
-│   ├── app_vms.yml          — Provisiona VM1, VM2, VM4 (Docker + gcloud + .env)
-│   └── db_vm.yml            — Provisiona VM3 (Docker + SQL files + PostgreSQL)
-└── templates/
-    ├── env_vm1.j2           — Plantilla .env para VM1
-    ├── env_vm2.j2           — Plantilla .env para VM2
-    ├── env_vm3.j2           — Plantilla .env para VM3
-    └── env_vm4.j2           — Plantilla .env para VM4
+└── 📁ansible
+    └── 📁group_vars
+        ├── all.yml
+    └── 📁playbooks
+        ├── app_vms.yml
+        ├── db_vm.yml
+        ├── monitoring_vm3.yml
+        ├── site.yml
+    └── 📁templates
+        ├── env_vm1.j2
+        ├── env_vm2.j2
+        ├── env_vm3.j2
+        ├── env_vm4.j2
+    ├── ansible.cfg
+    └── inventory.ini
 ```
 
 ---
 
-## 5. Configuración paso a paso con Ansible
+## Configuración paso a paso con Ansible
 
-### Paso 1 — Instalar Ansible
+#### Instalar Ansible
 
 ```bash
 pip install ansible
@@ -66,33 +48,34 @@ pip install ansible
 sudo apt install ansible
 ```
 
-### Paso 2 — Completar el inventario con las IPs de Terraform
+#### Completar el inventario con las IPs de Terraform
 
 ```bash
 # Obtener IPs
 terraform -chdir=terraform output
-
+# si estas dentro de terraform
+terraform output
 # Editar ansible/inventory.ini y reemplazar los placeholders REEMPLAZAR_*
 # con las IPs reales del output anterior
 ```
 
-### Paso 3 — Completar las variables internas de inventario
+#### Completar las variables internas de inventario
 
 En `ansible/inventory.ini`, también reemplazar los valores `REEMPLAZAR_VMX_INTERNAL_IP`
 con las IPs internas obtenidas del output de Terraform.
 
-### Paso 4 — Verificar conectividad SSH
+#### Verificar conectividad SSH
 
 ```bash
 cd ansible/
-ansible all -m ping
+ansible all -m ping -i inventory.ini
 ```
 
 Debe responder `pong` en las 4 VMs.
 
-> **Captura sugerida:** salida del `ansible all -m ping` mostrando SUCCESS en los 4 hosts
+![Ping](./img/ping.png)
 
-### Paso 5 — Ejecutar el playbook
+#### Ejecutar el playbook
 
 ```bash
 ansible-playbook playbooks/site.yml \
@@ -109,64 +92,41 @@ Ansible ejecuta en orden:
 
 El proceso toma aproximadamente 5-10 minutos.
 
-> **Captura sugerida:** log de ejecución del playbook mostrando tareas en verde (ok) y amarillo (changed). Al final debe mostrar `PLAY RECAP` con 0 failures.
+![check](./img/check.png)
 
-### Paso 6 — Verificar que las BDs están corriendo (en VM3)
+#### Verificar que las BDs están corriendo en VM3
 
 ```bash
-ssh -i ~/.ssh/quetzaltv_deploy ubuntu@<VM3_EXTERNAL_IP>
+ssh -i ~/.ssh/quetzaltv_deploy ubuntu@146.148.63.64
 docker ps
 ```
 
 Deben aparecer 7 contenedores PostgreSQL corriendo.
 
-> **Captura sugerida:** salida de `docker ps` en VM3 mostrando los 7 contenedores postgres en estado Up
+![Docker ps](./img/bds.png)
 
 ---
 
-## Secrets de GitHub a actualizar
+## Verificación del aprovisionamiento con Ansible
 
-Después de ejecutar Terraform y Ansible, actualizar los siguientes secrets en
-**GitHub → Settings → Secrets and variables → Actions**:
+Los siguientes comandos se ejecutan desde el directorio `ansible/` y verifican que el playbook se aplicó correctamente en todas las VMs. No modifican nada — solo leen el estado actual.
 
-| Secret | Valor | Cómo obtenerlo |
-|---|---|---|
-| `GCP_PROJECT_ID` | `sa-proyecto-g10-500320` | Fijo |
-| `GCP_SA_KEY` | JSON de `quetzaltv-deploy` SA | Ver abajo |
-| `GCS_SA_KEY` | JSON de `quetzal-tv-storage` SA | Ver abajo |
-| `AR_REGION` | `us-central1` | Fijo |
-| `GCS_BACKUP_BUCKET` | `quetzaltv-backups-sa-proyecto-g10-500320` | `terraform output backups_bucket_name` |
-| `VM1_HOST` | IP externa de VM1 | `terraform output -raw vm1_external_ip` |
-| `VM2_HOST` | IP externa de VM2 | `terraform output -raw vm2_external_ip` |
-| `VM3_HOST` | IP externa de VM3 | `terraform output -raw vm3_external_ip` |
-| `VM3_INTERNAL_IP` | IP interna de VM3 | `terraform output -raw vm3_internal_ip` |
-| `VM4_HOST` | IP externa de VM4 | `terraform output -raw vm4_external_ip` |
-| `VM_USER` | `ubuntu` | Fijo |
-| `VM_SSH_KEY` | Contenido de `~/.ssh/quetzaltv_deploy` (privada) | `cat ~/.ssh/quetzaltv_deploy` |
-| `GKE_CLUSTER` | `quetzaltv-cluster` | `terraform output -raw gke_cluster_name` |
-| `GKE_ZONE` | `us-central1-a` | `terraform output -raw gke_cluster_zone` |
-| `DB_PASSWORD` | Tu contraseña de PostgreSQL | El mismo valor que usaste en Ansible |
-| `JWT_SECRET` | Tu JWT secret | El mismo valor que usaste en Ansible |
-| `EMAIL_USER` | Correo para notificaciones | Igual que antes |
-| `EMAIL_PASS` | App password del correo | Igual que antes |
-| `EMAIL_FROM` | Nombre remitente | Igual que antes |
-| `DOCKERHUB_USERNAME` | Tu usuario de Docker Hub | Igual que antes |
-| `DOCKERHUB_TOKEN` | Tu token de Docker Hub | Igual que antes |
-
-### Exportar JSON keys de Service Accounts
+#### contenedores PostgreSQL corriendo en VM3
 
 ```bash
-# Key para deploy (CI/CD — GCP_SA_KEY)
-gcloud iam service-accounts keys create /tmp/deploy-sa-key.json \
-  --iam-account=quetzaltv-deploy@sa-proyecto-g10-500320.iam.gserviceaccount.com
-
-# Key para storage (GCS signed URLs — GCS_SA_KEY)
-gcloud iam service-accounts keys create /tmp/storage-sa-key.json \
-  --iam-account=quetzal-tv-storage@sa-proyecto-g10-500320.iam.gserviceaccount.com
-
-# Copiar el contenido de cada JSON al secret correspondiente en GitHub
-cat /tmp/deploy-sa-key.json
-cat /tmp/storage-sa-key.json
+ansible vm_db -m command -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 ```
+
+Deben aparecer los 7 contenedores:
+
+| Nombre | Puerto |
+|---|---|
+| `quetzal-postgres-usuario` | 5432 |
+| `quetzal-postgres-suscripcion` | 5438 |
+| `quetzal-postgres-catalogo` | 5433 |
+| `quetzal-postgres-streaming` | 5434 |
+| `quetzal-postgres-divisas` | 5435 |
+| `quetzal-postgres-cobros` | 5436 |
+| `quetzal-postgres-notificaciones` | 5439 |
 
 [Volver a la documentacion](../Documentación.md)

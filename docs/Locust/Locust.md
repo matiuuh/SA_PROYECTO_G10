@@ -1,12 +1,15 @@
-# Locust — Pruebas de carga distribuidas
+# Locust
+## Pruebas de carga distribuidas
 
-> Directorio: `locust/` · Archivo principal: `locust/locustfile.py`
+```js
+Directorio: `locust/` · Archivo principal: `locust/locustfile.py`
+```
 
-## ¿Qué es y cómo funciona?
+### ¿Qué es y cómo funciona?
 
-**Locust** es una herramienta de pruebas de carga distribuida basada en código Python que simula flujos de usuarios reales. Permite definir comportamientos de usuario mediante clases que heredan de `HttpUser`, donde cada tarea representa una interacción con el sistema (navegar catálogo, iniciar sesión, consultar divisas, etc.).
+Es una herramienta de pruebas de carga distribuida basada en código Python que simula flujos de usuarios reales. Permite definir comportamientos de usuario mediante clases que heredan de `HttpUser`, donde cada tarea representa una interacción con el sistema.
 
-Los usuarios se crean como "locusts" (langostas) que atacan el sistema de forma concurrente. Locust mide en tiempo real:
+Los usuarios se crean como "locusts", o langostas, que atacan el sistema de forma concurrente. Locust mide en tiempo real:
 
 - **RPS** (requests per second)
 - **Tiempos de respuesta** (mediana, p95, p99)
@@ -15,8 +18,8 @@ Los usuarios se crean como "locusts" (langostas) que atacan el sistema de forma 
 
 Soporta dos modos de ejecución:
 
-1. **Interfaz web** — ideal para monitoreo en vivo. Se abre `http://localhost:8089` donde se configura el número de usuarios, tasa de spawn y se visualizan gráficas.
-2. **Headless** — ejecución desde terminal ideal para CI/CD, generando un reporte HTML al finalizar.
+1. **Interfaz web**: ideal para monitoreo en vivo. Se abre `http://localhost:8089` donde se configura el número de usuarios, tasa de spawn y se visualizan gráficas.
+3. **Headless**: ejecución desde terminal ideal para CI/CD, generando un reporte HTML al finalizar.
 
 ### Perfiles de usuario simulados
 
@@ -40,7 +43,7 @@ Soporta dos modos de ejecución:
 | `GET /api/usuario/api/v1/auth/me` (con JWT) | Autenticado | alto |
 | `POST /api/divisas/api/v1/convertir` | Autenticado | bajo |
 
-## Instalación
+### Instalación
 
 ```powershell
 pip install locust
@@ -54,7 +57,7 @@ Verificar la instalación:
 locust --version
 ```
 
-## Credenciales para usuario autenticado
+### Credenciales para usuario autenticado
 
 El `UsuarioAutenticado` necesita una cuenta real. Crear una desde el frontend y exportar las variables:
 
@@ -72,9 +75,9 @@ export LOCUST_PASSWORD="contraseña"
 
 Si no se exportan, se usan los defaults `test@quetzaltv.com` / `Test1234!` y el login fallará con 401 — las tareas autenticadas se saltan automáticamente.
 
-## Ejecución
+### Ejecución
 
-### Opción A — Interfaz web (recomendada para ver tráfico en vivo)
+#### Interfaz web
 
 ```powershell
 locust -f locust/locustfile.py --host http://8.232.249.93
@@ -86,7 +89,11 @@ Abrir `http://localhost:8089`. Configurar:
 
 Click en **Start swarming**. La UI muestra en tiempo real: RPS, tiempos de respuesta (mediana, p95), tasa de fallos, gráficas por endpoint y pestaña **Failures** con detalle de errores. Al terminar, descargar el reporte desde **Download Report**.
 
-### Opción B — Headless (terminal + reporte HTML)
+![Interfaz web](./img/web1.png)
+
+![Interfaz web](./img/web2.png)
+
+#### Headless
 
 ```powershell
 locust -f locust/locustfile.py `
@@ -109,6 +116,8 @@ locust -f locust/locustfile.py \
   --html locust/reporte.html
 ```
 
+![reporte](./img/bash.png)
+
 El reporte se guarda en `locust/reporte.html`. Al finalizar se imprime un resumen en consola:
 
 ```
@@ -125,9 +134,9 @@ El reporte se guarda en `locust/reporte.html`. Al finalizar se imprime un resume
 
 ## Interpretación de resultados
 
-- **Failures = 0** — ningún endpoint retornó error inesperado ✅
+- **Failures = 0**: ningún endpoint retornó error inesperado
 - `GET /api/usuario/me` sin JWT debe retornar 401; si no lo hace, es un fallo de seguridad
-- **p95 < 1 000 ms** — comportamiento aceptable bajo carga
+- **p95 < 1 000 ms**: comportamiento aceptable bajo carga
 - **RPS > 30** con 50 usuarios concurrentes es el mínimo esperado
 
 ## Causas comunes de fallos
@@ -135,3 +144,5 @@ El reporte se guarda en `locust/reporte.html`. Al finalizar se imprime un resume
 - **Login 401**: la cuenta no existe o fue eliminada por el CronJob de depuración. Mientras Locust corre, el login genera sesiones activas y el CronJob no elimina la cuenta.
 - **Timeout en catálogo**: el servicio puede tardar en el primer request por cold-start de la conexión a BD.
 - **500 en algún endpoint**: revisar logs del pod con `kubectl logs <pod> -n quetzaltv-prod`.
+
+[Volver a la documentacion](../Documentación.md)
