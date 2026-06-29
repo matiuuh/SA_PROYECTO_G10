@@ -194,24 +194,6 @@ El diagrama muestra que el frontend no calcula recomendaciones. El servicio
 calificaciones proporcionados por `catalogo`. Después construye los pesos por
 genero, puntua los candidatos y devuelve una lista ordenada.
 
-### Flujo entre componentes
-
-```text
-Panel React
-    |
-    | GET /api/v1/recommendations/{perfil_id}
-    v
-Servicio Streaming
-    |-- consulta historial en PostgreSQL
-    |
-    |-- HTTP --> Servicio Catalogo
-                   |-- catalogo disponible
-                   |-- generos y detalle
-                   `-- likes/dislikes del perfil
-    |
-    `-- calcula, ordena y devuelve recomendaciones
-```
-
 Esta distribucion evita acceso directo a la base de datos de otro
 microservicio. El intercambio utiliza identificadores (`perfil_id` y
 `contenido_id`) y contratos HTTP, respetando la autonomia de cada servicio.
@@ -372,3 +354,5 @@ pnpm -s tsc -b
 Ejecutado en:
 
 - `frontend`
+
+[ Volver a documentación](../Documentaci%C3%B3n.md)

@@ -350,7 +350,7 @@ Se utiliza **Google Kubernetes Engine (GKE)** para orquestar el entorno de la ra
 `release`. Los recursos se despliegan dentro del namespace `quetzaltv-prod` mediante
 manifiestos YAML almacenados en `k8s/`.
 
-El clúster ejecuta diez componentes:
+El clúster ejecuta diez componentes propios de la aplicación:
 
 - frontend;
 - API Gateway;
@@ -358,6 +358,8 @@ El clúster ejecuta diez componentes:
 - Redis.
 
 Las bases PostgreSQL permanecen fuera del clúster, en una VM de Compute Engine.
+Además, el clúster aloja los componentes de centralización de logs y monitoreo descritos
+en las secciones 18 y 19.
 
 ### ¿Por qué?
 
@@ -382,6 +384,10 @@ GKE se utiliza para ejecutar la versión de `release` con actualizaciones sin in
 supervisar la salud de los pods y restaurar la versión anterior cuando el rollout falla.
 El recurso Ingress constituye el único acceso externo y dirige el tráfico al API Gateway,
 sin exponer individualmente los microservicios.
+
+La justificación de Deployments, Services, ConfigMaps, Secrets, recursos, sondas,
+RollingUpdate y rollback se amplía en
+[Justificación de Kubernetes](./Justificación_Kubernetes.md).
 
 ## 10. Google Artifact Registry
 
@@ -594,12 +600,244 @@ identificadores.
 El modelo matemático, pseudocódigo, diagrama, complejidad y flujo de ejecución se
 documentan en [Motor inteligente de recomendación](../Recomendaciones/README.md).
 
+## 14. Terraform — Infraestructura como código
+
+### ¿Qué?
+
+Se utiliza **Terraform** con el provider de Google Cloud para declarar la infraestructura
+del proyecto mediante archivos `.tf`. La configuración crea y relaciona:
+
+- la VPC, subredes y reglas de firewall;
+- cuatro VMs de Compute Engine;
+- el clúster y el node pool de GKE;
+- el repositorio de Artifact Registry;
+- los buckets de GCS para multimedia y backups;
+- cuentas de servicio y permisos IAM.
+
+Las variables permiten parametrizar el proyecto, región, zona y tamaños de máquina. El
+estado de Terraform se conserva en un backend remoto de GCS y los `outputs` publican
+datos como las IPs de las VMs, el nombre del clúster y la dirección del registro.
+
+### ¿Por qué?
+
+Terraform permite describir el estado deseado de GCP de forma declarativa, repetible y
+versionada. Esto evita depender de una secuencia manual de operaciones en la consola,
+facilita revisar los cambios con `terraform plan` antes de aplicarlos y reduce
+inconsistencias al volver a crear un entorno.
+
+El estado remoto en GCS evita que la referencia principal de los recursos quede ligada a
+una sola computadora. La separación por archivos según el tipo de recurso mantiene la
+configuración legible y permite localizar con rapidez cambios de red, cómputo,
+almacenamiento o permisos.
+
+### ¿Para qué?
+
+Terraform se utiliza para construir la base de infraestructura sobre la que operan los
+dos despliegues: las VMs de `develop`, la VM externa de bases de datos, GKE para
+`release` y los servicios compartidos de GCP. Sus salidas también alimentan el inventario
+de Ansible y la configuración de secretos del pipeline.
+
+La guía de aplicación se encuentra en
+[Creación de infraestructura con Terraform](../Terraform/terraform.md).
+
+## 15. Ansible — Configuración de servidores
+
+### ¿Qué?
+
+Se utiliza **Ansible** como herramienta de gestión de configuración sin agentes. Desde
+una máquina de control se conecta por SSH a las VMs creadas por Terraform y ejecuta
+playbooks YAML.
+
+El inventario agrupa las máquinas según su responsabilidad y los playbooks realizan,
+entre otras, las siguientes tareas:
+
+- preparar las VMs de aplicación;
+- instalar y configurar Docker;
+- crear directorios y archivos de entorno a partir de plantillas Jinja;
+- preparar VM3 y levantar los siete contenedores PostgreSQL;
+- instalar `node_exporter` como servicio de `systemd` para exponer métricas de VM3.
+
+### ¿Por qué?
+
+Terraform administra recursos de nube, pero no debe concentrar toda la configuración
+interna del sistema operativo. Ansible complementa esa capa aplicando de forma
+repetible el software y la configuración que necesita cada host.
+
+Se eligió porque opera sobre SSH y no requiere mantener un agente adicional en cada VM.
+Sus tareas son idempotentes: pueden volver a ejecutarse para llevar el servidor al estado
+declarado sin convertir cada aprovisionamiento en una lista de comandos manuales.
+
+### ¿Para qué?
+
+Ansible convierte las VMs recién creadas en servidores utilizables por Quetzal TV y
+mantiene separadas dos responsabilidades:
+
+- **Terraform:** crea la infraestructura en GCP.
+- **Ansible:** configura el sistema operativo y los servicios dentro de las VMs.
+
+Esta secuencia permite tomar las IPs producidas por Terraform, incorporarlas al
+inventario y configurar los cuatro hosts de manera uniforme. El procedimiento completo
+se documenta en [Configuración de infraestructura con Ansible](../ansible/ansible.md).
+
+## 16. Herramientas de pruebas unitarias y cobertura
+
+### ¿Qué?
+
+Las pruebas del backend respetan el ecosistema de cada lenguaje:
+
+- **pytest y pytest-cov:** servicios de Usuarios y Suscripción en Python;
+- **`go test` y la cobertura nativa de Go:** servicios de Catálogo y Streaming;
+- **Jest, ts-jest y el recolector de cobertura de Jest:** Cobros, Divisas,
+  Notificaciones y API Gateway en TypeScript.
+
+Las suites aíslan la lógica mediante repositorios en memoria y mocks cuando una
+dependencia real requeriría red, PostgreSQL, Redis, SMTP, GCS o gRPC. El CI ejecuta las
+pruebas por servicio y exige una cobertura mínima del **75 %**.
+
+### ¿Por qué?
+
+Utilizar la herramienta estándar o predominante de cada lenguaje reduce configuración
+innecesaria y ofrece integración directa con sus modelos de módulos, tipos y reportes:
+
+- pytest facilita fixtures, parametrización y pruebas legibles en Python;
+- `go test` está integrado al toolchain de Go y mide cobertura sin una dependencia
+  externa;
+- Jest ofrece mocks, aserciones y cobertura, mientras `ts-jest` transforma TypeScript
+  durante la ejecución.
+
+La cobertura se concentra en dominio, aplicación y código puro. Los entrypoints,
+adaptadores de infraestructura y transportes que abren conexiones reales pertenecen a
+pruebas de integración o de extremo a extremo; incluirlos artificialmente en la métrica
+unitaria haría menos representativa la puerta de calidad.
+
+### ¿Para qué?
+
+Estas herramientas verifican reglas como autenticación, permisos de rutas, planes,
+pagos, conversión de moneda, notificaciones, catálogo, reproducción y recomendaciones.
+También permiten detectar regresiones antes del merge y generan evidencia cuantificable
+para que el pipeline detenga una versión cuando falla una suite o no se alcanza el umbral
+de cobertura.
+
+El inventario y los resultados de las suites se detallan en
+[Pruebas unitarias](../Pruebas/PruebasUnitarias.md).
+
+## 17. Locust — Pruebas de carga
+
+### ¿Qué?
+
+Se utiliza **Locust** para simular tráfico HTTP concurrente contra Quetzal TV mediante un
+escenario escrito en Python. El archivo `locust/locustfile.py` define dos perfiles:
+
+- usuarios anónimos que consultan salud, catálogo, planes y divisas;
+- usuarios autenticados que inician sesión y consultan recursos protegidos.
+
+Locust puede ejecutarse con interfaz web para observar la prueba en vivo o en modo
+`headless` para automatizarla y producir un reporte HTML. Registra solicitudes por
+segundo, tiempos de respuesta, percentiles y fallos por endpoint.
+
+### ¿Por qué?
+
+Las pruebas unitarias demuestran que una función se comporta correctamente de forma
+aislada, pero no muestran qué ocurre cuando varios usuarios recorren simultáneamente el
+API Gateway y los microservicios. Locust cubre esa necesidad con escenarios programables
+que representan proporciones y pausas de usuarios más realistas que una repetición fija
+de una sola URL.
+
+Se eligió además porque el escenario se conserva como código, puede versionarse junto a
+la aplicación y resulta fácil de extender con nuevos recorridos.
+
+### ¿Para qué?
+
+Locust se utiliza para medir capacidad y latencia, identificar endpoints lentos,
+observar errores bajo concurrencia y validar que respuestas esperadas —como un `401` sin
+JWT— no se contabilicen como fallos funcionales. El reporte sirve como evidencia de
+comportamiento del sistema desplegado y como punto de comparación para futuras
+optimizaciones.
+
+La configuración y forma de ejecución se describen en
+[Pruebas de carga con Locust](../Locust/Locust.md).
+
+## 18. Elasticsearch, Logstash y Kibana — Centralización de logs
+
+### ¿Qué?
+
+Se utiliza el stack **ELK** en el namespace `quetzaltv-prod`:
+
+- **Logstash:** se ejecuta como `DaemonSet`, lee los logs de los pods desde cada nodo,
+  interpreta el formato CRI, extrae metadatos de Kubernetes y envía los eventos;
+- **Elasticsearch:** indexa y almacena los eventos en índices diarios
+  `logstash-quetzaltv-YYYY.MM.dd`, con un volumen persistente;
+- **Kibana:** consulta Elasticsearch y permite explorar los eventos mediante filtros de
+  tiempo y búsquedas KQL.
+
+### ¿Por qué?
+
+En Kubernetes los pods son efímeros y pueden ser recreados o reemplazados durante un
+rollout. Consultar únicamente `kubectl logs` obliga a conocer el pod y dificulta
+relacionar eventos de varios microservicios. ELK concentra esos registros en un punto
+consultable y conserva contexto como namespace, pod, contenedor, ambiente y mensaje.
+
+El `DaemonSet` garantiza un recolector Logstash por nodo, Elasticsearch proporciona
+búsqueda e indexación adecuadas para un volumen continuo de texto y Kibana ofrece una
+interfaz especializada para investigar los datos sin consultar manualmente cada índice.
+
+### ¿Para qué?
+
+El stack permite buscar errores por servicio, investigar respuestas `401` o `500`,
+seguir operaciones distribuidas y diagnosticar fallos de base de datos, GCS, streaming o
+autorización. También centraliza la evidencia operativa aunque el pod que originó un
+evento ya no exista.
+
+La instalación y las consultas de diagnóstico se documentan en
+[Centralización de logs con ELK](../EL-STACK/elstack.md).
+
+## 19. Prometheus y Grafana — Observabilidad de métricas
+
+### ¿Qué?
+
+Se utiliza **Prometheus** para recolectar series temporales y **Grafana** para presentar
+la telemetría en dashboards. Ambos se despliegan en el namespace separado
+`quetzaltv-monitoring`.
+
+Prometheus obtiene métricas mediante:
+
+- descubrimiento de servicios y pods anotados en `quetzaltv-prod`;
+- **Node Exporter** como `DaemonSet` para métricas de los nodos de GKE;
+- **kube-state-metrics** para el estado de recursos de Kubernetes;
+- `node_exporter` instalado por Ansible en VM3 y registrado como objetivo externo.
+
+Grafana utiliza Prometheus como fuente de datos predeterminada y carga dashboards desde
+ConfigMaps. Sus credenciales administrativas se obtienen de un Secret y su información
+se conserva en un volumen persistente.
+
+### ¿Por qué?
+
+Los logs explican eventos concretos, mientras las métricas muestran tendencias y cambios
+del sistema a lo largo del tiempo. Prometheus fue elegido por su modelo de recolección
+`pull`, su lenguaje de consulta PromQL y su integración con el descubrimiento de
+Kubernetes. Grafana complementa esa recolección con paneles que facilitan comparar
+consumo, disponibilidad y estado sin interpretar series crudas.
+
+Separar el monitoreo en su propio namespace reduce el acoplamiento con los recursos de la
+aplicación. El descubrimiento dinámico evita mantener IPs de pods, mientras el mecanismo
+de objetivos externos permite incorporar la VM de PostgreSQL sin moverla dentro de GKE.
+
+### ¿Para qué?
+
+Prometheus y Grafana se utilizan para observar disponibilidad de objetivos, CPU, memoria,
+red, disco, estado de pods, Deployments y nodos, además de la VM externa de bases de
+datos. Los dashboards ayudan a detectar saturación, reinicios o pérdida de capacidad y a
+correlacionar esas señales con los eventos centralizados en ELK.
+
 ## Conclusión
 
 Las decisiones adoptadas mantienen coherencia entre desarrollo, persistencia, seguridad y
 despliegue. La arquitectura políglota aprovecha las fortalezas de Python, Go y TypeScript;
-PostgreSQL y Redis separan persistencia y caché; GitHub Actions automatiza las entregas; y
-GCP proporciona Compute Engine, GKE, Artifact Registry y Cloud Storage para ejecutar la
-plataforma en dos entornos diferenciados.
+PostgreSQL y Redis separan persistencia y caché; Terraform y Ansible hacen repetible la
+infraestructura; las herramientas de pruebas y Locust validan corrección y carga; GitHub
+Actions automatiza las entregas; y GCP proporciona Compute Engine, GKE, Artifact Registry
+y Cloud Storage para ejecutar la plataforma en dos entornos diferenciados. ELK centraliza
+los eventos operativos, mientras Prometheus y Grafana proporcionan visibilidad sobre las
+métricas de Kubernetes y la infraestructura externa.
 
 [Volver a Documentación](../Documentación.md)

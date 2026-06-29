@@ -19,15 +19,15 @@ Es una herramienta de automatización de configuración agentless o sea que no r
 ### Estructura de archivos
 
 ```
-└── 📁ansible
-    └── 📁group_vars
+└── ansible
+    └── group_vars
         ├── all.yml
-    └── 📁playbooks
+    └── playbooks
         ├── app_vms.yml
         ├── db_vm.yml
         ├── monitoring_vm3.yml
         ├── site.yml
-    └── 📁templates
+    └── emplates
         ├── env_vm1.j2
         ├── env_vm2.j2
         ├── env_vm3.j2
