@@ -391,7 +391,26 @@ jobs:
 
       - name: Aplicar manifiestos al clúster
         run: |
-          kubectl apply -f k8s/
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl apply -f k8s/01-configmap.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/02-redis.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/03-usuario.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/04-suscripcion.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/05-catalogo.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/06-streaming.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/07-divisas.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/08-cobros.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/09-notificaciones.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/10-api-gateway.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/11-frontend.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/12-ingress.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/13-depuracion-usuarios.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/14-prometheus.yaml
+          kubectl apply -f k8s/15-grafana.yaml
+          kubectl apply -f k8s/16-prometheus-vm-targets.yaml
+          kubectl apply -f k8s/17-grafana-dashboards.yaml
+          kubectl apply -f k8s/18-kube-state-metrics.yaml
+          kubectl apply -f k8s/19-node-exporter.yaml
           echo "✓ Manifiestos aplicados"
 
       - name: Esperar rollout y verificar salud
