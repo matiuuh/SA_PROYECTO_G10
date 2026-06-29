@@ -691,7 +691,426 @@ Devuelve el número de ejecuciones completadas desde que el contenedor arrancó.
 
 ---
 
-## 5. Verificación rápida combinada
+## 5. Pruebas de carga — Locust
+
+> Directorio: `locust/` · Archivo principal: `locust/locustfile.py`
+
+### ¿Qué es Locust?
+
+**Locust** es una herramienta de pruebas de carga escrita en Python. Permite simular miles de usuarios concurrentes enviando peticiones HTTP a la plataforma y medir tiempos de respuesta, tasa de errores y throughput (RPS).
+
+El script de Quetzal TV simula dos perfiles de usuario:
+
+| Clase | Peso | Comportamiento |
+|---|---|---|
+| `UsuarioAnonimo` | 70 % | Navega catálogo, planes y divisas sin autenticarse |
+| `UsuarioAutenticado` | 30 % | Inicia sesión y consulta su perfil, catálogo y monedas |
+
+### Prerequisito — Instalar Locust
+
+```powershell
+pip install locust
+# o usando el requirements del proyecto:
+pip install -r locust/requirements.txt
+```
+
+Verificar la instalación:
+
+```powershell
+locust --version
+```
+
+### Credenciales para el usuario autenticado
+
+El `UsuarioAutenticado` necesita una cuenta real en el sistema. Crear una desde el frontend (`http://8.232.249.93`) y luego exportar las variables antes de correr Locust:
+
+```powershell
+# PowerShell
+$env:LOCUST_EMAIL    = "correo@ejemplo.com"
+$env:LOCUST_PASSWORD = "contraseña"
+```
+
+```bash
+# Bash/Linux
+export LOCUST_EMAIL="correo@ejemplo.com"
+export LOCUST_PASSWORD="contraseña"
+```
+
+Si no se exportan, el script usa los defaults `test@quetzaltv.com` / `Test1234!` y el login fallará con 401 — las tareas autenticadas se saltarán automáticamente sin detener la prueba.
+
+### Opción A — Interfaz web (recomendada para ver tráfico en vivo)
+
+```powershell
+locust -f locust/locustfile.py --host http://8.232.249.93
+```
+
+Abre `http://localhost:8089` en el navegador. Configura:
+- **Number of users:** 50
+- **Spawn rate:** 5
+
+Haz clic en **Start swarming**. Verás en tiempo real:
+
+- Tabla de peticiones con RPS, tiempos de respuesta (mediana, p95) y tasa de fallos
+- Gráficas de RPS y tiempos de respuesta por endpoint
+- Pestaña **Failures** con detalle de errores
+- Pestaña **Charts** con evolución temporal
+
+Al terminar, descarga el reporte desde el botón **Download Report** en la UI.
+
+### Opción B — Headless (terminal + reporte HTML)
+
+```powershell
+locust -f locust/locustfile.py `
+  --headless `
+  --users 50 `
+  --spawn-rate 5 `
+  --run-time 60s `
+  --host http://8.232.249.93 `
+  --html locust/reporte.html
+```
+
+```bash
+# Bash/Linux
+locust -f locust/locustfile.py \
+  --headless \
+  --users 50 \
+  --spawn-rate 5 \
+  --run-time 60s \
+  --host http://8.232.249.93 \
+  --html locust/reporte.html
+```
+
+El reporte queda en `locust/reporte.html`. Ábrelo con cualquier navegador al finalizar.
+
+Al terminar se imprime un resumen en consola:
+
+```
+╔══════════════════════════════════════════════════════╗
+║         RESUMEN — Prueba de carga Quetzal TV        ║
+╚══════════════════════════════════════════════════════╝
+  Peticiones totales : 3247
+  Fallos             : 0
+  RPS promedio       : 54.1
+  Tiempo resp. medio : 312 ms
+  Tiempo resp. p95   : 780 ms
+  Tiempo resp. p99   : 1203 ms
+```
+
+### Endpoints que se prueban
+
+| Endpoint | Clase | Peso relativo |
+|---|---|---|
+| `GET /health` | Anónimo | bajo |
+| `GET /api/catalogo/api/v1/catalog` | Ambas | alto |
+| `GET /api/catalogo/api/v1/catalog/search?q=<término>` | Anónimo | medio |
+| `GET /api/suscripcion/api/v1/plans` | Ambas | medio |
+| `GET /api/divisas/api/v1/monedas` | Anónimo | medio |
+| `GET /api/divisas/api/v1/tipo-cambio?...` | Anónimo | medio |
+| `GET /api/usuario/api/v1/auth/me` (sin JWT) | Anónimo | bajo — debe retornar 401 |
+| `POST /api/usuario/api/v1/auth/login` | Autenticado | una vez al iniciar |
+| `GET /api/usuario/api/v1/auth/me` (con JWT) | Autenticado | alto |
+| `POST /api/divisas/api/v1/convertir` | Autenticado | bajo |
+
+### Interpretar resultados
+
+- **Failures = 0** — ningún endpoint retornó error inesperado ✅
+- **El endpoint `GET /api/usuario/me — sin JWT` marca failure si NO retorna 401** — es un test de seguridad invertido
+- **p95 < 1 000 ms** — comportamiento aceptable bajo carga
+- **RPS > 30** con 50 usuarios concurrentes es el mínimo esperado para la infraestructura actual
+
+### Causas comunes de fallos durante la prueba
+
+- Login 401: la cuenta no existe o fue eliminada por el CronJob de depuración (ver sección 4). Mientras Locust corre, el login genera sesiones activas y el CronJob no elimina la cuenta.
+- Timeout en catálogo: el servicio de catálogo puede tardar en el primer request por cold-start de la conexión a BD.
+- 500 en algún endpoint: revisar logs del pod correspondiente con `kubectl logs <pod> -n quetzaltv-prod`.
+
+---
+
+## 6. ELK Stack — Centralización de logs (GKE)
+
+> Archivos: `k8s/14-elasticsearch.yaml`, `k8s/15-kibana.yaml`, `k8s/16-logstash.yaml`  
+> Namespace: `quetzaltv-prod`
+
+### Arquitectura
+
+```
+Pods (stdout) → /var/log/containers/
+                      │
+                      ▼
+             Logstash (DaemonSet)        ← un pod por nodo del clúster
+             — lee logs de todos los containers
+             — parsea formato CRI de GKE (containerd)
+             — extrae metadatos: pod, namespace, container
+                      │
+                      ▼
+             Elasticsearch (Deployment)  ← indexa y almacena
+             — índice diario: quetzaltv-logs-YYYY.MM.dd
+                      │
+                      ▼
+             Kibana (Deployment)         ← UI de búsqueda y visualización
+```
+
+### Instalar / aplicar el stack
+
+```bash
+kubectl apply -f k8s/14-elasticsearch.yaml
+kubectl apply -f k8s/15-kibana.yaml
+kubectl apply -f k8s/16-logstash.yaml
+```
+
+Elasticsearch tarda ~2 minutos en estar listo. Kibana tarda ~3 minutos.
+
+### Verificar que los pods están corriendo
+
+```bash
+kubectl get pods -n quetzaltv-prod -l 'app in (elasticsearch,logstash,kibana)'
+```
+
+Salida esperada:
+
+```
+NAME                             READY   STATUS    RESTARTS   AGE
+elasticsearch-775d9bd8c4-xxxx    1/1     Running   0          10m
+kibana-5dc76bbcb6-xxxx           1/1     Running   0          10m
+logstash-xxxx                    1/1     Running   0          5m
+logstash-yyyy                    1/1     Running   0          5m
+```
+
+Logstash aparece dos veces porque es un DaemonSet: un pod por nodo del clúster.
+
+### Verificar que Elasticsearch está recibiendo logs
+
+```bash
+kubectl exec -n quetzaltv-prod deployment/elasticsearch -- \
+  curl -s "http://localhost:9200/_cat/indices?v&index=quetzaltv*"
+```
+
+Salida esperada:
+
+```
+health status index                          docs.count store.size
+yellow open   quetzaltv-logs-2026.06.28      80114      35.3mb
+yellow open   quetzaltv-logs-2026.06.29        896       1.6mb
+```
+
+`docs.count` > 0 confirma que Logstash está enviando logs. Se crea un índice nuevo por día.
+
+### Verificar salud de Elasticsearch
+
+```bash
+kubectl exec -n quetzaltv-prod deployment/elasticsearch -- \
+  curl -s http://localhost:9200/_cluster/health | python3 -m json.tool
+```
+
+`"status": "green"` o `"yellow"` es normal (yellow = réplica sin asignar por ser nodo único).
+
+### Acceder a Kibana
+
+```bash
+kubectl port-forward svc/kibana 5601:5601 -n quetzaltv-prod
+```
+
+Luego abre `http://localhost:5601`.
+
+**Primera vez — crear Data View:**
+1. Menú lateral → **Discover**
+2. **Create data view**
+3. Index pattern: `logstash-quetzaltv-*`
+4. Timestamp field: `@timestamp`
+5. **Save data view to Kibana**
+
+### Buscar logs en Kibana (KQL)
+
+```
+# Todos los logs de un servicio
+k8s_pod_name : usuario-service*
+
+# Solo errores
+message : "error" or message : "ERROR"
+
+# Errores en un servicio específico
+k8s_pod_name : streaming-service* and message : "error"
+
+# Logs de watch party
+k8s_pod_name : streaming-service* and message : "watchparty"
+
+# Respuestas 500 o 401
+message : "500" or message : "401"
+```
+
+Combina las búsquedas con el filtro de tiempo (arriba a la derecha).
+
+### Ver logs de Logstash (para diagnosticar)
+
+```bash
+kubectl logs -n quetzaltv-prod -l app=logstash --tail=20
+```
+
+### Causas comunes de que no lleguen logs
+
+- Logstash en CrashLoopBackOff: revisar límites de memoria (necesita mínimo 512Mi)
+- Índices no creados: Elasticsearch no está listo aún — esperar 2 minutos
+- Kibana no abre: aumentar límite de memoria a 1.5Gi si hay OOMKilled
+
+---
+
+## 6b. Kibana — Búsqueda de logs por servicio
+
+Una vez abierto Kibana (`kubectl port-forward svc/kibana 5601:5601 -n quetzaltv-prod` → `http://localhost:5601`), ve a **Discover** con el data view `logstash-quetzaltv-*`.
+
+El campo clave para filtrar por servicio es **`k8s_pod_name`**, que Logstash extrae automáticamente del nombre del archivo de log. También puedes buscar por **`message`** para filtrar por contenido del log.
+
+### Comandos KQL por servicio
+
+#### API Gateway (TypeScript · Node.js)
+```
+k8s_pod_name : api-gateway*
+```
+Qué buscar: rutas bloqueadas, JWT inválidos, errores de proxy.
+```
+k8s_pod_name : api-gateway* and message : "401"
+k8s_pod_name : api-gateway* and message : "403"
+k8s_pod_name : api-gateway* and message : "upstream"
+```
+
+#### Servicio de Usuarios (Python · FastAPI)
+```
+k8s_pod_name : usuario-service*
+```
+Qué buscar: registros, logins, errores de BD.
+```
+k8s_pod_name : usuario-service* and message : "login"
+k8s_pod_name : usuario-service* and message : "registro"
+k8s_pod_name : usuario-service* and message : "error"
+k8s_pod_name : usuario-service* and message : "UniqueViolation"
+```
+
+#### Servicio de Suscripciones (Python · FastAPI)
+```
+k8s_pod_name : suscripcion-service*
+```
+Qué buscar: cambios de plan, verificación premium, pagos.
+```
+k8s_pod_name : suscripcion-service* and message : "plan"
+k8s_pod_name : suscripcion-service* and message : "premium"
+k8s_pod_name : suscripcion-service* and message : "error"
+```
+
+#### Servicio de Catálogo (Go)
+```
+k8s_pod_name : catalogo-service*
+```
+Qué buscar: búsquedas, URLs firmadas de GCS, errores de permisos IAM.
+```
+k8s_pod_name : catalogo-service* and message : "error"
+k8s_pod_name : catalogo-service* and message : "GCS"
+k8s_pod_name : catalogo-service* and message : "signBlob"
+k8s_pod_name : catalogo-service* and message : "catalogo"
+```
+
+#### Servicio de Streaming y Watch Party (Go)
+```
+k8s_pod_name : streaming-service*
+```
+Qué buscar: creación de salas, verificación premium, reproducción.
+```
+k8s_pod_name : streaming-service* and message : "watchparty"
+k8s_pod_name : streaming-service* and message : "premium"
+k8s_pod_name : streaming-service* and message : "error"
+k8s_pod_name : streaming-service* and message : "websocket"
+```
+
+#### Servicio de Cobros (Python · FastAPI)
+```
+k8s_pod_name : cobros-service*
+```
+Qué buscar: transacciones, pagos fallidos.
+```
+k8s_pod_name : cobros-service* and message : "error"
+k8s_pod_name : cobros-service* and message : "pago"
+```
+
+#### Servicio de Divisas / FX (Go · Redis Cache)
+```
+k8s_pod_name : divisas-service*
+```
+Qué buscar: consultas de tipo de cambio, hits/misses de caché Redis.
+```
+k8s_pod_name : divisas-service* and message : "cache"
+k8s_pod_name : divisas-service* and message : "error"
+k8s_pod_name : divisas-service* and message : "tipo-cambio"
+```
+
+#### Servicio de Notificaciones (Python)
+```
+k8s_pod_name : notificaciones-service*
+```
+Qué buscar: envíos de correo, fallos SMTP.
+```
+k8s_pod_name : notificaciones-service* and message : "email"
+k8s_pod_name : notificaciones-service* and message : "error"
+k8s_pod_name : notificaciones-service* and message : "correo"
+```
+
+#### CronJob — Depuración de usuarios
+```
+k8s_pod_name : depuracion-usuarios*
+```
+Qué buscar: ejecuciones del cron, cuentas eliminadas.
+```
+k8s_pod_name : depuracion-usuarios* and message : "COMMIT"
+k8s_pod_name : depuracion-usuarios* and message : "UPDATE"
+```
+
+### Ver errores de TODOS los servicios a la vez
+
+```
+k8s_namespace : quetzaltv-prod and (message : "error" or message : "ERROR" or message : "Error")
+```
+
+### Ver actividad en los últimos minutos (todos los servicios)
+
+Cambia el rango de tiempo arriba a la derecha a **Last 5 minutes** y deja la búsqueda vacía — verás el flujo completo de todos los servicios en tiempo real.
+
+### Columnas recomendadas en Discover
+
+Haz clic en **Columns** (arriba a la derecha de la tabla) y agrega:
+- `k8s_pod_name` — qué servicio generó el log
+- `stream` — `stdout` o `stderr`
+- `message` — el texto del log
+
+Esto hace mucho más fácil leer los resultados sin tener que abrir cada documento.
+
+---
+
+## 6c. Resolución de incidentes con Kibana
+
+### Problema resuelto: catálogo sin portadas (Error IAM signBlob)
+
+**Síntoma:** Las películas no cargaban sus imágenes en el frontend.
+
+**Diagnóstico en Kibana:**
+```
+k8s_pod_name : catalogo-service* and message : "signBlob"
+```
+Aparecía el error: `Permission 'iam.serviceAccounts.signBlob' denied`.
+
+**Causa raíz:** El servicio de catálogo en GKE usa Workload Identity para acceder a GCS. Para generar URLs firmadas V4 (necesarias para las portadas), la Service Account necesita el permiso `signBlob` sobre sí misma. En develop esto no ocurre porque se usa un archivo de clave JSON local que firma directamente. En GKE con Workload Identity, la firma se delega a la API de IAM y requiere ese permiso explícito.
+
+**Solución aplicada:**
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  quetzal-tv-storage@sa-proyecto-g10-500320.iam.gserviceaccount.com \
+  --member="serviceAccount:quetzal-tv-storage@sa-proyecto-g10-500320.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=sa-proyecto-g10-500320
+
+kubectl rollout restart deployment/catalogo-service -n quetzaltv-prod
+```
+
+---
+
+## 7. Verificación rápida combinada
 
 Secuencia de comandos para confirmar de un vistazo que todo está en pie:
 
