@@ -272,7 +272,7 @@ jobs:
             set -e
             DATE=$(date +%Y%m%d_%H%M%S)
 
-            echo "${GCP_SA_KEY}" > /tmp/sa-key.json
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' > /tmp/sa-key.json
             gcloud auth activate-service-account --key-file=/tmp/sa-key.json --quiet
             rm /tmp/sa-key.json
 
