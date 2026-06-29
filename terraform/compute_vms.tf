@@ -67,7 +67,7 @@ resource "google_compute_instance" "vm3" {
   name         = "quetzaltv-vm3"
   machine_type = var.vm_machine_type_db
   zone         = var.zone
-  tags         = ["quetzaltv-vm"]
+  tags         = ["quetzaltv-vm", "quetzaltv-monitoring-target"]
 
   boot_disk {
     initialize_params {

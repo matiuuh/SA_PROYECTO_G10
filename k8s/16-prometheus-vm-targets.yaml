@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-vm-targets
+  namespace: quetzaltv-monitoring
+data:
+  vm3-node-exporter.json: |
+    [
+      {
+        "labels": {
+          "env": "release",
+          "instance": "vm3",
+          "job": "node-exporter",
+          "role": "database"
+        },
+        "targets": [
+          "${VM3_INTERNAL_IP}:9100"
+        ]
+      }
+    ]
