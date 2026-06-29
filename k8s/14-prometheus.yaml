@@ -10,27 +10,25 @@ metadata:
   namespace: quetzaltv-monitoring
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: prometheus-discovery
-  namespace: quetzaltv-prod
 rules:
   - apiGroups: [""]
     resources: ["services", "endpoints", "pods"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: prometheus-discovery
-  namespace: quetzaltv-prod
 subjects:
   - kind: ServiceAccount
     name: prometheus
     namespace: quetzaltv-monitoring
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: prometheus-discovery
 ---
 apiVersion: v1
@@ -134,6 +132,22 @@ data:
           - action: labelmap
             regex: __meta_kubernetes_pod_node_name
             replacement: kubernetes_node
+          - target_label: env
+            replacement: release
+
+      - job_name: quetzaltv-monitoring-kube-state-metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - quetzaltv-monitoring
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: kube-state-metrics
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: http-metrics
           - target_label: env
             replacement: release
 
