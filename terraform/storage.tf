@@ -1,7 +1,7 @@
 resource "google_storage_bucket" "backups" {
   name          = "quetzaltv-backups-${var.project_id}"
   location      = var.region
-  force_destroy = false
+  force_destroy = true
 
   # Limpia backups con más de 30 días automáticamente
   lifecycle_rule {
@@ -19,7 +19,7 @@ resource "google_storage_bucket" "backups" {
 resource "google_storage_bucket" "streaming" {
   name          = "quetzaltv-streaming-g10"
   location      = var.region
-  force_destroy = false
+  force_destroy = true
 
   cors {
     origin          = ["*"]
