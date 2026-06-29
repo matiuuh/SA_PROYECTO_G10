@@ -391,7 +391,7 @@ jobs:
 
       - name: Aplicar manifiestos al clúster
         run: |
-          kubectl apply -f k8s/ --namespace=quetzaltv-prod
+          kubectl apply -f k8s/
           echo "✓ Manifiestos aplicados"
 
       - name: Esperar rollout y verificar salud
