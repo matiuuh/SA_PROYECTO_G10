@@ -62,6 +62,11 @@ Integrantes:
 
 ### Mockups Del Frontend
 - [Mockups](./19_Mockups/mockups.md)
+### Diagramas Estructurales, Comportamentales y Persistencia
+- [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
+- [Despliegue de infraestructura](./Terraform/terraform.md)
+- [Configuración de infraestructura](./ansible/ansible.md)
+- [Observabilidad de métricas con Prometheus y Grafana](./PrometheusGrafana/prometheus-grafana.md)
 
 ## Introducción
 
@@ -86,3 +91,4 @@ Este archivo funciona como índice principal de la documentación. Desde aquí s
 4. La contenedorización con Docker y la configuración de dos entornos diferenciados mediante Docker Compose garantizan que el sistema sea reproducible y portable, eliminando discrepancias entre el entorno de desarrollo local y el de producción en la nube.
 
 5. La centralización del enrutamiento, la validación de sesiones y el control de acceso en el API Gateway establece un perímetro de seguridad claro, asegurando que ningún microservicio quede expuesto directamente al cliente externo.
+
