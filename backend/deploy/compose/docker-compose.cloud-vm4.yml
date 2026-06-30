@@ -69,7 +69,30 @@ services:
       COBROS_SERVICE_URL:         http://${VM2_HOST}:8006
       DIVISAS_SERVICE_URL:        http://${VM2_HOST}:8005
       NOTIFICACIONES_SERVICE_URL: http://${VM2_HOST}:8007
-    ports:
-      - "80:80"
     depends_on:
       - frontend
+
+  # TLS publico: obtiene y renueva automaticamente el certificado.
+  https-proxy:
+    image: caddy:2.8-alpine
+    container_name: quetzal-https-proxy
+    restart: unless-stopped
+    command:
+      - caddy
+      - reverse-proxy
+      - --from
+      - ${PUBLIC_DOMAIN:?PUBLIC_DOMAIN es requerido}
+      - --to
+      - api-gateway:80
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api-gateway
+
+volumes:
+  caddy_data:
+  caddy_config:

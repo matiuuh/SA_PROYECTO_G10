@@ -427,11 +427,12 @@ jobs:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           AR_REGION: ${{ secrets.AR_REGION }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          VM4_HOST: ${{ secrets.VM4_HOST }}
         with:
           host: ${{ secrets.VM4_HOST }}
           username: ${{ secrets.VM_USER }}
           key_path: /tmp/deploy_key
-          envs: IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCP_PROJECT_ID
+          envs: IMAGE_TAG,GCP_SA_KEY,AR_REGION,GCP_PROJECT_ID,VM4_HOST
           script: |
             set -e
 
@@ -447,6 +448,7 @@ jobs:
             grep -v "^AR_REGISTRY=\|^IMAGE_TAG=" backend/deploy/compose/.env > "${DEPLOY_ENV}" 2>/dev/null || true
             echo "AR_REGISTRY=${AR_REGISTRY}" >> "${DEPLOY_ENV}"
             echo "IMAGE_TAG=${IMAGE_TAG}"     >> "${DEPLOY_ENV}"
+            echo "PUBLIC_DOMAIN=${VM4_HOST}.nip.io" >> "${DEPLOY_ENV}"
 
             docker compose -f backend/deploy/compose/docker-compose.cloud-vm4.yml \
               --env-file "${DEPLOY_ENV}" pull
@@ -473,4 +475,4 @@ jobs:
       - name: Ejecutar smoke tests contra VM4
         run: |
           chmod +x scripts/smoke-test.sh
-          bash scripts/smoke-test.sh "http://${{ secrets.VM4_HOST }}"
+          bash scripts/smoke-test.sh "https://${{ secrets.VM4_HOST }}.nip.io"
