@@ -80,7 +80,7 @@ Si no se exportan, se usan los defaults `test@quetzaltv.com` / `Test1234!` y el 
 #### Interfaz web
 
 ```powershell
-locust -f locust/locustfile.py --host http://8.232.249.93
+locust -f locust/locustfile.py --host http://34.111.20.79
 ```
 
 Abrir `http://localhost:8089`. Configurar:
@@ -101,8 +101,8 @@ locust -f locust/locustfile.py `
   --users 50 `
   --spawn-rate 5 `
   --run-time 60s `
-  --host http://8.232.249.93 `
-  --html locust/reporte.html
+  --host http://34.111.20.79 `
+  --html reporte.html
 ```
 
 ```bash
@@ -112,8 +112,8 @@ locust -f locust/locustfile.py \
   --users 50 \
   --spawn-rate 5 \
   --run-time 60s \
-  --host http://8.232.249.93 \
-  --html locust/reporte.html
+  --host http://34.111.20.79 \
+  --html reporte.html
 ```
 
 ![reporte](./img/bash.png)
