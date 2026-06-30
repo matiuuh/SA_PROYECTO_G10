@@ -209,6 +209,7 @@
       loop:
         - { src: "../../backend/services/streaming/database/sql/01_schema.sql",    dest: "01_schema.sql" }
         - { src: "../../backend/services/streaming/database/sql/02_procedures.sql",dest: "02_procedures.sql" }
+        - { src: "../../backend/services/streaming/database/sql/03_watchparty.sql",dest: "03_watchparty.sql" }
 
     - name: Copiar SQL de divisas
       copy:

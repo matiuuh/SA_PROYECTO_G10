@@ -92,6 +92,7 @@ services:
       GRPC_PORT: 5004
       HTTP_PORT: 8004
       CATALOGO_API_URL: http://${VM1_HOST}:8003
+      SUSCRIPCION_SERVICE_URL: http://${VM1_HOST}:8002
       GCS_BUCKET: quetzaltv-streaming-g10
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
     volumes:
