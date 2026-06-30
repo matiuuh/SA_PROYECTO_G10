@@ -94,19 +94,13 @@ services:
         HAVING COALESCE(MAX(s.iniciada_en), c.creado_en)
           < NOW() - INTERVAL '5 minutes';
 
-        UPDATE usuarios.sesiones
-        SET cerrada_en = COALESCE(cerrada_en, NOW())
-        WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas);
-
-        UPDATE usuarios.perfiles
-        SET activo = FALSE,
-            eliminado_en = COALESCE(eliminado_en, NOW())
-        WHERE cuenta_id IN (SELECT id FROM cuentas_inactivas)
-          AND eliminado_en IS NULL;
-
-        UPDATE usuarios.cuentas
-        SET eliminado_en = NOW()
-        WHERE id IN (SELECT id FROM cuentas_inactivas);
+        WITH cuentas_eliminadas AS (
+          DELETE FROM usuarios.cuentas
+          WHERE id IN (SELECT id FROM cuentas_inactivas)
+          RETURNING id
+        )
+        SELECT COUNT(*) AS cuentas_eliminadas
+        FROM cuentas_eliminadas;
 
         COMMIT;
         SQL
