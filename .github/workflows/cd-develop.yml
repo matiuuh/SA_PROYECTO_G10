@@ -217,6 +217,15 @@ jobs:
           chmod 600 /tmp/deploy_key
           ssh-keyscan -H ${{ secrets.VM3_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: Copiar esquema y compose actualizados a VM3
+        run: |
+          scp -i /tmp/deploy_key \
+            backend/services/streaming/database/sql/03_watchparty.sql \
+            ${{ secrets.VM_USER }}@${{ secrets.VM3_HOST }}:/opt/quetzaltv/backend/services/streaming/database/sql/03_watchparty.sql
+          scp -i /tmp/deploy_key \
+            backend/deploy/compose/docker-compose.cloud-vm3.yml \
+            ${{ secrets.VM_USER }}@${{ secrets.VM3_HOST }}:/opt/quetzaltv/backend/deploy/compose/docker-compose.cloud-vm3.yml
+
       - name: Ejecutar backup en VM3 vía SSH
         uses: appleboy/ssh-action@v1
         env:
@@ -262,6 +271,17 @@ jobs:
             backup_db "quetzal_notificaciones" "quetzal-postgres-notificaciones"
 
             echo "=== Backup completo: ${DATE} ==="
+
+            echo "=== Aplicando esquema de Watch Party ==="
+            cd /opt/quetzaltv
+            docker exec -i quetzal-postgres-streaming \
+              psql -v ON_ERROR_STOP=1 -U postgres -d quetzal_streaming \
+              < backend/services/streaming/database/sql/03_watchparty.sql
+            docker compose \
+              -f backend/deploy/compose/docker-compose.cloud-vm3.yml \
+              --env-file backend/deploy/compose/.env \
+              up -d --force-recreate postgres-streaming
+            echo "=== Esquema de Watch Party aplicado ==="
 
   # ════════════════════════════════════════════════════════════════════════════
   # 3–5. DESPLIEGUE A VMs — espera que build y backup terminen
