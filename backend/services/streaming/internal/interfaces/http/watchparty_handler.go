@@ -17,11 +17,12 @@ import (
 )
 
 type WatchPartyHandler struct {
-	repo    *postgres.WatchPartyRepository
-	clients map[string]*wpClient // perfilID → client
-	rooms   map[string]map[string]bool // salaID → set<perfilID>
-	mu      sync.Mutex
-	upgrader websocket.Upgrader
+	repo            *postgres.WatchPartyRepository
+	clients         map[string]*wpClient       // perfilID → client
+	rooms           map[string]map[string]bool // salaID → set<perfilID>
+	roomCloseTimers map[string]*time.Timer
+	mu              sync.Mutex
+	upgrader        websocket.Upgrader
 }
 
 type wpClient struct {
@@ -31,13 +32,16 @@ type wpClient struct {
 	perfilNombre   string
 	cuentaID       string
 	participanteID string
+	esAnfitrion    bool
+	writeMu        sync.Mutex
 }
 
 func NewWatchPartyHandler(repo *postgres.WatchPartyRepository) *WatchPartyHandler {
 	return &WatchPartyHandler{
-		repo:    repo,
-		clients: make(map[string]*wpClient),
-		rooms:   make(map[string]map[string]bool),
+		repo:            repo,
+		clients:         make(map[string]*wpClient),
+		rooms:           make(map[string]map[string]bool),
+		roomCloseTimers: make(map[string]*time.Timer),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -76,11 +80,11 @@ func (h *WatchPartyHandler) handleREST(w http.ResponseWriter, r *http.Request) {
 
 func (h *WatchPartyHandler) handleCreateSala(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PerfilID       string `json:"perfil_id"`
-		CuentaID       string `json:"cuenta_id"`
-		ContenidoID    string `json:"contenido_id"`
-		TipoContenido  string `json:"tipo_contenido"`
-		DuracionSegundos int  `json:"duracion_segundos"`
+		PerfilID         string `json:"perfil_id"`
+		CuentaID         string `json:"cuenta_id"`
+		ContenidoID      string `json:"contenido_id"`
+		TipoContenido    string `json:"tipo_contenido"`
+		DuracionSegundos int    `json:"duracion_segundos"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "JSON invalido")
@@ -176,23 +180,18 @@ func (h *WatchPartyHandler) handleWebSocket(w http.ResponseWriter, r *http.Reque
 
 	esAnfitrion := sala.CreadorPerfilID == perfilID
 
-	existing, _ := h.repo.GetParticipante(r.Context(), sala.ID, perfilID)
-	var participante *domain.ParticipanteWatchParty
-	if existing != nil {
-		participante = existing
-	} else {
-		participante = &domain.ParticipanteWatchParty{
-			SalaID:       sala.ID,
-			PerfilID:     perfilID,
-			PerfilNombre: perfilNombre,
-			CuentaID:     cuentaID,
-			EsAnfitrion:  esAnfitrion,
-		}
-		if err := h.repo.AddParticipante(r.Context(), participante); err != nil {
-			_ = conn.WriteJSON(map[string]string{"type": "error", "message": "Error al unirse a la sala."})
-			conn.Close()
-			return
-		}
+	participante := &domain.ParticipanteWatchParty{
+		SalaID:       sala.ID,
+		PerfilID:     perfilID,
+		PerfilNombre: perfilNombre,
+		CuentaID:     cuentaID,
+		EsAnfitrion:  esAnfitrion,
+		Conectado:    true,
+	}
+	if err := h.repo.AddParticipante(r.Context(), participante); err != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "message": "Error al unirse a la sala."})
+		conn.Close()
+		return
 	}
 
 	client := &wpClient{
@@ -202,6 +201,7 @@ func (h *WatchPartyHandler) handleWebSocket(w http.ResponseWriter, r *http.Reque
 		perfilNombre:   perfilNombre,
 		cuentaID:       cuentaID,
 		participanteID: participante.ID,
+		esAnfitrion:    esAnfitrion,
 	}
 
 	h.mu.Lock()
@@ -213,13 +213,16 @@ func (h *WatchPartyHandler) handleWebSocket(w http.ResponseWriter, r *http.Reque
 		old.conn.Close()
 	}
 	h.clients[perfilID] = client
+	if esAnfitrion {
+		h.cancelRoomCloseLocked(sala.ID)
+	}
 	h.mu.Unlock()
 
 	participantes, _ := h.repo.GetParticipantes(r.Context(), sala.ID)
 
-	_ = conn.WriteJSON(map[string]any{
-		"type":         "joined",
-		"sala":         sala,
+	_ = client.writeJSON(map[string]any{
+		"type":          "joined",
+		"sala":          sala,
 		"participantes": participantes,
 	})
 
@@ -233,22 +236,34 @@ func (h *WatchPartyHandler) handleWebSocket(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *WatchPartyHandler) readLoop(client *wpClient, conn *websocket.Conn) {
+	done := make(chan struct{})
 	defer func() {
+		close(done)
+
 		h.mu.Lock()
-		delete(h.clients, client.perfilID)
-		if room, ok := h.rooms[client.salaID]; ok {
-			delete(room, client.perfilID)
-			if len(room) == 0 {
-				delete(h.rooms, client.salaID)
+		current, isCurrent := h.clients[client.perfilID]
+		shouldDisconnect := isCurrent && current == client
+		if shouldDisconnect {
+			delete(h.clients, client.perfilID)
+			if room, ok := h.rooms[client.salaID]; ok {
+				delete(room, client.perfilID)
+				if len(room) == 0 {
+					delete(h.rooms, client.salaID)
+				}
+			}
+			if client.esAnfitrion {
+				h.scheduleRoomCloseLocked(client.salaID)
 			}
 		}
 		h.mu.Unlock()
 
-		_ = h.repo.MarkDisconnected(context.Background(), client.perfilID, client.salaID)
-		h.broadcastToRoom(client.salaID, map[string]any{
-			"type":      "participant_left",
-			"perfil_id": client.perfilID,
-		}, "")
+		if shouldDisconnect {
+			_ = h.repo.MarkDisconnected(context.Background(), client.perfilID, client.salaID)
+			h.broadcastToRoom(client.salaID, map[string]any{
+				"type":      "participant_left",
+				"perfil_id": client.perfilID,
+			}, "")
+		}
 		conn.Close()
 	}()
 
@@ -256,9 +271,15 @@ func (h *WatchPartyHandler) readLoop(client *wpClient, conn *websocket.Conn) {
 	defer pingTicker.Stop()
 
 	go func() {
-		for range pingTicker.C {
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+		for {
+			select {
+			case <-done:
 				return
+			case <-pingTicker.C:
+				if err := client.writeMessage(websocket.PingMessage, nil); err != nil {
+					_ = conn.Close()
+					return
+				}
 			}
 		}
 	}()
@@ -271,7 +292,7 @@ func (h *WatchPartyHandler) readLoop(client *wpClient, conn *websocket.Conn) {
 
 		var msg domain.WsMessage
 		if err := json.Unmarshal(raw, &msg); err != nil {
-			_ = conn.WriteJSON(map[string]string{"type": "error", "message": "Mensaje JSON invalido."})
+			_ = client.writeJSON(map[string]string{"type": "error", "message": "Mensaje JSON invalido."})
 			continue
 		}
 
@@ -314,15 +335,15 @@ func (h *WatchPartyHandler) readLoop(client *wpClient, conn *websocket.Conn) {
 
 		case "chat_message":
 			h.broadcastToRoom(client.salaID, map[string]any{
-				"type":           "chat_message",
-				"perfil_id":      client.perfilID,
-				"perfil_nombre":  client.perfilNombre,
-				"text":           msg.Text,
+				"type":          "chat_message",
+				"perfil_id":     client.perfilID,
+				"perfil_nombre": client.perfilNombre,
+				"text":          msg.Text,
 			}, "")
 
 		case "sync_request":
 			if sala, err := h.repo.GetSalaByID(context.Background(), client.salaID); err == nil {
-				_ = conn.WriteJSON(map[string]any{
+				_ = client.writeJSON(map[string]any{
 					"type":                "state_sync",
 					"estado_reproduccion": sala.EstadoReproduccion,
 					"position":            sala.PosicionSegundos,
@@ -331,7 +352,7 @@ func (h *WatchPartyHandler) readLoop(client *wpClient, conn *websocket.Conn) {
 
 		case "ping":
 			_ = h.repo.UpdateHeartbeat(context.Background(), client.participanteID)
-			_ = conn.WriteJSON(map[string]string{"type": "pong"})
+			_ = client.writeJSON(map[string]string{"type": "pong"})
 		}
 	}
 }
@@ -359,8 +380,58 @@ func (h *WatchPartyHandler) broadcastToRoom(salaID string, msg map[string]any, e
 		if !ok {
 			continue
 		}
-		_ = client.conn.WriteJSON(msg)
+		_ = client.writeJSON(msg)
 	}
+}
+
+func (c *wpClient) writeJSON(value any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteJSON(value)
+}
+
+func (c *wpClient) writeMessage(messageType int, data []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteMessage(messageType, data)
+}
+
+// cancelRoomCloseLocked debe llamarse con h.mu adquirido.
+func (h *WatchPartyHandler) cancelRoomCloseLocked(salaID string) {
+	if timer, ok := h.roomCloseTimers[salaID]; ok {
+		timer.Stop()
+		delete(h.roomCloseTimers, salaID)
+	}
+}
+
+// scheduleRoomCloseLocked debe llamarse con h.mu adquirido.
+func (h *WatchPartyHandler) scheduleRoomCloseLocked(salaID string) {
+	h.cancelRoomCloseLocked(salaID)
+	var timer *time.Timer
+	timer = time.AfterFunc(15*time.Second, func() {
+		h.mu.Lock()
+		if current := h.roomCloseTimers[salaID]; current != timer {
+			h.mu.Unlock()
+			return
+		}
+		delete(h.roomCloseTimers, salaID)
+		for _, client := range h.clients {
+			if client.salaID == salaID && client.esAnfitrion {
+				h.mu.Unlock()
+				return
+			}
+		}
+		h.mu.Unlock()
+
+		if err := h.repo.CloseSala(context.Background(), salaID); err != nil {
+			log.Printf("[watchparty] error closing abandoned room %s: %v", salaID, err)
+			return
+		}
+		h.broadcastToRoom(salaID, map[string]any{
+			"type": "room_closed",
+		}, "")
+	})
+	h.roomCloseTimers[salaID] = timer
 }
 
 func (h *WatchPartyHandler) checkPremium(cuentaID string) (bool, error) {

@@ -175,12 +175,16 @@ export function WatchPartyPage() {
   const savingProgressRef = useRef(false)
   const salaRef = useRef(sala)
   const syncStateRef = useRef(syncState)
+  const participantesRef = useRef(participantes)
   const hostLeftRef = useRef(false)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
   const [hostLeftCountdown, setHostLeftCountdown] = useState<number | null>(null)
 
   salaRef.current = sala
   syncStateRef.current = syncState
+  participantesRef.current = participantes
 
   useEffect(() => {
     if (hostLeftCountdown === null) return
@@ -225,15 +229,28 @@ export function WatchPartyPage() {
   }
 
   function conectarWebSocket(room: SalaWatchParty) {
-    if (!profile || !session) return
+    if (!profile || !session || !mountedRef.current) return
     const url = getWebSocketUrl(room, profile.id, profile.nombre, session.account.id)
 
-    if (wsRef.current) wsRef.current.close()
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
+    if (wsRef.current) {
+      const previous = wsRef.current
+      wsRef.current = null
+      previous.close()
+    }
 
     const ws = new WebSocket(url)
     wsRef.current = ws
 
     ws.onopen = () => {
+      if (wsRef.current !== ws || !mountedRef.current) return
       setSyncState('joined')
       setError('')
       void cargarVideo(room)
@@ -250,6 +267,10 @@ export function WatchPartyPage() {
           break
         case 'participant_joined':
           if (msg.participant) {
+            if (msg.participant.perfilId === salaRef.current?.creadorPerfilId) {
+              hostLeftRef.current = false
+              setHostLeftCountdown(null)
+            }
             setParticipantes((prev) => [...prev.filter((p) => p.perfilId !== msg.participant!.perfilId), msg.participant!])
             setMensajesChat((prev) => [...prev, { perfilId: 'system', perfilNombre: '', text: `${msg.participant!.perfilNombre} se unio a la sala` }])
             setTimeout(() => chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }), 50)
@@ -257,7 +278,7 @@ export function WatchPartyPage() {
           break
         case 'participant_left':
           if (msg.perfil_id) {
-            const nombre = participantes.find((p) => p.perfilId === msg.perfil_id)?.perfilNombre
+            const nombre = participantesRef.current.find((p) => p.perfilId === msg.perfil_id)?.perfilNombre
             if (msg.perfil_id === salaRef.current?.creadorPerfilId && !hostLeftRef.current) {
               hostLeftRef.current = true
               setHostLeftCountdown(15)
@@ -267,6 +288,16 @@ export function WatchPartyPage() {
             }
             setParticipantes((prev) => prev.filter((p) => p.perfilId !== msg.perfil_id))
           }
+          break
+        case 'room_closed':
+          hostLeftRef.current = false
+          setHostLeftCountdown(null)
+          setSyncState('idle')
+          setSala(null)
+          setParticipantes([])
+          setVideoUrl(null)
+          setError('La sala fue cerrada porque el anfitrion se desconecto.')
+          navigate('/watch-party', { replace: true })
           break
         case 'play':
           if (msg.triggered_by !== profile?.id) {
@@ -295,7 +326,7 @@ export function WatchPartyPage() {
             if (vid) vid.currentTime = msg.position ?? 0
           }
           break
-        case 'state_sync':
+        case 'state_sync': {
           suppressNextSync.current = true
           const vid3 = videoRef.current
           if (vid3) {
@@ -304,6 +335,7 @@ export function WatchPartyPage() {
             else vid3.pause()
           }
           break
+        }
         case 'chat_message':
           if (msg.perfil_nombre && msg.text) {
             setMensajesChat((prev) => [...prev, { perfilId: msg.perfil_id ?? '', perfilNombre: msg.perfil_nombre ?? '', text: msg.text ?? '' }])
@@ -316,12 +348,27 @@ export function WatchPartyPage() {
       }
     }
 
-    ws.onerror = () => setError('Error de conexion WebSocket')
+    ws.onerror = () => {
+      if (wsRef.current === ws && mountedRef.current) {
+        setError('Error de conexion WebSocket')
+      }
+    }
 
     ws.onclose = () => {
-      if (syncStateRef.current === 'joined' && !hostLeftRef.current) {
-        setError('Conexion perdida. Reconnecting...')
-        setTimeout(() => conectarWebSocket(room), 3000)
+      if (wsRef.current !== ws) return
+      wsRef.current = null
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+      if (mountedRef.current && syncStateRef.current === 'joined' && !hostLeftRef.current) {
+        setError('Conexion perdida. Reconectando...')
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null
+          if (mountedRef.current && syncStateRef.current === 'joined') {
+            conectarWebSocket(room)
+          }
+        }, 3000)
       }
     }
 
@@ -334,14 +381,21 @@ export function WatchPartyPage() {
   }
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
         pingIntervalRef.current = null
       }
       if (wsRef.current) {
-        wsRef.current.close()
+        const current = wsRef.current
         wsRef.current = null
+        current.close()
       }
     }
   }, [])
