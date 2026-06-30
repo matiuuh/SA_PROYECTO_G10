@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: quetzaltv-prod
+data:
+  pipeline.conf: |
+    input {
+      file {
+        path => "/var/log/pods/quetzaltv-prod_*/*/*.log"
+        start_position => "end"
+        sincedb_path => "/usr/share/logstash/data/sincedb"
+        mode => "tail"
+        discover_interval => 5
+      }
+    }
+
+    filter {
+      # Los logs de GKE (containerd/CRI) tienen formato:
+      # <timestamp> <stream> <flags> <mensaje>
+      grok {
+        match => {
+          "message" => "^%{TIMESTAMP_ISO8601:log_timestamp}\s+%{WORD:stream}\s+\w\s+%{GREEDYDATA:log_message}"
+        }
+        tag_on_failure => ["_cri_parse_failure"]
+      }
+
+      # Intentar parsear el mensaje como JSON (logs estructurados de Go/Python)
+      if [log_message] {
+        json {
+          source => "log_message"
+          target => "parsed"
+          skip_on_invalid_json => true
+        }
+        mutate {
+          replace => { "message" => "%{log_message}" }
+        }
+      }
+
+      # Extraer metadatos del path: /var/log/pods/<namespace>_<pod>_<uid>/<container>/<num>.log
+      grok {
+        match => {
+          "[log][file][path]" => "/var/log/pods/%{DATA:k8s_namespace}_%{DATA:k8s_pod_name}_%{DATA:k8s_uid}/%{DATA:k8s_container_name}/%{GREEDYDATA}\\.log"
+        }
+        tag_on_failure => []
+      }
+
+      mutate {
+        add_field => {
+          "environment" => "production"
+          "platform"    => "quetzaltv"
+        }
+        remove_field => ["log_message", "log_timestamp", "k8s_uid"]
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts    => ["http://elasticsearch:9200"]
+        index    => "logstash-quetzaltv-%{+YYYY.MM.dd}"
+        action   => "index"
+      }
+    }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: logstash
+  namespace: quetzaltv-prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logstash
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logstash
+subjects:
+  - kind: ServiceAccount
+    name: logstash
+    namespace: quetzaltv-prod
+roleRef:
+  kind: ClusterRole
+  name: logstash
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: logstash
+  namespace: quetzaltv-prod
+  labels:
+    app: logstash
+spec:
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      serviceAccountName: logstash
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      containers:
+        - name: logstash
+          image: docker.elastic.co/logstash/logstash:8.13.4
+          securityContext:
+            runAsUser: 0
+          env:
+            - name: LS_JAVA_OPTS
+              value: "-Xms256m -Xmx256m"
+            - name: XPACK_MONITORING_ENABLED
+              value: "false"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          args:
+            - "-f"
+            - "/usr/share/logstash/pipeline/pipeline.conf"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: pipeline
+              mountPath: /usr/share/logstash/pipeline/pipeline.conf
+              subPath: pipeline.conf
+              readOnly: true
+            - name: varlogcontainers
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: data
+              mountPath: /usr/share/logstash/data
+      volumes:
+        - name: pipeline
+          configMap:
+            name: logstash-config
+            items:
+              - key: pipeline.conf
+                path: pipeline.conf
+        - name: varlogcontainers
+          hostPath:
+            path: /var/log/containers
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: data
+          emptyDir: {}

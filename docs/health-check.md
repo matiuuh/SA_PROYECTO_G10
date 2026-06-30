@@ -691,7 +691,146 @@ Devuelve el número de ejecuciones completadas desde que el contenedor arrancó.
 
 ---
 
-## 5. Verificación rápida combinada
+## 5. Pruebas de carga — Locust
+
+> Directorio: `locust/` · Archivo principal: `locust/locustfile.py`
+
+### ¿Qué es Locust?
+
+**Locust** es una herramienta de pruebas de carga escrita en Python. Permite simular miles de usuarios concurrentes enviando peticiones HTTP a la plataforma y medir tiempos de respuesta, tasa de errores y throughput (RPS).
+
+El script de Quetzal TV simula dos perfiles de usuario:
+
+| Clase | Peso | Comportamiento |
+|---|---|---|
+| `UsuarioAnonimo` | 70 % | Navega catálogo, planes y divisas sin autenticarse |
+| `UsuarioAutenticado` | 30 % | Inicia sesión y consulta su perfil, catálogo y monedas |
+
+### Prerequisito — Instalar Locust
+
+```powershell
+pip install locust
+# o usando el requirements del proyecto:
+pip install -r locust/requirements.txt
+```
+
+Verificar la instalación:
+
+```powershell
+locust --version
+```
+
+### Credenciales para el usuario autenticado
+
+El `UsuarioAutenticado` necesita una cuenta real en el sistema. Crear una desde el frontend (`http://8.232.249.93`) y luego exportar las variables antes de correr Locust:
+
+```powershell
+# PowerShell
+$env:LOCUST_EMAIL    = "correo@ejemplo.com"
+$env:LOCUST_PASSWORD = "contraseña"
+```
+
+```bash
+# Bash/Linux
+export LOCUST_EMAIL="correo@ejemplo.com"
+export LOCUST_PASSWORD="contraseña"
+```
+
+Si no se exportan, el script usa los defaults `test@quetzaltv.com` / `Test1234!` y el login fallará con 401 — las tareas autenticadas se saltarán automáticamente sin detener la prueba.
+
+### Opción A — Interfaz web (recomendada para ver tráfico en vivo)
+
+```powershell
+locust -f locust/locustfile.py --host http://8.232.249.93
+```
+
+Abre `http://localhost:8089` en el navegador. Configura:
+- **Number of users:** 50
+- **Spawn rate:** 5
+
+Haz clic en **Start swarming**. Verás en tiempo real:
+
+- Tabla de peticiones con RPS, tiempos de respuesta (mediana, p95) y tasa de fallos
+- Gráficas de RPS y tiempos de respuesta por endpoint
+- Pestaña **Failures** con detalle de errores
+- Pestaña **Charts** con evolución temporal
+
+Al terminar, descarga el reporte desde el botón **Download Report** en la UI.
+
+### Opción B — Headless (terminal + reporte HTML)
+
+```powershell
+locust -f locust/locustfile.py `
+  --headless `
+  --users 50 `
+  --spawn-rate 5 `
+  --run-time 60s `
+  --host http://8.232.249.93 `
+  --html locust/reporte.html
+```
+
+```bash
+# Bash/Linux
+locust -f locust/locustfile.py \
+  --headless \
+  --users 50 \
+  --spawn-rate 5 \
+  --run-time 60s \
+  --host http://8.232.249.93 \
+  --html locust/reporte.html
+```
+
+El reporte queda en `locust/reporte.html`. Ábrelo con cualquier navegador al finalizar.
+
+Al terminar se imprime un resumen en consola:
+
+```
+╔══════════════════════════════════════════════════════╗
+║         RESUMEN — Prueba de carga Quetzal TV        ║
+╚══════════════════════════════════════════════════════╝
+  Peticiones totales : 3247
+  Fallos             : 0
+  RPS promedio       : 54.1
+  Tiempo resp. medio : 312 ms
+  Tiempo resp. p95   : 780 ms
+  Tiempo resp. p99   : 1203 ms
+```
+
+### Endpoints que se prueban
+
+| Endpoint | Clase | Peso relativo |
+|---|---|---|
+| `GET /health` | Anónimo | bajo |
+| `GET /api/catalogo/api/v1/catalog` | Ambas | alto |
+| `GET /api/catalogo/api/v1/catalog/search?q=<término>` | Anónimo | medio |
+| `GET /api/suscripcion/api/v1/plans` | Ambas | medio |
+| `GET /api/divisas/api/v1/monedas` | Anónimo | medio |
+| `GET /api/divisas/api/v1/tipo-cambio?...` | Anónimo | medio |
+| `GET /api/usuario/api/v1/auth/me` (sin JWT) | Anónimo | bajo — debe retornar 401 |
+| `POST /api/usuario/api/v1/auth/login` | Autenticado | una vez al iniciar |
+| `GET /api/usuario/api/v1/auth/me` (con JWT) | Autenticado | alto |
+| `POST /api/divisas/api/v1/convertir` | Autenticado | bajo |
+
+### Interpretar resultados
+
+- **Failures = 0** — ningún endpoint retornó error inesperado ✅
+- **El endpoint `GET /api/usuario/me — sin JWT` marca failure si NO retorna 401** — es un test de seguridad invertido
+- **p95 < 1 000 ms** — comportamiento aceptable bajo carga
+- **RPS > 30** con 50 usuarios concurrentes es el mínimo esperado para la infraestructura actual
+
+### Causas comunes de fallos durante la prueba
+
+- Login 401: la cuenta no existe o fue eliminada por el CronJob de depuración (ver sección 4). Mientras Locust corre, el login genera sesiones activas y el CronJob no elimina la cuenta.
+- Timeout en catálogo: el servicio de catálogo puede tardar en el primer request por cold-start de la conexión a BD.
+- 500 en algún endpoint: revisar logs del pod correspondiente con `kubectl logs <pod> -n quetzaltv-prod`.
+
+---
+
+
+
+---
+
+## 7. Verificación rápida combinada
 
 Secuencia de comandos para confirmar de un vistazo que todo está en pie:
 

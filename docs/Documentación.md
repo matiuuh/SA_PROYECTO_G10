@@ -1,4 +1,4 @@
-# Documentación del Proyecto Fase : Quetzal TV
+# Documentación del Proyecto Quetzal TV
 
 Integrantes:
 
@@ -12,41 +12,61 @@ Integrantes:
 
 ## Indice
 
-
 ### Requerimientos del sistema
 
-- [Requerimientos funcionales](./RF/RF.md)
-- [Requerimientos no funcionales](./RNF/RNF.md)
-- [Mockups Del Frontend](mockups/mockups.md)
+- [Requerimientos funcionales](./01_RF/RF.md)
+- [Requerimientos no funcionales](./02_RNF/RNF.md)
 
 ### Modelo de Casos de Uso
 
-- [Casos de uso](./CasosDeUso/casosDeUso.md)
+- [Casos de uso](./03_CasosDeUso/casosDeUso.md)
 
 ### Vista de Arquitectura 4+1
 
-- [Vistas 4+1](./vistas_4_+_1/vista4+1.md)
+- [Vistas 4+1](./04_Vistas4+1/vista4+1.md)
 
-### Diagramas Estructurales, Comportamentales y Persistencia
+### Diagrama de Actividades
 
-- [Diagrama de arquitectura general](./Diagramas%20Estructurales/Diagrama%20de%20Arquitectura.md)
-- [Diagrama de actividades](./Actividades/Diagrama_Actividades.md)
-- [Diagramas entidad relacion](./ER/EntidadRelacion.md)
-- [Diagrama local](/docs/Local/Diagrama%20Despliegue%20Proyecto-Page-2.drawio.svg)
+- [Diagrama de actividades](./05_Actividades/Diagrama_Actividades.md)
 
-### Principios Solid
-- [Principios Solid](./Principios_Solid/Principios_Solid.md)
+### Diagramas Estructurales y Comportamentales, y Persistencia
+
+- [Diagrama de arquitectura general](./06_Diagramas%20Estructurales/Diagrama%20de%20Arquitectura.md)
+- [Diagramas entidad relacion](./07_ER/EntidadRelacion.md)
+
+### CI/CD
+
+- [CI/CD](./08_CICD/cicd.md)
 
 ### Justificacion de Toma de decisiones
-- [Justificacion toma de decisiones](./Justificacion/justificacion_decisiones.md)
+
+- [Justificacion toma de decisiones](./09_Justificacion/justificacion_decisiones.md)
+
+### Entregables solicitados para esta entrega
+
+- [Algoritmo de Recomendaciones](./10_Recomendaciones/README.md)
+- [Documentación sobre terraform](./11_Terraform/terraform.md)
+- [Documentación sobre ansible](./12_Ansible/ansible.md)
+- [Documentación sobre ELK](./13_ELK/elstack.md)
+- [Documentación sobre observabilidad con Prometheus y Grafana](./14_Obsevabilidad/Observabilidad.md)
+- [Documentación sobre Locust](./15_Locust/Locust.md)
 
 ### Pruebas Unitarias
-- [Pruebas unitarias del backend](./Pruebas/PruebasUnitarias.md)
+- [Pruebas unitarias del backend](./16_Pruebas/PruebasUnitarias.md)
 
+### Principios Solid
+- [Principios Solid](./17_PrincipiosSolid/Principios_Solid.md)
+
+### Despliegue en Google Cloud Platform
+- [Defensa DesplieguesGCP](./18_DespliegueGCP/DefensaDespliegueGCP.md)
+
+### Mockups Del Frontend
+- [Mockups](./19_Mockups/mockups.md)
 ### Diagramas Estructurales, Comportamentales y Persistencia
 - [Defensa_DesplieguesGCP](./DespliegueGCP/DefensaDespliegueGCP.md)
 - [Despliegue de infraestructura](./Terraform/terraform.md)
 - [Configuración de infraestructura](./ansible/ansible.md)
+- [Observabilidad de métricas con Prometheus y Grafana](./PrometheusGrafana/prometheus-grafana.md)
 
 ## Introducción
 
@@ -71,3 +91,4 @@ Este archivo funciona como índice principal de la documentación. Desde aquí s
 4. La contenedorización con Docker y la configuración de dos entornos diferenciados mediante Docker Compose garantizan que el sistema sea reproducible y portable, eliminando discrepancias entre el entorno de desarrollo local y el de producción en la nube.
 
 5. La centralización del enrutamiento, la validación de sesiones y el control de acceso en el API Gateway establece un perímetro de seguridad claro, asegurando que ningún microservicio quede expuesto directamente al cliente externo.
+

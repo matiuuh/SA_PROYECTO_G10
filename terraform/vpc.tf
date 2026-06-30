@@ -68,6 +68,34 @@ resource "google_compute_firewall" "allow_internal" {
   target_tags   = ["quetzaltv-vm"]
 }
 
+# Grafana (3000) y Prometheus (9090) accesibles desde internet
+resource "google_compute_firewall" "allow_grafana" {
+  name    = "quetzaltv-allow-grafana"
+  network = google_compute_network.quetzaltv_vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["3000", "9090"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["quetzaltv-vm"]
+}
+
+# Scrape privado de exporters desde la VPC interna y los pods de GKE.
+resource "google_compute_firewall" "allow_monitoring_exporters" {
+  name    = "quetzaltv-allow-monitoring-exporters"
+  network = google_compute_network.quetzaltv_vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["9100"]
+  }
+
+  source_ranges = ["10.0.0.0/24", "10.1.0.0/16"]
+  target_tags   = ["quetzaltv-monitoring-target"]
+}
+
 # Health checks de GCP para el balanceador de carga de GKE Ingress
 resource "google_compute_firewall" "allow_health_checks" {
   name    = "quetzaltv-allow-health-checks"

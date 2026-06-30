@@ -272,7 +272,7 @@ jobs:
             set -e
             DATE=$(date +%Y%m%d_%H%M%S)
 
-            echo "${GCP_SA_KEY}" > /tmp/sa-key.json
+            printf '%s' "${GCP_SA_KEY}" | sed 's/^\xEF\xBB\xBF//' > /tmp/sa-key.json
             gcloud auth activate-service-account --key-file=/tmp/sa-key.json --quiet
             rm /tmp/sa-key.json
 
@@ -347,6 +347,11 @@ jobs:
       - name: Crear namespace (si no existe)
         run: kubectl apply -f k8s/00-namespace.yaml
 
+      - name: Crear namespace de monitoreo (si no existe)
+        run: |
+          kubectl create namespace quetzaltv-monitoring \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Crear/actualizar Secret de Kubernetes desde GitHub Secrets
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
@@ -370,30 +375,64 @@ jobs:
             --from-literal=DATABASE_URL_COBROS="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5436/quetzal_cobros?sslmode=disable" \
             --from-literal=DATABASE_URL_NOTIFICACIONES="postgres://postgres:${DB_PASSWORD}@${VM3_INTERNAL_IP}:5439/quetzal_notificaciones?sslmode=disable" \
             --dry-run=client -o yaml | kubectl apply -f -
-          echo "✓ Secret quetzaltv-secrets actualizado"
+           echo "✓ Secret quetzaltv-secrets actualizado"
+
+      - name: Crear/actualizar Secret de Grafana
+        env:
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          kubectl create secret generic grafana-admin \
+            --namespace=quetzaltv-monitoring \
+            --from-literal=admin-user="${GRAFANA_ADMIN_USER}" \
+            --from-literal=admin-password="${GRAFANA_ADMIN_PASSWORD}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Secret grafana-admin actualizado"
 
       - name: Aplicar manifiestos al clúster
         run: |
-          kubectl apply -f k8s/ --namespace=quetzaltv-prod
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl apply -f k8s/01-configmap.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/02-redis.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/03-usuario.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/04-suscripcion.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/05-catalogo.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/06-streaming.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/07-divisas.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/08-cobros.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/09-notificaciones.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/10-api-gateway.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/11-frontend.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/12-ingress.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/13-depuracion-usuarios.yaml -n quetzaltv-prod
+          kubectl apply -f k8s/14-prometheus.yaml
+          kubectl apply -f k8s/15-grafana.yaml
+          kubectl apply -f k8s/16-prometheus-vm-targets.yaml
+          kubectl apply -f k8s/17-grafana-dashboards.yaml
+          kubectl apply -f k8s/18-kube-state-metrics.yaml
+          kubectl apply -f k8s/19-node-exporter.yaml
           echo "✓ Manifiestos aplicados"
 
       - name: Esperar rollout y verificar salud
         id: rollout
         run: |
-          NAMESPACE="quetzaltv-prod"
           FAILED=0
-
-          # Espera a que cada Deployment complete su rollout (máx. 5 minutos c/u)
-          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
-            echo "→ Esperando rollout de ${DEPLOY}..."
-            if ! kubectl rollout status "${DEPLOY}" \
-                -n "${NAMESPACE}" \
-                --timeout=10m; then
-              echo "::error::Rollout fallido en ${DEPLOY}"
-              FAILED=1
-            else
-              echo "  ✓ ${DEPLOY} saludable"
+          for NAMESPACE in quetzaltv-prod quetzaltv-monitoring; do
+            if ! kubectl get deployments -n "${NAMESPACE}" >/dev/null 2>&1; then
+              continue
             fi
+
+            for DEPLOY in $(kubectl get deployments -n "${NAMESPACE}" -o name); do
+              echo "→ Esperando rollout de ${DEPLOY} en ${NAMESPACE}..."
+              if ! kubectl rollout status "${DEPLOY}" \
+                  -n "${NAMESPACE}" \
+                  --timeout=10m; then
+                echo "::error::Rollout fallido en ${DEPLOY} (${NAMESPACE})"
+                FAILED=1
+              else
+                echo "  ✓ ${DEPLOY} saludable"
+              fi
+            done
           done
 
           echo "rollout_failed=${FAILED}" >> "$GITHUB_OUTPUT"
@@ -402,17 +441,28 @@ jobs:
       - name: Rollback automático si el rollout falló
         if: failure() && steps.rollout.outputs.rollout_failed == '1'
         run: |
-          NAMESPACE="quetzaltv-prod"
           echo "::warning::Iniciando rollback automático a la versión estable anterior..."
 
-          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
-            echo "→ Revirtiendo ${DEPLOY}..."
-            kubectl rollout undo "${DEPLOY}" -n "${NAMESPACE}"
+          for NAMESPACE in quetzaltv-prod quetzaltv-monitoring; do
+            if ! kubectl get deployments -n "${NAMESPACE}" >/dev/null 2>&1; then
+              continue
+            fi
+
+            for DEPLOY in $(kubectl get deployments -n "${NAMESPACE}" -o name); do
+              echo "→ Revirtiendo ${DEPLOY} en ${NAMESPACE}..."
+              kubectl rollout undo "${DEPLOY}" -n "${NAMESPACE}"
+            done
           done
 
           echo "Esperando que la versión anterior sea saludable..."
-          for DEPLOY in $(kubectl get deployments -n ${NAMESPACE} -o name); do
-            kubectl rollout status "${DEPLOY}" -n "${NAMESPACE}" --timeout=5m
+          for NAMESPACE in quetzaltv-prod quetzaltv-monitoring; do
+            if ! kubectl get deployments -n "${NAMESPACE}" >/dev/null 2>&1; then
+              continue
+            fi
+
+            for DEPLOY in $(kubectl get deployments -n "${NAMESPACE}" -o name); do
+              kubectl rollout status "${DEPLOY}" -n "${NAMESPACE}" --timeout=5m
+            done
           done
 
           echo "::error::Despliegue de ${{ env.VERSION }} fallido. Se restauró la versión anterior."
@@ -426,8 +476,10 @@ jobs:
           echo "║  Versión : ${{ env.VERSION }}                            ║"
           echo "║  Clúster : ${{ secrets.GKE_CLUSTER }}                     ║"
           echo "║  Namespace: quetzaltv-prod                          ║"
+          echo "║  Monitoreo: quetzaltv-monitoring                    ║"
           echo "╚══════════════════════════════════════════════════════╝"
           kubectl get pods -n quetzaltv-prod
+          kubectl get pods -n quetzaltv-monitoring
 
   # ════════════════════════════════════════════════════════════════════════════
   # 5. SMOKE TESTS — verifica rutas base tras el despliegue en GKE
@@ -473,10 +525,27 @@ jobs:
             exit 1
           fi
 
+      - name: Esperar certificado HTTPS administrado
+        run: |
+          echo "Esperando certificado para 34.111.20.79.nip.io..."
+          for i in $(seq 1 80); do
+            STATUS=$(kubectl get managedcertificate quetzaltv-certificate \
+              -n quetzaltv-prod \
+              -o jsonpath='{.status.certificateStatus}' 2>/dev/null || echo "")
+            if [ "$STATUS" = "Active" ]; then
+              echo "Certificado HTTPS activo"
+              exit 0
+            fi
+            echo "  Intento $i/80 - estado: ${STATUS:-Pending}"
+            sleep 30
+          done
+          echo "::error::El certificado HTTPS no se activo en 40 minutos"
+          exit 1
+
       - name: Esperar estabilización de los pods
         run: sleep 15
 
       - name: Ejecutar smoke tests contra GKE Ingress
         run: |
           chmod +x scripts/smoke-test.sh
-          bash scripts/smoke-test.sh "http://${{ steps.ingress.outputs.ip }}"
+          bash scripts/smoke-test.sh "https://34.111.20.79.nip.io"

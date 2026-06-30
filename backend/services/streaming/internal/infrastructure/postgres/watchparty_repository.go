@@ -81,7 +81,12 @@ func (r *WatchPartyRepository) AddParticipante(ctx context.Context, p *domain.Pa
 	return r.db.QueryRow(ctx, `
 		INSERT INTO participantes_watch_party (sala_id, perfil_id, perfil_nombre, cuenta_id, es_anfitrion, conectado)
 		VALUES ($1, $2, $3, $4, $5, TRUE)
-		ON CONFLICT (sala_id, perfil_id) DO UPDATE SET conectado = TRUE, perfil_nombre = EXCLUDED.perfil_nombre
+		ON CONFLICT (sala_id, perfil_id) DO UPDATE SET
+			conectado = TRUE,
+			perfil_nombre = EXCLUDED.perfil_nombre,
+			cuenta_id = EXCLUDED.cuenta_id,
+			es_anfitrion = EXCLUDED.es_anfitrion,
+			ultimo_latido = NOW()
 		RETURNING id
 	`, p.SalaID, p.PerfilID, p.PerfilNombre, p.CuentaID, p.EsAnfitrion).Scan(&p.ID)
 }

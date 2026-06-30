@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "sa-proyecto-g10-500320",
+  "private_key_id": "94dd8f0ea4f97c59554f3ba7d2c330557cc57e45",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDUIM3m5gL/wx7n\nfeZhocdiaIFqs/mPbYXEoJ7GsMbherRGswEg8DOLyOfxCbPaMcMwcNDD0gHBBl43\nAAgLRBLonLiVLngxrzLkVcc2TPLaD7H8W8wUtTwBPqAHrJQ1IYzzWc5LnDufV5jw\nyII5fJbLYPdIyyoVnkULjZH3F7QW+WHUkfdZyHVDnUeOctnftZuQ1qUk6Hxiq50j\ndFH2F58wAmSQpOurY3xr/2SD5VLWpFMVmrT/5hj8Aq3mPzuzdE8bw9F66ktw0CTx\nyOj+aY7QoSPvFityTxKl3+WlFsSuhjuOWJ5FKWKIzMt5i+u2WzUzwD/L4JXYQwmS\nUvNJlMCNAgMBAAECggEAL73VUXTtcl4Z/7wuZEVKkDuYeukYDt91poAG1A13qUoa\nNjo11BGzbC+ygeVu4Lnn5ehSF+xVIDn8bND5Pn3a6pbRFSQxAW+emtSyYeZ2Fr1H\nD9aiKvvyDg6n6io9berH5AIPg6VdJtrKbVCXPHRtpMbFSNEOvvBQtk2trwia67tZ\n/GmGIhdynRVyj8YO5NvkTGDHhgE6NQOSjF39cvu9vNpQ2GNL5yAlAVknirLEwARn\nzDWslLu3p+51lmWcV+1vV7y3QmhTqdAMoYZsijl7HEdMZiwHYtNd8gmW7qzKMNm0\nOm7Yiz+Qod5oix+cRS6nmjPcNdoJVMhwQuNc1pwXqQKBgQD8oBQ6193GRRllrFLW\nSd37Q85f5B/Qnvp7/x6M024pufoTd9YgkNY1w+buKAnszKWmLSQmO2UrJLDVTd09\nD0ef+7glmKbv0A6hEIeYy/00eXlUD5ZA6UG3kgvDJtmteNUCNW+rMDUoiWVFhivb\nhJ/TdP4PQXWtHQt/sf9wo3rz+QKBgQDW9jv0mc5hdGgBd8FeGpPnXrZtz0P1DR3u\nIyrLfhmUn16n/vmUgbiFZ2JqL5xRet9oNK3btrRf9cTq4wmDSAD59lVOJj73L19n\n3Zv/mK5ywZOpF1Bv66Tn16rCDZEcMnzPqbF3Z3I+Vn9KLxho8LQtqnp73yjRWNDD\nToOv8vWuNQKBgBqkx31tRvaiUwtmIVZ4c/EMNbfnV3OpUMHDJnWz1uqPstBa0zqc\nC/ufrbtwfZt7+fyMxkNCAGmMdRoKHEtUUTmOUt2kO/cO+nwCQkrbONlP9nvnKPGv\nqD60KIlsj4i8NbsF58EmVHTyCLxMalO8qR6kOCdjwAWCCrRtEYPPuigBAoGBAMvw\nEDGfOg17QrEhzHJbBLcdRDYpzW9PYnXrJ06n89zs1gDMBjy+VTE7REM5qDQlPo6+\na7NnQvlHUesGOqAyT7rV2VirMFGSwBDqTnXPhLGatVxWohmMlobeNUKlXGZD/+WE\nOLnvipNZvKnExIPK2SX59vpOXYs/l8+zTXxAJJWBAoGBAOCc2cQyQDv4qjFZFetV\nZSsJkb3OICkd24vVMrgPs9vnlNt0AyBMbm6nndF939GuiF4k7Ufx8eWuSkjCZnQS\ntrQxuzg518EvGu4S4DCI5NQXCH/dMkbf3blV3djMzKqBtpBcpWACV58fxJBSSPTm\noVKiHsPT3VPSEnrj3RPaOfJu\n-----END PRIVATE KEY-----\n",
+  "client_email": "quetzal-tv-storage@sa-proyecto-g10-500320.iam.gserviceaccount.com",
+  "client_id": "103120518200855118184",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/quetzal-tv-storage%40sa-proyecto-g10-500320.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

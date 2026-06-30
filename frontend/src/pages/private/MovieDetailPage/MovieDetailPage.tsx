@@ -170,7 +170,7 @@ function parseRequestedStart(value: string | null): number {
   return Math.floor(parsed)
 }
 
-const PREMIUM_PLAN_ID = 'b0000000-0000-0000-0000-000000000003'
+const PREMIUM_PLAN_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3'
 
 export function MovieDetailPage() {
   const navigate = useNavigate()
