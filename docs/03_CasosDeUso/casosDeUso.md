@@ -202,7 +202,7 @@
 | Descripción | Permite al usuario configurar o retirar un PIN restrictivo y definir la clasificación máxima que uno de sus perfiles puede reproducir sin solicitar dicho PIN. |
 | Precondiciones | El usuario debe haber iniciado sesión y el perfil que desea configurar debe pertenecer a su cuenta. La configuración se realiza al editar un perfil existente. |
 | Postcondiciones | El PIN queda almacenado de forma protegida y el nivel de control parental queda asociado al perfil; o ambos quedan desactivados cuando el usuario retira el PIN. |
-| Flujo principal | 1. El usuario ingresa a la administración de perfiles.<br>2. El usuario selecciona un perfil y abre su edición.<br>3. El usuario activa el PIN restrictivo.<br>4. El usuario ingresa un PIN numérico de cuatro dígitos.<br>5. El usuario selecciona la clasificación máxima permitida sin PIN: TP, PG-13 o R.<br>6. El usuario guarda los cambios.<br>7. El sistema valida y almacena el PIN cifrado mediante hash.<br>8. El sistema asocia el nivel seleccionado al perfil y confirma su actualización. |
+| Flujo principal | 1. El usuario ingresa a la administración de perfiles.<br>2. El usuario habilita administración de perfiles y abre la edición del perfil deseado.<br>3. El usuario activa el PIN restrictivo.<br>4. El usuario ingresa un PIN numérico de cuatro dígitos.<br>5. El usuario selecciona la clasificación máxima permitida sin PIN: TP, PG-13 o R.<br>6. El usuario guarda los cambios.<br>7. El sistema valida y almacena el PIN cifrado mediante hash.<br>8. El sistema asocia el nivel seleccionado al perfil y confirma su actualización. |
 | Flujos alternos | FA1. El usuario desactiva el PIN restrictivo.<br>FA1.1 El sistema limpia el PIN y el nivel de control parental del perfil.<br>FA2. El contenido seleccionado para reproducir supera el nivel configurado.<br>FA2.1 El sistema solicita el PIN antes de reproducir, reanudar o crear una Watch Party.<br>FA3. El usuario cancela la solicitud del PIN durante la reproducción.<br>FA3.1 El sistema no ejecuta la acción protegida. |
 | Flujos de excepción | FE1. El PIN no contiene exactamente cuatro dígitos numéricos.<br>FE1.1 El sistema rechaza la configuración e informa la validación requerida.<br>FE2. El perfil no existe o no pertenece a la cuenta autenticada.<br>FE2.1 El sistema informa que el perfil no fue encontrado.<br>FE3. La sesión expiró o falla la persistencia de la configuración.<br>FE3.1 El sistema no completa la operación y muestra el error correspondiente. |
 | Reglas de negocio | El PIN debe contener exactamente cuatro dígitos y se almacena mediante hash, no en texto plano.<br>Los únicos niveles admitidos son TP, PG-13 y R.<br>El PIN se solicita únicamente cuando el contenido tiene una clasificación superior al nivel del perfil y el perfil conserva tanto PIN como nivel configurado.<br>La configuración solo puede modificarse desde la cuenta propietaria del perfil. |
@@ -483,9 +483,9 @@
 | Precondiciones | El usuario debe haber iniciado sesión, tener un perfil activo y contar con una suscripción válida para el contenido solicitado. |
 | Postcondiciones | Reproducción iniciada correctamente; o acceso denegado por falta de permisos, suscripción o disponibilidad del contenido. |
 | Flujo principal | 1. El usuario selecciona un contenido disponible.<br>2. El sistema valida la suscripción y el acceso del perfil activo.<br>3. El sistema prepara la reproducción del contenido.<br>4. El sistema inicia la reproducción para el usuario. |
-| Flujos alternos | FA1. El usuario no tiene una suscripción.<br>FA1.1 El sistema incita a comprar una suscripción.<br>FA2. El contenido no está disponible.<br>FA2.1 El sistema informa que no puede reproducirse. |
+| Flujos alternos | FA1. El usuario no tiene una suscripción.<br>FA1.1 El sistema incita a comprar una suscripción.<br>FA2. El contenido no está disponible.<br>FA2.1 El sistema informa que no puede reproducirse.<br>FA3. El perfil activo tiene control parental con PIN y el contenido seleccionado supera la clasificación permitida para el perfil.<br>FA3.1 El sistema consulta las restricciones del perfil y solicita el PIN de seguridad antes de iniciar la reproducción.<br>FA3.2 El usuario ingresa el PIN solicitado.<br>FA3.3 El sistema verifica el PIN; si es correcto, inicia la reproducción del contenido.<br>FA4. El usuario cancela la solicitud del PIN o ingresa un PIN incorrecto.<br>FA4.1 El sistema no inicia la reproducción y mantiene al usuario en el detalle del contenido. |
 | Flujos de excepción | FE1. Error de conexión con la base de datos.<br>FE1.1 El sistema informa que no fue posible validar la suscripción. Intenta nuevamente.<br>FE2. Error de conexión con el servicio de streaming.<br>FE2.1 El sistema informa que no fue posible iniciar la reproducción. Intenta nuevamente. |
-| Reglas de negocio | Solo puede reproducirse contenido disponible para una cuenta con acceso válido.<br>La reproducción debe quedar asociada al perfil activo. |
+| Reglas de negocio | Solo puede reproducirse contenido disponible para una cuenta con acceso válido.<br>La reproducción debe quedar asociada al perfil activo.<br>Cuando el perfil tiene PIN y control parental configurados, el sistema debe solicitar el PIN si la clasificación del contenido es superior al nivel permitido del perfil. |
 | Reglas de calidad | El inicio de reproducción debe ocurrir con el menor retraso posible.<br>Los mensajes de restricción de acceso deben ser claros para el usuario. |
 
 #### CDU-005.2 Reanudación de Reproducción
@@ -641,11 +641,12 @@
 | Reglas de negocio | Solo administradores pueden eliminar contenido.<br>La eliminación debe aplicarse únicamente a contenidos existentes. |
 | Reglas de calidad | La acción debe requerir confirmación explícita para evitar errores.<br>El sistema debe mostrar un mensaje claro sobre el resultado final. |
 
-### Expandidos de CDU007: Consulta de Auditoría del Catálogo
+### Expandidos de CDU007: Consulta de Auditoría
 
 ![CDU007](./img/CDU_CDU007.png)
 
 - **CDU-007.1**: Consulta de Tabla de Auditoría
+- **CDU-007.2**: Consultar Dashboard de rendimiento
 
 #### CDU-007.1 Consulta de Tabla de Auditoría
 
@@ -663,8 +664,20 @@
 | Reglas de negocio | Solo administradores autorizados pueden consultar la auditoría del catálogo.<br>Los eventos de auditoría deben originarse desde triggers de base de datos sobre operaciones de inserción, actualización y eliminación.<br>La consulta debe limitar la cantidad de registros retornados para evitar sobrecarga del servicio. |
 | Reglas de calidad | La tabla debe presentar los eventos en orden cronológico descendente para facilitar la revisión reciente.<br>La exportación debe conservar los datos relevantes de la auditoría mostrada.<br>Los errores de autorización o sesión deben informarse sin exponer detalles sensibles. |
 
+#### CDU-007.2 Consultar Dashboard de rendimiento
 
-[Volver al documentación](../Documentación.md)
+| Campo | Especificación |
+|----|----|
+| Nombre | Consultar Dashboard de rendimiento |
+| Código | CDU-007.2 |
+| Actores | Administrador |
+| Descripción | Permite al administrador consultar un dashboard de rendimiento del sistema, mostrando métricas clave del estado del sistema de streaming. |
+| Precondiciones | El administrador debe haber iniciado sesión con una cuenta activa.<br>El administrador tiene acceso y una sesión activa en Grafana. |
+| Postcondiciones | El administrador visualiza el dashboard con las métricas actualizadas. |
+| Flujo principal | 1. El administrador accede a la sección de dashboard desde la página principal de Grafana.<br>2. El sistema recupera y muestra las métricas clave del sistema.<br>3. El administrador visualiza las métricas y los gráficos para obtener información operativa. |
+| Flujos de excepción | FE1. No hay conexión a prometheus para obtener las métricas.<br>FE1.1 El sistema muestra un mensaje de error indicando que no se pueden recuperar las métricas. |
+
+[Volver al documentación](../Documentación.md) 
 
 ## Archivo Crudo
 
