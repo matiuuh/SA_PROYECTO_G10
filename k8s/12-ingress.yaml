@@ -1,6 +1,25 @@
-# Único punto de entrada externo del clúster. Todo el tráfico pasa por
-# api-gateway (que enruta /api/* a los microservicios y sirve el frontend
-# en /*). No se exponen Services tipo LoadBalancer individuales.
+# Certificado TLS administrado por Google para el dominio publico del Ingress.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: quetzaltv-certificate
+  namespace: quetzaltv-prod
+spec:
+  domains:
+    - 34.111.20.79.nip.io
+---
+# Fuerza que todo acceso HTTP sea redirigido a HTTPS.
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: quetzaltv-frontend-config
+  namespace: quetzaltv-prod
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# Unico punto de entrada externo del cluster.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -8,7 +27,20 @@ metadata:
   namespace: quetzaltv-prod
   annotations:
     kubernetes.io/ingress.class: "gce"
+    networking.gke.io/managed-certificates: quetzaltv-certificate
+    networking.gke.io/v1beta1.FrontendConfig: quetzaltv-frontend-config
 spec:
+  rules:
+    - host: 34.111.20.79.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 80
   defaultBackend:
     service:
       name: api-gateway
