@@ -134,6 +134,7 @@ services:
       - pg_streaming_data:/var/lib/postgresql/data
       - ../../services/streaming/database/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ../../services/streaming/database/sql/02_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+      - ../../services/streaming/database/sql/03_watchparty.sql:/docker-entrypoint-initdb.d/03_watchparty.sql:ro
     ports:
       - "5434:5432"
     healthcheck:

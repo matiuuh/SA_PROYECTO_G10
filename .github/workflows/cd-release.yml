@@ -525,10 +525,27 @@ jobs:
             exit 1
           fi
 
+      - name: Esperar certificado HTTPS administrado
+        run: |
+          echo "Esperando certificado para 34.111.20.79.nip.io..."
+          for i in $(seq 1 80); do
+            STATUS=$(kubectl get managedcertificate quetzaltv-certificate \
+              -n quetzaltv-prod \
+              -o jsonpath='{.status.certificateStatus}' 2>/dev/null || echo "")
+            if [ "$STATUS" = "Active" ]; then
+              echo "Certificado HTTPS activo"
+              exit 0
+            fi
+            echo "  Intento $i/80 - estado: ${STATUS:-Pending}"
+            sleep 30
+          done
+          echo "::error::El certificado HTTPS no se activo en 40 minutos"
+          exit 1
+
       - name: Esperar estabilización de los pods
         run: sleep 15
 
       - name: Ejecutar smoke tests contra GKE Ingress
         run: |
           chmod +x scripts/smoke-test.sh
-          bash scripts/smoke-test.sh "http://${{ steps.ingress.outputs.ip }}"
+          bash scripts/smoke-test.sh "https://34.111.20.79.nip.io"
