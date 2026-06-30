@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, LayoutGrid, Play, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { IconButton } from '../atoms/IconButton'
 import { ProgressPip } from '../atoms/ProgressPip'
 
@@ -41,10 +41,6 @@ export function FootbarControls({
         isDisabled={currentIndex === totalSlides - 1}
         onClick={onNext}
       />
-      <span className="footbar-separator" />
-      <IconButton label="Vista de diapositivas" icon={LayoutGrid} />
-      <IconButton label="Modo presentación" icon={Play} isActive />
-      <IconButton label="Estética de lujo" icon={Sparkles} />
     </div>
   )
 }
